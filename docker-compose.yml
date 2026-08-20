@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: foodaware_db
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: rootpassword
+      POSTGRES_DB: foodaware
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  python-service:
+    build:
+      context: ./python-service
+    container_name: foodaware_python
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+    container_name: foodaware_backend
+    environment:
+      - DATABASE_HOST=db
+      - DATABASE_PORT=5432
+      - DATABASE_USER=root
+      - DATABASE_PASSWORD=rootpassword
+      - DATABASE_NAME=foodaware
+      - PYTHON_SERVICE_URL=http://python-service:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - db
+      - python-service
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: foodaware_frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
