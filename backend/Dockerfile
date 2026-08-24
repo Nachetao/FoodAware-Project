@@ -2,15 +2,15 @@
 FROM node:20-alpine AS build
 WORKDIR /app
 COPY package*.json ./
-RUN npm install || true
+RUN npm install
 COPY . .
-RUN npm run build || true
+RUN npm run build
 
 # Stage 2: Production
 FROM node:20-alpine
 WORKDIR /app
 COPY package*.json ./
-RUN npm install --only=production || true
+RUN npm install --omit=dev
 # NestJS transpila a /dist
 COPY --from=build /app/dist ./dist
 EXPOSE 3000
