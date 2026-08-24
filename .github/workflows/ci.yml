@@ -19,4 +19,4 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Validate infrastructure build
-        run: docker-compose build
+        run: docker compose build
