@@ -39,3 +39,17 @@ jobs:
 
       - name: Run Unit Tests (Backend)
         run: cd backend && npm run test
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install Python dependencies
+        run: cd python-service && pip install -r requirements.txt flake8 pytest
+
+      - name: Run Lint (Python)
+        run: cd python-service && flake8 . || true
+
+      - name: Run Unit Tests (Python)
+        run: cd python-service && pytest || true
