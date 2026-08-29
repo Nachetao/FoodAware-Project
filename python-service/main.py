@@ -1,26 +1,37 @@
-# pyrefly: ignore [missing-import]
 from fastapi import FastAPI
-# pyrefly: ignore [missing-import]
 from pydantic import BaseModel
+from typing import List, Optional
 
-app = FastAPI(title="FoodAware AI Service")
+app = FastAPI(title="Analista de Alimentos FoodAware")
 
-class FoodItem(BaseModel):
+class ProductoInput(BaseModel):
     nombre: str
-    ingredientes: list[str] = []
+    ingredientes: List[str]
+    marca: Optional[str] = None
 
-@app.get("/health")
-def health_check():
-    return {"status": "ok", "service": "FoodAware Python Service"}
+@app.get("/")
+def read_root():
+    return {"status": "Servicio FastAPI activo"}
 
-@app.post("/clasificar-alimento")
-def clasificar_alimento(item: FoodItem):
-    # Lógica mockeada para el MVP
-    is_compatible = "azúcar" not in [i.lower() for i in item.ingredientes]
+@app.post("/analizar")
+def analizar_producto(producto: ProductoInput):
+    # Lógica simulada de análisis
+    ingredientes_lower = [ing.lower() for ing in producto.ingredientes]
     
+    alergenos_detectados = []
+    if "leche" in ingredientes_lower or "lactosa" in ingredientes_lower:
+        alergenos_detectados.append("lácteos")
+    if "maní" in ingredientes_lower or "mani" in ingredientes_lower or "cacahuete" in ingredientes_lower:
+        alergenos_detectados.append("maní")
+        
+    alto_en_azucar = any("azúcar" in ing or "azucar" in ing or "jarabe" in ing for ing in ingredientes_lower)
+
     return {
-        "alimento": item.nombre,
-        "compatible": is_compatible,
-        "restriccion_detectada": "Ninguna" if is_compatible else "Contiene azúcar",
-        "confidence": 0.95
+        "producto": producto.nombre,
+        "veredicto": {
+            "alergenos_detectados": alergenos_detectados,
+            "alto_en_azucar": alto_en_azucar,
+            "es_saludable": not alto_en_azucar and len(alergenos_detectados) == 0
+        },
+        "confianza_modelo": 0.95
     }
