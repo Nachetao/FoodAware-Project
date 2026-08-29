@@ -6,6 +6,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { UsersModule } from './users/users.module';
 import { IaModule } from './ia/ia.module';
+import { FoodsModule } from './foods/foods.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { IaModule } from './ia/ia.module';
     }),
     UsersModule,
     IaModule,
+    FoodsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

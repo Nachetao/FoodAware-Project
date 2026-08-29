@@ -1,7 +1,10 @@
 import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { firstValueFrom } from 'rxjs';
+import { Food } from '../foods/entities/food.entity';
 
 @Injectable()
 export class IaAnalysisService {
@@ -11,6 +14,8 @@ export class IaAnalysisService {
   constructor(
     private readonly httpService: HttpService,
     private readonly configService: ConfigService,
+    @InjectRepository(Food)
+    private readonly foodRepository: Repository<Food>,
   ) {
     this.pythonApiUrl = this.configService.get<string>('PYTHON_API_URL', 'http://localhost:8000');
   }
@@ -27,10 +32,21 @@ export class IaAnalysisService {
       );
       
       this.logger.log('Análisis recibido exitosamente.');
-      return response.data;
+      const data = response.data;
+      
+      const newFood = this.foodRepository.create({
+        nombre: data.producto,
+        ingredientes: ingredientes,
+        alergenosPresentes: data.veredicto.alergenos_detectados,
+        esNutricionalmenteSaludable: data.veredicto.es_saludable
+      });
+      
+      const savedFood = await this.foodRepository.save(newFood);
+      this.logger.log(`Alimento guardado en DB con ID: ${savedFood.id}`);
+      return savedFood;
     } catch (error) {
-      this.logger.error(`Error de comunicación con el servicio de Python: ${error.message}`);
-      throw new InternalServerErrorException('Error al analizar el producto con IA');
+      this.logger.error(`Error de comunicación con el servicio de Python o al guardar: ${error.message}`);
+      throw new InternalServerErrorException('Error al analizar el producto con IA o guardarlo en la base de datos');
     }
   }
 }

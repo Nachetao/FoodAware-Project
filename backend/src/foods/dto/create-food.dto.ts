@@ -1,21 +1,21 @@
-import { IsString, IsNotEmpty, IsNumber, IsOptional, Min, IsDateString } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsString, IsNotEmpty, IsArray, IsBoolean, IsOptional } from 'class-validator';
 
 export class CreateFoodDto {
   @IsString()
   @IsNotEmpty({ message: 'El nombre del alimento es obligatorio' })
-  name: string;
+  nombre: string;
 
-  @IsString()
+  @IsArray()
+  @IsString({ each: true, message: 'Cada ingrediente debe ser un texto' })
+  @IsNotEmpty({ message: 'La lista de ingredientes es obligatoria' })
+  ingredientes: string[];
+
+  @IsArray()
+  @IsString({ each: true })
   @IsOptional()
-  description?: string;
+  alergenosPresentes?: string[];
 
-  @IsNumber()
-  @Min(1, { message: 'La cantidad debe ser al menos 1' })
-  @Type(() => Number) // Convierte el input a Number automáticamente
-  quantity: number;
-
-  @IsDateString({}, { message: 'La fecha de expiración debe ser una fecha válida (YYYY-MM-DD)' })
-  @IsNotEmpty()
-  expirationDate: string;
+  @IsBoolean()
+  @IsOptional()
+  esNutricionalmenteSaludable?: boolean;
 }
