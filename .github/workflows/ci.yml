@@ -25,3 +25,17 @@ jobs:
 
       - name: Validate infrastructure build
         run: docker compose build
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install backend dependencies
+        run: cd backend && npm install
+
+      - name: Run Lint (Backend)
+        run: cd backend && npm run lint
+
+      - name: Run Unit Tests (Backend)
+        run: cd backend && npm run test
