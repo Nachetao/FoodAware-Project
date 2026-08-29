@@ -5,6 +5,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { firstValueFrom } from 'rxjs';
 import { Food } from '../foods/entities/food.entity';
+import { User } from '../users/user.entity';
 
 @Injectable()
 export class IaAnalysisService {
@@ -16,11 +17,13 @@ export class IaAnalysisService {
     private readonly configService: ConfigService,
     @InjectRepository(Food)
     private readonly foodRepository: Repository<Food>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
   ) {
     this.pythonApiUrl = this.configService.get<string>('PYTHON_API_URL', 'http://localhost:8000');
   }
 
-  async analizarProducto(nombre: string, ingredientes: string[]) {
+  async analizarProducto(nombre: string, ingredientes: string[], userId?: string) {
     this.logger.log(`Enviando producto '${nombre}' para análisis a ${this.pythonApiUrl}...`);
     
     try {
@@ -43,7 +46,24 @@ export class IaAnalysisService {
       
       const savedFood = await this.foodRepository.save(newFood);
       this.logger.log(`Alimento guardado en DB con ID: ${savedFood.id}`);
-      return savedFood;
+      
+      let aptoParaConsumo = true;
+      if (userId) {
+        const user = await this.userRepository.findOne({ where: { id: userId } });
+        if (user && user.alergias && savedFood.alergenosPresentes) {
+          const tieneAlergia = savedFood.alergenosPresentes.some(alergeno => 
+            user.alergias.includes(alergeno)
+          );
+          if (tieneAlergia) {
+            aptoParaConsumo = false;
+          }
+        }
+      }
+      
+      return {
+        ...savedFood,
+        aptoParaConsumo
+      };
     } catch (error) {
       this.logger.error(`Error de comunicación con el servicio de Python o al guardar: ${error.message}`);
       throw new InternalServerErrorException('Error al analizar el producto con IA o guardarlo en la base de datos');

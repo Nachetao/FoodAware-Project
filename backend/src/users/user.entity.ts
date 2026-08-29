@@ -15,5 +15,5 @@ export class User {
   password: string;
 
   @Column({ type: 'simple-array', nullable: true })
-  restricciones: string[];
+  alergias: string[];
 }

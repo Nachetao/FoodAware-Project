@@ -4,11 +4,12 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { IaAnalysisService } from './ia.service';
 import { IaController } from './ia.controller';
 import { Food } from '../foods/entities/food.entity';
+import { User } from '../users/user.entity';
 
 @Module({
   imports: [
     HttpModule,
-    TypeOrmModule.forFeature([Food]),
+    TypeOrmModule.forFeature([Food, User]),
   ],
   providers: [IaAnalysisService],
   controllers: [IaController],

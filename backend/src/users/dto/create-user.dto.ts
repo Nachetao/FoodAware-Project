@@ -16,5 +16,5 @@ export class CreateUserDto {
   @IsArray()
   @IsString({ each: true })
   @IsOptional()
-  restricciones?: string[];
+  alergias?: string[];
 }
