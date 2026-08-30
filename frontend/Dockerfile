@@ -1,18 +1,15 @@
 # Stage 1: Build
-FROM node:20-alpine AS build
+FROM node:22-alpine AS build
 WORKDIR /app
 COPY package*.json ./
-# Instalamos dependencias. Fallará silenciosamente si package.json aún no existe, lo cual es útil para este MVP iterativo.
-RUN npm install || true
+RUN npm install
 COPY . .
-# Angular exporta por defecto a dist/frontend (o dist/ dependiendo de la versión)
-RUN npm run build || true
-# Aseguramos que el directorio exista para que COPY no falle si el código aún no ha sido generado
-RUN mkdir -p /app/dist/frontend
+# Sin atajos. Si falla, queremos que nos avise.
+RUN npm run build 
 
 # Stage 2: Serve
 FROM nginx:alpine
-# Copiamos la salida de la compilación
-COPY --from=build /app/dist/frontend /usr/share/nginx/html
+# Copiamos la salida (Ionic usa www por defecto, si usas Angular puro a veces es dist/nombre-proyecto/browser)
+COPY --from=build /app/www /usr/share/nginx/html
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]

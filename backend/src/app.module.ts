@@ -20,8 +20,8 @@ import { FoodsModule } from './foods/foods.module';
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
         type: 'postgres',
-        host: configService.get<string>('DB_HOST') === 'db' && process.env.NODE_ENV !== 'production' ? 'localhost' : configService.get<string>('DB_HOST', 'localhost'),
-        port: configService.get<string>('DB_HOST') === 'db' && process.env.NODE_ENV !== 'production' ? 5433 : configService.get<number>('DB_PORT', 5432),
+        host: configService.get<string>('DB_HOST'),
+        port: configService.get<number>('DB_PORT'),
         username: configService.get<string>('DB_USER'),
         password: configService.get<string>('DB_PASSWORD'),
         database: configService.get<string>('DB_NAME'),

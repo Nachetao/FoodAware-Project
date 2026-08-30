@@ -1,13 +1,15 @@
 services:
   db:
-    image: postgres:15-alpine
+    image: postgres:15
     container_name: foodaware_db
+    env_file:
+      - .env
     environment:
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-root}
+      POSTGRES_DB: ${DB_NAME:-foodaware}
     ports:
-      - "5433:5432"
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
@@ -16,6 +18,8 @@ services:
     build:
       context: ./python-service
     container_name: foodaware_python
+    env_file:
+      - .env
     ports:
       - "8000:8000"
     restart: unless-stopped
@@ -24,13 +28,8 @@ services:
     build:
       context: ./backend
     container_name: foodaware_backend
-    environment:
-      - DB_HOST=${DB_HOST}
-      - DB_PORT=${DB_PORT}
-      - DB_USER=${DB_USER}
-      - DB_PASSWORD=${DB_PASSWORD}
-      - DB_NAME=${DB_NAME}
-      - PYTHON_SERVICE_URL=${PYTHON_API_URL}
+    env_file:
+      - .env
     ports:
       - "3000:3000"
     depends_on:
@@ -43,7 +42,7 @@ services:
       context: ./frontend
     container_name: foodaware_frontend
     ports:
-      - "8080:80"
+      - "4200:80"
     depends_on:
       - backend
     restart: unless-stopped
