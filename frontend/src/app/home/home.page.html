@@ -1,0 +1,32 @@
+<ion-header [translucent]="true">
+  <ion-toolbar>
+    <ion-title>
+      FoodAware
+    </ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content [fullscreen]="true" class="ion-padding">
+  <div class="mobile-container">
+    <ion-item>
+      <ion-label position="floating">ID del Producto</ion-label>
+      <ion-input [(ngModel)]="productoId" type="text" placeholder="Ej. 123"></ion-input>
+    </ion-item>
+
+    <ion-button expand="block" class="ion-margin-top" (click)="analizarProducto()">
+      Analizar
+    </ion-button>
+
+    <ion-card *ngIf="resultado" [color]="resultado.aptoParaConsumo ? 'success' : 'danger'" class="ion-margin-top">
+      <ion-card-header>
+        <ion-card-title>{{ resultado.nombre }}</ion-card-title>
+      </ion-card-header>
+      <ion-card-content>
+        <p>Apto para consumo: <strong>{{ resultado.aptoParaConsumo ? 'Sí' : 'No' }}</strong></p>
+        <p *ngIf="resultado.alergenos.length > 0">
+          Alérgenos: {{ resultado.alergenos.join(', ') }}
+        </p>
+      </ion-card-content>
+    </ion-card>
+  </div>
+</ion-content>
