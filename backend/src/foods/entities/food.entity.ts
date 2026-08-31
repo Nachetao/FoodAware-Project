@@ -1,19 +1,19 @@
-import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column } from "typeorm";
 
-@Entity('foods')
+@Entity("foods")
 export class Food {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn("uuid")
   id: string;
 
-  @Column({ type: 'text' })
+  @Column({ type: "text" })
   nombre: string;
 
-  @Column({ type: 'simple-array' })
+  @Column({ type: "simple-array" })
   ingredientes: string[];
 
-  @Column({ type: 'simple-array', nullable: true })
+  @Column({ type: "simple-array", nullable: true })
   alergenosPresentes: string[];
 
-  @Column({ type: 'boolean' })
+  @Column({ type: "boolean" })
   esNutricionalmenteSaludable: boolean;
 }
