@@ -37,3 +37,9 @@ Siga los pasos a continuación para configurar y ejecutar el proyecto en su ento
 
 3. **Ejecutar el proyecto:**
    Utilice el comando `docker-compose up --build` para construir y levantar los contenedores de la base de datos, el frontend, el backend y el servicio de Python(FastAPI).
+
+## Pipeline DevSecOps
+El proyecto utiliza GitHub Actions para establecer un flujo robusto de automatización e integración continua (CI). Este pipeline se encarga de ejecutar la instalación de dependencias, realizar revisiones de código, construir las imágenes de Docker correspondientes y llevar a cabo un escaneo estricto de seguridad utilizando GitLeaks para prevenir la exposición accidental de credenciales o información sensible.
+
+## Prototipo
+Enlace al diseño interactivo en Figma: [PENDIENTE DE INGRESO - REEMPLAZAR POR LINK]
