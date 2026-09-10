@@ -42,4 +42,4 @@ Siga los pasos a continuación para configurar y ejecutar el proyecto en su ento
 El proyecto utiliza GitHub Actions para establecer un flujo robusto de automatización e integración continua (CI). Este pipeline se encarga de ejecutar la instalación de dependencias, realizar revisiones de código, construir las imágenes de Docker correspondientes y llevar a cabo un escaneo estricto de seguridad utilizando GitLeaks para prevenir la exposición accidental de credenciales o información sensible.
 
 ## Prototipo
-Enlace al diseño interactivo en Figma: [PENDIENTE DE INGRESO - REEMPLAZAR POR LINK]
+Enlace al diseño interactivo en Figma: https://www.figma.com/design/5ckGTwcAkx4wRjsVI7VfEw/FoodAware?node-id=0-1&t=bg6G2XpqgT3mjuvQ-1
