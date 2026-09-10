@@ -25,4 +25,15 @@ FoodAware es una aplicación web multiplataforma diseñada para ayudar a los usu
 *   **Base de Datos:** PostgreSQL
 *   **Infraestructura y DevSecOps:** Docker, Docker Compose, Terraform, GitHub Actions.
 
-*NOTA: La sección de instrucción para su instalación, ejecución con docker, variables de entorno y enlace a staging se agregarán mientras se haga avance en el desarrollo de la primera entrega*
+## Instrucciones de Instalación y Ejecución
+
+Siga los pasos a continuación para configurar y ejecutar el proyecto en su entorno local:
+
+1. **Clonar el repositorio:**
+   Descargue el código fuente a su entorno local.
+
+2. **Crear las variables de entorno:**
+   Copie el archivo `.env.example`, renómbrelo a `.env` y configure los valores locales correspondientes.
+
+3. **Ejecutar el proyecto:**
+   Utilice el comando `docker-compose up --build` para construir y levantar los contenedores de la base de datos, el frontend, el backend y el servicio de Python(FastAPI).
