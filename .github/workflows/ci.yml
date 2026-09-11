@@ -35,7 +35,7 @@ jobs:
         run: cd backend && npm install
 
       - name: Run Lint (Backend)
-        run: cd backend && npx eslint "{src,apps,libs,test}/**/*.ts" --no-eslintrc || true
+        run: cd backend && npm run lint
 
       - name: Run Unit Tests (Backend)
         run: cd backend && npm run test
@@ -49,7 +49,7 @@ jobs:
         run: cd python-service && pip install -r requirements.txt flake8 pytest
 
       - name: Run Lint (Python)
-        run: cd python-service && flake8 . || true
+        run: cd python-service && flake8 .
 
       - name: Run Unit Tests (Python)
-        run: cd python-service && pytest || true
+        run: cd python-service && pytest

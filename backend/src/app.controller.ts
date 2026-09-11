@@ -9,10 +9,4 @@ export class AppController {
   getHealth() {
     return { status: "ok", service: "foodaware-backend" };
   }
-
-  // @Post("food/clasificar")
-  // async clasificarFood(@Body() body: any) {
-  //   // Reenvía la petición al servicio de Python
-  //   return this.appService.clasificarEnPython(body);
-  // }
 }
