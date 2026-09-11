@@ -26,7 +26,9 @@ import { FoodsModule } from "./foods/foods.module";
         password: configService.get<string>("DB_PASSWORD"),
         database: configService.get<string>("DB_NAME"),
         autoLoadEntities: true,
-        synchronize: true, // Habilitado temporalmente para el MVP
+        synchronize: false,
+        migrations: [__dirname + "/migrations/*{.ts,.js}"],
+        migrationsRun: true,
       }),
     }),
     UsersModule,
