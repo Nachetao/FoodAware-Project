@@ -13,6 +13,10 @@ class ProductoInput(BaseModel):
 def read_root():
     return {"status": "Servicio FastAPI activo"}
 
+@app.get("/health")
+def health_check():
+    return {"status": "ok", "service": "foodaware-ia"}
+
 @app.post("/analizar")
 def analizar_producto(producto: ProductoInput):
     # Lógica simulada de análisis
