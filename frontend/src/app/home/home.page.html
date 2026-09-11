@@ -23,7 +23,7 @@
       </ion-card-header>
       <ion-card-content>
         <p>Apto para consumo: <strong>{{ resultado.aptoParaConsumo ? 'Sí' : 'No' }}</strong></p>
-        <p *ngIf="resultado.alergenos.length > 0">
+        <p *ngIf="resultado?.alergenos?.length > 0">
           Alérgenos: {{ resultado.alergenos.join(', ') }}
         </p>
       </ion-card-content>
