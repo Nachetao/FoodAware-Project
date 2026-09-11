@@ -7,6 +7,7 @@ import { AppService } from "./app.service";
 import { UsersModule } from "./users/users.module";
 import { IaModule } from "./ia/ia.module";
 import { FoodsModule } from "./foods/foods.module";
+import { AuthModule } from "./auth/auth.module";
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { FoodsModule } from "./foods/foods.module";
     UsersModule,
     IaModule,
     FoodsModule,
+    AuthModule,
   ],
   controllers: [AppController],
   providers: [AppService],
