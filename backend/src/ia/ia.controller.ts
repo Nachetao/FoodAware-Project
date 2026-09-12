@@ -1,4 +1,4 @@
-import { Controller, Get } from "@nestjs/common";
+import { Controller, Get, Post, Body } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { IaAnalysisService } from "./ia.service";
@@ -11,6 +11,29 @@ export class IaController {
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
   ) {}
+
+  @Post("analizar")
+  async analizar(
+    @Body()
+    body: {
+      nombre: string;
+      ingredientes: string[];
+      userId?: string;
+    },
+  ) {
+    const { nombre, ingredientes, userId } = body;
+
+    const resultado = await this.iaAnalysisService.analizarProducto(
+      nombre,
+      ingredientes,
+      userId,
+    );
+
+    return {
+      message: "Análisis completado",
+      resultado,
+    };
+  }
 
   @Get("test-ia")
   async testIa() {
