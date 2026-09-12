@@ -27,3 +27,16 @@ jobs:
 
       - name: Instalar las dependencias
         run: pip install -r requirements.txt
+
+      - name: Auditar dependencias vulnerables
+        run: pip audit
+
+      - name: Ejecutar analisis de calidad
+        run: |
+          pip install flake8
+          flake8 .
+
+      - name: Ejecutar pruebas unitarias
+        run: |
+          pip install pytest
+          pytest

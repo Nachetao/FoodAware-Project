@@ -8,25 +8,79 @@
 
 <ion-content [fullscreen]="true" class="ion-padding">
   <div class="mobile-container">
+
+    <!-- Nombre del producto -->
     <ion-item>
-      <ion-label position="floating">ID del Producto</ion-label>
-      <ion-input [(ngModel)]="productoId" type="text" placeholder="Ej. 123"></ion-input>
+      <ion-label position="floating">Nombre del Producto</ion-label>
+      <ion-input [(ngModel)]="productoNombre" type="text" placeholder="Ej. Barrita energética"></ion-input>
     </ion-item>
 
-    <ion-button expand="block" class="ion-margin-top" (click)="analizarProducto()">
+    <!-- Ingredientes -->
+    <ion-item>
+      <ion-label position="floating">Ingredientes (separados por coma)</ion-label>
+      <ion-textarea [(ngModel)]="ingredientesTexto" placeholder="Ej. avena, maní, azúcar, miel" rows="3"></ion-textarea>
+    </ion-item>
+
+    <!-- Botón analizar -->
+    <ion-button expand="block" class="ion-margin-top" (click)="analizarProducto()"
+      [disabled]="!productoNombre.trim() || !ingredientesTexto.trim()">
+      <ion-icon name="search-outline" slot="start"></ion-icon>
       Analizar
     </ion-button>
 
+    <!-- Error -->
+    <ion-card *ngIf="errorMsg" color="danger" class="ion-margin-top">
+      <ion-card-header>
+        <ion-card-title>Error</ion-card-title>
+      </ion-card-header>
+      <ion-card-content>
+        <p>{{ errorMsg }}</p>
+      </ion-card-content>
+    </ion-card>
+
+    <!-- Resultado del análisis -->
     <ion-card *ngIf="resultado" [color]="resultado.aptoParaConsumo ? 'success' : 'danger'" class="ion-margin-top">
       <ion-card-header>
+        <ion-card-subtitle>Resultado del Análisis</ion-card-subtitle>
         <ion-card-title>{{ resultado.nombre }}</ion-card-title>
       </ion-card-header>
       <ion-card-content>
-        <p>Apto para consumo: <strong>{{ resultado.aptoParaConsumo ? 'Sí' : 'No' }}</strong></p>
-        <p *ngIf="resultado?.alergenos?.length > 0">
-          Alérgenos: {{ resultado.alergenos.join(', ') }}
-        </p>
+        <ion-list lines="none" class="result-list">
+          <ion-item>
+            <ion-icon [name]="resultado.aptoParaConsumo ? 'checkmark-circle' : 'close-circle'" slot="start"
+              [color]="resultado.aptoParaConsumo ? 'success' : 'danger'"></ion-icon>
+            <ion-label>
+              <strong>Apto para consumo:</strong> {{ resultado.aptoParaConsumo ? 'Sí' : 'No' }}
+            </ion-label>
+          </ion-item>
+
+          <ion-item>
+            <ion-icon [name]="resultado.esNutricionalmenteSaludable ? 'heart-circle' : 'heart-dislike'"
+              slot="start"
+              [color]="resultado.esNutricionalmenteSaludable ? 'success' : 'warning'"></ion-icon>
+            <ion-label>
+              <strong>Saludable:</strong> {{ resultado.esNutricionalmenteSaludable ? 'Sí' : 'No' }}
+            </ion-label>
+          </ion-item>
+
+          <ion-item *ngIf="resultado.alergenosPresentes?.length > 0">
+            <ion-icon name="warning" slot="start" color="warning"></ion-icon>
+            <ion-label class="ion-text-wrap">
+              <strong>Alérgenos detectados:</strong><br>
+              {{ resultado.alergenosPresentes.join(', ') }}
+            </ion-label>
+          </ion-item>
+
+          <ion-item *ngIf="resultado.ingredientes?.length > 0">
+            <ion-icon name="list" slot="start" color="medium"></ion-icon>
+            <ion-label class="ion-text-wrap">
+              <strong>Ingredientes:</strong><br>
+              {{ resultado.ingredientes.join(', ') }}
+            </ion-label>
+          </ion-item>
+        </ion-list>
       </ion-card-content>
     </ion-card>
+
   </div>
 </ion-content>

@@ -26,7 +26,10 @@ jobs:
           node-version: 20
 
       - name: Instalar dependencias
-        run: npm install
+        run: npm ci
+
+      - name: Auditar dependencias vulnerables
+        run: npm audit --audit-level=high
 
       - name: Ejecutar analisis de calidad
         run: npm run lint

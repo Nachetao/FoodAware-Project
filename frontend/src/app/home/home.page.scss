@@ -5,3 +5,12 @@
   flex-direction: column;
   gap: 15px;
 }
+
+.result-list {
+  background: transparent;
+
+  ion-item {
+    --background: transparent;
+    --padding-start: 0;
+  }
+}
