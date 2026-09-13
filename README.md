@@ -64,8 +64,8 @@ Siga los pasos a continuación para configurar y ejecutar el proyecto en su ento
 ## 8. Pipeline DevSecOps
 El proyecto utiliza GitHub Actions para establecer un flujo robusto de automatización e integración continua (CI). Este pipeline se encarga de ejecutar la instalación de dependencias, realizar revisiones de formato (Linting), ejecutar pruebas unitarias, realizar análisis de dependencias vulnerables críticas (`npm audit` y `pip-audit`), y llevar a cabo un escaneo estricto de seguridad utilizando GitLeaks para prevenir la exposición accidental de credenciales.
 
-## 9. Entorno de Staging y Despliegue (Terraform)
-El proyecto incluye configuración de infraestructura como código (IaC) en la carpeta `terraform/`. Está preparado para aprovisionar un ambiente de **Staging** en AWS, el cual constará de instancias para alojar los contenedores de Docker, garantizando un entorno idéntico al de desarrollo local para pruebas previas a producción.
+## 9. Ambiente de staging
+El ambiente de staging se levanta localmente mediante Docker Compose, replicando la misma arquitectura de contenedores que se usaría en un despliegue real: frontend (puerto 4200), backend (puerto 3000), servicio Python (puerto 8000) y PostgreSQL (puerto interno 5432). La infraestructura está definida como código en la carpeta `terraform/`, validada automáticamente en cada push mediante el workflow `ci-terraform.yml` (`terraform fmt`, `terraform validate` y `terraform plan`).
 
 ## 10. Prototipo
 Enlace al diseño interactivo en Figma: https://www.figma.com/design/5ckGTwcAkx4wRjsVI7VfEw/FoodAware?node-id=0-1&t=bg6G2XpqgT3mjuvQ-1
