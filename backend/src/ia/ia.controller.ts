@@ -3,6 +3,7 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { IaAnalysisService } from "./ia.service";
 import { User } from "../users/user.entity";
+import { AnalizarProductoDto } from "./dto/analizar-producto.dto";
 
 @Controller("food")
 export class IaController {
@@ -14,12 +15,7 @@ export class IaController {
 
   @Post("analizar")
   async analizar(
-    @Body()
-    body: {
-      nombre: string;
-      ingredientes: string[];
-      userId?: string;
-    },
+    @Body() body: AnalizarProductoDto,
   ) {
     const { nombre, ingredientes, userId } = body;
 
