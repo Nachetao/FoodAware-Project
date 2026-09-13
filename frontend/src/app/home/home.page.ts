@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, ChangeDetectorRef } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { AlertController, LoadingController } from '@ionic/angular/lazy';
 import { environment } from '../../environments/environment';
@@ -13,6 +13,7 @@ export class HomePage {
   private http = inject(HttpClient);
   private alertCtrl = inject(AlertController);
   private loadingCtrl = inject(LoadingController);
+  private cdr = inject(ChangeDetectorRef);
 
   productoNombre: string = '';
   ingredientesTexto: string = '';
@@ -68,6 +69,7 @@ export class HomePage {
         next: async (respuesta) => {
           await loading.dismiss();
           this.resultado = respuesta.resultado;
+          this.cdr.detectChanges();
         },
         error: async (err) => {
           await loading.dismiss();
@@ -75,6 +77,7 @@ export class HomePage {
           this.errorMsg =
             err.error?.message ||
             'Ocurrió un error al conectar con el servidor.';
+          this.cdr.detectChanges();
         },
       });
   }

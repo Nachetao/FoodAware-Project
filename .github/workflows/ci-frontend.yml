@@ -28,6 +28,12 @@ jobs:
       - name: Instalar dependencias
         run: npm ci
 
+      - name: Ejecutar analisis de calidad (lint)
+        run: npm run lint
+
+      - name: Ejecutar pruebas unitarias
+        run: npm test -- --configuration ci
+
       - name: Auditar dependencias vulnerables
         run: npm audit --audit-level=critical
 

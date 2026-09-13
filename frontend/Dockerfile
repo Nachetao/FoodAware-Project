@@ -11,5 +11,6 @@ RUN npm run build
 FROM nginx:alpine
 # Copiamos la salida (Ionic usa www por defecto, si usas Angular puro a veces es dist/nombre-proyecto/browser)
 COPY --from=build /app/www /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]

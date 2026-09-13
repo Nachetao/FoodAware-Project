@@ -60,7 +60,7 @@ export class IaAnalysisService {
       const savedFood = await this.foodRepository.save(newFood);
       this.logger.log(`Alimento guardado en DB con ID: ${savedFood.id}`);
 
-      let aptoParaConsumo = true;
+      let aptoParaConsumo = !savedFood.alergenosPresentes || savedFood.alergenosPresentes.length === 0;
       if (userId) {
         const user = await this.userRepository.findOne({
           where: { id: userId },
@@ -69,9 +69,7 @@ export class IaAnalysisService {
           const tieneAlergia = savedFood.alergenosPresentes.some((alergeno) =>
             user.alergias.includes(alergeno),
           );
-          if (tieneAlergia) {
-            aptoParaConsumo = false;
-          }
+          aptoParaConsumo = !tieneAlergia;
         }
       }
 
