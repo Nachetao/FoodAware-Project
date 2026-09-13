@@ -3,6 +3,7 @@
 ```mermaid
 flowchart LR
     Usuario([Usuario]) -->|Ingresa producto| FoodAware[FoodAware]
+    FoodAware -->|Resultado del análisis| Usuario
     FoodAware -.->|Consultará en EP2| FuenteWeb[(Fuente web\nplanificada)]
 ```
 
@@ -43,13 +44,13 @@ erDiagram
         text nombre
         text correo
         text password
-        text_array alergias
+        text alergias "lista separada por comas"
     }
     FOODS {
         uuid id PK
         text nombre
-        text_array ingredientes
-        text_array alergenosPresentes
+        text ingredientes "lista separada por comas"
+        text alergenosPresentes "lista separada por comas"
         boolean esNutricionalmenteSaludable
     }
 ```
