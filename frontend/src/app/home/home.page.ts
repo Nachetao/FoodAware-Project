@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { AlertController, LoadingController } from '@ionic/angular/lazy';
 import { environment } from '../../environments/environment';
@@ -10,18 +10,16 @@ import { environment } from '../../environments/environment';
   standalone: false,
 })
 export class HomePage {
+  private http = inject(HttpClient);
+  private alertCtrl = inject(AlertController);
+  private loadingCtrl = inject(LoadingController);
+
   productoNombre: string = '';
   ingredientesTexto: string = '';
   resultado: any = null;
   errorMsg: string = '';
 
   private apiUrl = environment.apiUrl;
-
-  constructor(
-    private http: HttpClient,
-    private alertCtrl: AlertController,
-    private loadingCtrl: LoadingController,
-  ) {}
 
   async analizarProducto() {
     const nombre = this.productoNombre.trim();
