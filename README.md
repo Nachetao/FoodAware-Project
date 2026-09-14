@@ -64,6 +64,21 @@ Siga los pasos a continuación para configurar y ejecutar el proyecto en su ento
 ## 8. Pipeline DevSecOps
 El proyecto utiliza GitHub Actions para establecer un flujo robusto de automatización e integración continua (CI). Este pipeline se encarga de ejecutar la instalación de dependencias, realizar revisiones de formato (Linting), ejecutar pruebas unitarias, realizar análisis de dependencias vulnerables críticas (`npm audit` y `pip-audit`), y llevar a cabo un escaneo estricto de seguridad utilizando GitLeaks para prevenir la exposición accidental de credenciales.
 
+## 8.1 Evidencia del pipeline en funcionamiento
+
+Para comprobar que el pipeline bloquea el flujo ante un problema de seguridad, hicimos intencionalmente un secreto falso en una rama de prueba. El job de Gitleaks lo detectó de
+inmediato y falló el pipeline, identificando el archivo, la línea y la regla activada.
+
+![Checks fallando](docs/evidencia/7dd0b35e-ced6-458c-be62-37fe8d19b212.png)
+![Log de detección](docs/evidencia/4e13e96e-90f3-4be7-b47b-b2ddeba5c437.png)
+![Log de detección 2](docs/evidencia/a2601e1e-e4bc-463b-be64-5f0f5800a625.png)
+
+Tras eliminar el secreto (limpiando también el historial, ya que Gitleaks escanea los commits, no solo el código final), el pipeline volvió a estar en verde.
+
+![Pipeline en verde](docs/evidencia/no-leaks.webp)
+
+Esto confirma que el quality gate impide continuar el flujo mientras exista un secreto expuesto.
+
 ## 9. Ambiente de staging
 El ambiente de staging se levanta localmente mediante Docker Compose, replicando la misma arquitectura de contenedores que se usaría en un despliegue real: frontend (puerto 4200), backend (puerto 3000), servicio Python (puerto 8000) y PostgreSQL (puerto interno 5432). La infraestructura está definida como código en la carpeta `terraform/`, validada automáticamente en cada push mediante el workflow `ci-terraform.yml` (`terraform fmt`, `terraform validate` y `terraform plan`).
 
