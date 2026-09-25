@@ -57,9 +57,6 @@ Siga los pasos a continuación para configurar y ejecutar el proyecto en su ento
    Copie el archivo `.env.example`, renómbrelo a `.env` y configure los valores locales correspondientes.
 3. **Levantar los contenedores:** 
    Utilice el comando `docker compose up --build -d` para construir y levantar la base de datos, el frontend, el backend y el servicio de Python en segundo plano.
-4. **Ejecutar las migraciones (Importante):** 
-   Como el proyecto utiliza un control estricto de base de datos (`synchronize: false`), debe crear las tablas ejecutando las migraciones con el siguiente comando:
-   `docker compose exec backend npm run typeorm -- migration:run -d src/data-source.ts`
 
 ## 8. Pipeline DevSecOps
 El proyecto utiliza GitHub Actions para establecer un flujo robusto de automatización e integración continua (CI). Este pipeline se encarga de ejecutar la instalación de dependencias, realizar revisiones de formato (Linting), ejecutar pruebas unitarias, realizar análisis de dependencias vulnerables críticas (`npm audit` y `pip-audit`), y llevar a cabo un escaneo estricto de seguridad utilizando GitLeaks para prevenir la exposición accidental de credenciales.
