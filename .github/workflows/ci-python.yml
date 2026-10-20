@@ -42,3 +42,6 @@ jobs:
         run: |
           pip install pytest
           pytest
+
+      - name: Verificar que el contrato OpenAPI esté actualizado
+        run: python scripts/export_openapi.py --check

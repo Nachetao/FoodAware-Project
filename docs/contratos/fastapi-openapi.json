@@ -1,0 +1,1317 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Analista de Alimentos FoodAware",
+    "description": "Contrato entre FastAPI y NestJS de FoodAware. Los endpoints de productos, búsqueda, ingesta y métricas son stubs con datos de ejemplo y responden con el header X-Stub: true.",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/": {
+      "get": {
+        "tags": [
+          "sistema"
+        ],
+        "summary": "Read Root",
+        "operationId": "read_root__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "sistema"
+        ],
+        "summary": "Health Check",
+        "operationId": "health_check_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/analizar": {
+      "post": {
+        "tags": [
+          "analisis"
+        ],
+        "summary": "Analizar Producto",
+        "operationId": "analizar_producto_analizar_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductoInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/products/{codigo_barras}": {
+      "get": {
+        "tags": [
+          "productos"
+        ],
+        "summary": "Obtiene un producto por código de barras",
+        "operationId": "obtener_producto_products__codigo_barras__get",
+        "parameters": [
+          {
+            "name": "codigo_barras",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{8,14}$",
+              "description": "De 8 a 14 dígitos.",
+              "title": "Codigo Barras"
+            },
+            "description": "De 8 a 14 dígitos."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Producto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Recurso no encontrado (NOT_FOUND).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Parámetros o cuerpo inválidos (VALIDATION_ERROR).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error interno (INTERNAL_ERROR).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Open Food Facts no disponible (SOURCE_UNAVAILABLE).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Open Food Facts no respondió a tiempo (SOURCE_TIMEOUT).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/search": {
+      "get": {
+        "tags": [
+          "busqueda"
+        ],
+        "summary": "Busca productos por texto con ranking de relevancia",
+        "operationId": "buscar_search_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 100,
+              "description": "Texto a buscar.",
+              "title": "Q"
+            },
+            "description": "Texto a buscar."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 1,
+              "default": 10,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaBusqueda"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Parámetros o cuerpo inválidos (VALIDATION_ERROR).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error interno (INTERNAL_ERROR).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Open Food Facts no disponible (SOURCE_UNAVAILABLE).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Open Food Facts no respondió a tiempo (SOURCE_TIMEOUT).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ingest/runs": {
+      "post": {
+        "tags": [
+          "ingesta"
+        ],
+        "summary": "Inicia una ejecución de ingesta desde Open Food Facts",
+        "operationId": "iniciar_ingesta_ingest_runs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SolicitudIngesta"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResumenIngesta"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Parámetros o cuerpo inválidos (VALIDATION_ERROR).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error interno (INTERNAL_ERROR).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Open Food Facts no disponible (SOURCE_UNAVAILABLE).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ingest/runs/latest": {
+      "get": {
+        "tags": [
+          "ingesta"
+        ],
+        "summary": "Resumen de la última ejecución de ingesta",
+        "operationId": "ultima_ingesta_ingest_runs_latest_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResumenIngesta"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Recurso no encontrado (NOT_FOUND).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error interno (INTERNAL_ERROR).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/metrics/quality": {
+      "get": {
+        "tags": [
+          "metricas"
+        ],
+        "summary": "Métricas de calidad de los datos almacenados",
+        "operationId": "metricas_calidad_metrics_quality_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetricasCalidad"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error interno (INTERNAL_ERROR).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/metrics/evaluation": {
+      "get": {
+        "tags": [
+          "metricas"
+        ],
+        "summary": "Métricas de evaluación de la búsqueda (Precision@K)",
+        "operationId": "metricas_evaluacion_metrics_evaluation_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetricasEvaluacion"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error interno (INTERNAL_ERROR).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AllergenCode": {
+        "type": "string",
+        "enum": [
+          "lacteos",
+          "gluten",
+          "huevo",
+          "mani",
+          "frutos_secos",
+          "soya",
+          "pescado",
+          "crustaceos",
+          "moluscos",
+          "sesamo",
+          "mostaza",
+          "apio",
+          "sulfitos",
+          "altramuces"
+        ],
+        "title": "AllergenCode",
+        "description": "Alérgenos de declaración obligatoria, con códigos sin tildes."
+      },
+      "Calidad": {
+        "properties": {
+          "es_valido": {
+            "type": "boolean",
+            "title": "Es Valido",
+            "description": "Indica si el registro cumple las reglas mínimas.",
+            "examples": [
+              true
+            ]
+          },
+          "problemas": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Problemas",
+            "description": "Problemas detectados durante la validación.",
+            "examples": [
+              [
+                "sin_ingredientes",
+                "sin_imagen"
+              ]
+            ]
+          },
+          "completitud": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Completitud",
+            "description": "Fracción de campos relevantes presentes (0 a 1).",
+            "examples": [
+              0.85
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "es_valido",
+          "completitud"
+        ],
+        "title": "Calidad",
+        "description": "Resultado de la validación del registro."
+      },
+      "CodigoError": {
+        "type": "string",
+        "enum": [
+          "VALIDATION_ERROR",
+          "NOT_FOUND",
+          "SOURCE_UNAVAILABLE",
+          "SOURCE_TIMEOUT",
+          "INTERNAL_ERROR"
+        ],
+        "title": "CodigoError",
+        "description": "Códigos de error uniformes del contrato."
+      },
+      "DetalleError": {
+        "properties": {
+          "codigo": {
+            "$ref": "#/components/schemas/CodigoError",
+            "examples": [
+              "NOT_FOUND"
+            ]
+          },
+          "mensaje": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Mensaje",
+            "examples": [
+              "Producto 7802800716999 no encontrado"
+            ]
+          },
+          "request_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Request Id",
+            "description": "Valor del header X-Request-ID de la petición.",
+            "examples": [
+              "3f2b8c1e-9d4a-4e7b-8a6f-1c2d3e4f5a6b"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "codigo",
+          "mensaje",
+          "request_id"
+        ],
+        "title": "DetalleError"
+      },
+      "DietLabel": {
+        "type": "string",
+        "enum": [
+          "vegano",
+          "vegetariano",
+          "sin_gluten",
+          "sin_lactosa"
+        ],
+        "title": "DietLabel",
+        "description": "Etiquetas de dieta que el servicio puede inferir de un producto."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "MetricasCalidad": {
+        "properties": {
+          "porcentaje_validos": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Porcentaje Validos",
+            "examples": [
+              92.0
+            ]
+          },
+          "porcentaje_duplicados": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Porcentaje Duplicados",
+            "examples": [
+              5.0
+            ]
+          },
+          "cobertura_ingredientes": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Cobertura Ingredientes",
+            "description": "Porcentaje de productos con ingredientes.",
+            "examples": [
+              87.5
+            ]
+          },
+          "antiguedad_promedio_horas": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Antiguedad Promedio Horas",
+            "description": "Horas promedio desde recuperado_en.",
+            "examples": [
+              18.2
+            ]
+          },
+          "total_productos": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Total Productos",
+            "examples": [
+              1240
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "porcentaje_validos",
+          "porcentaje_duplicados",
+          "cobertura_ingredientes",
+          "antiguedad_promedio_horas",
+          "total_productos"
+        ],
+        "title": "MetricasCalidad"
+      },
+      "MetricasEvaluacion": {
+        "properties": {
+          "k": {
+            "type": "integer",
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "K",
+            "examples": [
+              5
+            ]
+          },
+          "precision_at_k": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Precision At K",
+            "examples": [
+              0.8
+            ]
+          },
+          "recall_at_k": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Recall At K",
+            "examples": [
+              0.65
+            ]
+          },
+          "consultas_evaluadas": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Consultas Evaluadas",
+            "examples": [
+              20
+            ]
+          },
+          "tiempo_promedio_ms": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Tiempo Promedio Ms",
+            "examples": [
+              14.3
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "k",
+          "precision_at_k",
+          "recall_at_k",
+          "consultas_evaluadas",
+          "tiempo_promedio_ms"
+        ],
+        "title": "MetricasEvaluacion"
+      },
+      "Procedencia": {
+        "properties": {
+          "fuente": {
+            "type": "string",
+            "const": "openfoodfacts",
+            "title": "Fuente",
+            "description": "Fuente web de la que proviene el producto.",
+            "default": "openfoodfacts",
+            "examples": [
+              "openfoodfacts"
+            ]
+          },
+          "url_fuente": {
+            "type": "string",
+            "maxLength": 2083,
+            "minLength": 1,
+            "format": "uri",
+            "title": "Url Fuente",
+            "description": "URL pública del producto en la fuente.",
+            "examples": [
+              "https://world.openfoodfacts.org/product/7802800716999"
+            ]
+          },
+          "recuperado_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Recuperado En",
+            "description": "Momento de la descarga; se normaliza a UTC.",
+            "examples": [
+              "2026-10-20T14:30:00Z"
+            ]
+          },
+          "modificado_en_fuente": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modificado En Fuente",
+            "description": "Última modificación informada por la fuente, en UTC.",
+            "examples": [
+              "2026-09-02T08:15:00Z"
+            ]
+          },
+          "run_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Run Id",
+            "description": "Ejecución de ingesta que obtuvo el registro.",
+            "examples": [
+              "3f2b8c1e-9d4a-4e7b-8a6f-1c2d3e4f5a6b"
+            ]
+          },
+          "hash_contenido": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Hash Contenido",
+            "description": "SHA-256 del contenido normalizado; sirve para detectar cambios y duplicados.",
+            "examples": [
+              "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "url_fuente",
+          "recuperado_en",
+          "run_id",
+          "hash_contenido"
+        ],
+        "title": "Procedencia",
+        "description": "Trazabilidad del registro: de dónde y cuándo se obtuvo."
+      },
+      "Producto": {
+        "properties": {
+          "codigo_barras": {
+            "type": "string",
+            "pattern": "^\\d{8,14}$",
+            "title": "Codigo Barras",
+            "description": "Código de barras de 8 a 14 dígitos.",
+            "examples": [
+              "7802800716999"
+            ]
+          },
+          "nombre": {
+            "type": "string",
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Nombre",
+            "description": "Nombre comercial del producto.",
+            "examples": [
+              "Leche semidescremada"
+            ]
+          },
+          "marca": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Marca",
+            "description": "Marca.",
+            "examples": [
+              "Colun"
+            ]
+          },
+          "cantidad": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 50
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cantidad",
+            "description": "Contenido neto tal como lo informa la fuente.",
+            "examples": [
+              "1 L"
+            ]
+          },
+          "ingredientes_texto": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 5000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ingredientes Texto",
+            "description": "Lista de ingredientes original, sin procesar.",
+            "examples": [
+              "Leche semidescremada, vitaminas A y D3."
+            ]
+          },
+          "ingredientes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Ingredientes",
+            "description": "Ingredientes normalizados (minúsculas, sin espacios sobrantes).",
+            "examples": [
+              [
+                "leche semidescremada",
+                "vitamina a",
+                "vitamina d3"
+              ]
+            ]
+          },
+          "alergenos": {
+            "items": {
+              "$ref": "#/components/schemas/AllergenCode"
+            },
+            "type": "array",
+            "title": "Alergenos",
+            "description": "Alérgenos presentes como ingrediente.",
+            "examples": [
+              [
+                "lacteos"
+              ]
+            ]
+          },
+          "trazas": {
+            "items": {
+              "$ref": "#/components/schemas/AllergenCode"
+            },
+            "type": "array",
+            "title": "Trazas",
+            "description": "Alérgenos que pueden estar presentes como trazas.",
+            "examples": [
+              [
+                "frutos_secos"
+              ]
+            ]
+          },
+          "etiquetas_dieta": {
+            "items": {
+              "$ref": "#/components/schemas/DietLabel"
+            },
+            "type": "array",
+            "title": "Etiquetas Dieta",
+            "description": "Dietas con las que el producto es compatible.",
+            "examples": [
+              [
+                "vegetariano",
+                "sin_gluten"
+              ]
+            ]
+          },
+          "nutriscore": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "a",
+                  "b",
+                  "c",
+                  "d",
+                  "e"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nutriscore",
+            "description": "Nutri-Score en minúscula.",
+            "examples": [
+              "b"
+            ]
+          },
+          "imagen_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2083,
+                "minLength": 1,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Imagen Url",
+            "description": "Imagen principal del producto.",
+            "examples": [
+              "https://images.openfoodfacts.org/images/products/780/280/071/6999/front_es.jpg"
+            ]
+          },
+          "procedencia": {
+            "$ref": "#/components/schemas/Procedencia"
+          },
+          "calidad": {
+            "$ref": "#/components/schemas/Calidad"
+          }
+        },
+        "type": "object",
+        "required": [
+          "codigo_barras",
+          "nombre",
+          "procedencia",
+          "calidad"
+        ],
+        "title": "Producto",
+        "description": "Producto alimenticio normalizado."
+      },
+      "ProductoInput": {
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "ingredientes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Ingredientes"
+          },
+          "marca": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Marca"
+          }
+        },
+        "type": "object",
+        "required": [
+          "nombre",
+          "ingredientes"
+        ],
+        "title": "ProductoInput"
+      },
+      "RespuestaBusqueda": {
+        "properties": {
+          "consulta": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 2,
+            "title": "Consulta",
+            "description": "Consulta tal como se procesó.",
+            "examples": [
+              "leche sin lactosa"
+            ]
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Total",
+            "description": "Total de coincidencias antes de paginar.",
+            "examples": [
+              23
+            ]
+          },
+          "tiempo_ms": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Tiempo Ms",
+            "description": "Tiempo de la búsqueda en ms.",
+            "examples": [
+              12.5
+            ]
+          },
+          "resultados": {
+            "items": {
+              "$ref": "#/components/schemas/ResultadoBusqueda"
+            },
+            "type": "array",
+            "title": "Resultados"
+          },
+          "estado_fuente": {
+            "type": "string",
+            "enum": [
+              "online",
+              "cache"
+            ],
+            "title": "Estado Fuente",
+            "description": "'cache' si la fuente no respondió y se usaron datos almacenados.",
+            "examples": [
+              "online"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "consulta",
+          "total",
+          "tiempo_ms",
+          "estado_fuente"
+        ],
+        "title": "RespuestaBusqueda"
+      },
+      "RespuestaError": {
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/DetalleError"
+          }
+        },
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "title": "RespuestaError"
+      },
+      "ResultadoBusqueda": {
+        "properties": {
+          "producto": {
+            "$ref": "#/components/schemas/Producto"
+          },
+          "score": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Score",
+            "description": "Puntaje de relevancia; mayor es más relevante.",
+            "examples": [
+              7.42
+            ]
+          },
+          "posicion": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Posicion",
+            "description": "Posición en el ranking, desde 1.",
+            "examples": [
+              1
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "producto",
+          "score",
+          "posicion"
+        ],
+        "title": "ResultadoBusqueda"
+      },
+      "ResumenIngesta": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Run Id",
+            "examples": [
+              "3f2b8c1e-9d4a-4e7b-8a6f-1c2d3e4f5a6b"
+            ]
+          },
+          "inicio": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Inicio",
+            "examples": [
+              "2026-10-20T14:00:00Z"
+            ]
+          },
+          "fin": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fin",
+            "description": "Nulo mientras la ejecución está en curso.",
+            "examples": [
+              "2026-10-20T14:02:30Z"
+            ]
+          },
+          "duracion_ms": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duracion Ms",
+            "examples": [
+              150000
+            ]
+          },
+          "recuperados": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Recuperados",
+            "description": "Productos descargados.",
+            "examples": [
+              100
+            ]
+          },
+          "validos": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Validos",
+            "examples": [
+              92
+            ]
+          },
+          "invalidos": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Invalidos",
+            "examples": [
+              8
+            ]
+          },
+          "duplicados": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Duplicados",
+            "description": "Válidos descartados por existir ya con el mismo contenido.",
+            "examples": [
+              5
+            ]
+          },
+          "errores": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Errores",
+            "description": "Peticiones a la fuente que fallaron.",
+            "examples": [
+              1
+            ]
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "en_curso",
+              "completado",
+              "completado_con_errores",
+              "fallido"
+            ],
+            "title": "Estado",
+            "examples": [
+              "completado_con_errores"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "inicio",
+          "recuperados",
+          "validos",
+          "invalidos",
+          "duplicados",
+          "errores",
+          "estado"
+        ],
+        "title": "ResumenIngesta"
+      },
+      "SolicitudIngesta": {
+        "properties": {
+          "pais": {
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 2,
+            "pattern": "^[a-z]+(-[a-z]+)*$",
+            "title": "Pais",
+            "description": "País como etiqueta de Open Food Facts.",
+            "default": "chile",
+            "examples": [
+              "chile"
+            ]
+          },
+          "categorias": {
+            "items": {
+              "type": "string",
+              "maxLength": 100,
+              "minLength": 2
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Categorias",
+            "description": "Categorías de Open Food Facts; vacío = todas.",
+            "examples": [
+              [
+                "en:dairies",
+                "en:breakfast-cereals"
+              ]
+            ]
+          },
+          "max_productos": {
+            "type": "integer",
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Max Productos",
+            "description": "Máximo de productos a recuperar.",
+            "default": 100,
+            "examples": [
+              100
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "SolicitudIngesta"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}
