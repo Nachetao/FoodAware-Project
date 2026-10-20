@@ -34,6 +34,11 @@ class NoEncontrado(ErrorAPI):
     codigo = CodigoError.NOT_FOUND
 
 
+class SolicitudInvalida(ErrorAPI):
+    status_code = 422
+    codigo = CodigoError.VALIDATION_ERROR
+
+
 class FuenteNoDisponible(ErrorAPI):
     status_code = 503
     codigo = CodigoError.SOURCE_UNAVAILABLE

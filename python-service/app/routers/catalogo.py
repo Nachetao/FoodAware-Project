@@ -5,11 +5,14 @@ from fastapi import APIRouter, Depends, Path, Query
 
 from app.core.errores import NoEncontrado, respuestas_error
 from app.core.request_id import marcar_stub
+from app.core.simulacion import simular_error
 from app.schemas.busqueda import RespuestaBusqueda
 from app.schemas.producto import Producto
 from app.services import catalogo_stub
 
-router = APIRouter(dependencies=[Depends(marcar_stub)])
+router = APIRouter(
+    dependencies=[Depends(marcar_stub), Depends(simular_error)]
+)
 
 
 @router.get(
