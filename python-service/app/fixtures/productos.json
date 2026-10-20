@@ -1,0 +1,68 @@
+[
+  {
+    "codigo_barras": "7801234000018",
+    "nombre": "Leche semidescremada",
+    "marca": "Lácteos del Sur",
+    "cantidad": "1 L",
+    "ingredientes_texto": "Leche semidescremada, vitamina A, vitamina D3.",
+    "ingredientes": ["leche semidescremada", "vitamina a", "vitamina d3"],
+    "alergenos": ["lacteos"],
+    "trazas": [],
+    "etiquetas_dieta": ["vegetariano", "sin_gluten"],
+    "nutriscore": "b",
+    "imagen_url": "https://images.openfoodfacts.org/images/products/780/123/400/0018/front_es.jpg",
+    "procedencia": {
+      "fuente": "openfoodfacts",
+      "url_fuente": "https://world.openfoodfacts.org/product/7801234000018",
+      "recuperado_en": "2026-10-20T14:30:00Z",
+      "modificado_en_fuente": "2026-09-02T08:15:00Z",
+      "run_id": "3f2b8c1e-9d4a-4e7b-8a6f-1c2d3e4f5a6b",
+      "hash_contenido": "be277b334c586b2bee20fabbb00f9ab43ea3390be854d92ed1f504edfc46d945"
+    },
+    "calidad": {"es_valido": true, "problemas": [], "completitud": 1.0}
+  },
+  {
+    "codigo_barras": "7805678000023",
+    "nombre": "Pan de molde integral",
+    "marca": "Panadería Andina",
+    "cantidad": "680 g",
+    "ingredientes_texto": "Harina de trigo integral, agua, gluten de trigo, azúcar, levadura, aceite vegetal, sal. Puede contener sésamo y soya.",
+    "ingredientes": ["harina de trigo integral", "agua", "gluten de trigo", "azucar", "levadura", "aceite vegetal", "sal"],
+    "alergenos": ["gluten"],
+    "trazas": ["sesamo", "soya"],
+    "etiquetas_dieta": ["vegano", "vegetariano", "sin_lactosa"],
+    "nutriscore": "b",
+    "imagen_url": null,
+    "procedencia": {
+      "fuente": "openfoodfacts",
+      "url_fuente": "https://world.openfoodfacts.org/product/7805678000023",
+      "recuperado_en": "2026-10-20T14:30:05Z",
+      "modificado_en_fuente": "2026-07-18T19:40:00Z",
+      "run_id": "3f2b8c1e-9d4a-4e7b-8a6f-1c2d3e4f5a6b",
+      "hash_contenido": "0ae99ab69f73270eb850e5b6be241b6e7f978b2a7c07287d8cdb01ab1d889a12"
+    },
+    "calidad": {"es_valido": true, "problemas": ["sin_imagen"], "completitud": 0.9}
+  },
+  {
+    "codigo_barras": "7809012000038",
+    "nombre": "Galletas de avena con chips de chocolate",
+    "marca": "Campo Austral",
+    "cantidad": "120 g",
+    "ingredientes_texto": "Harina de trigo, avena, azúcar, chips de chocolate (azúcar, pasta de cacao, lecitina de soya), mantequilla, huevo, sal. Puede contener maní y frutos secos.",
+    "ingredientes": ["harina de trigo", "avena", "azucar", "chips de chocolate", "pasta de cacao", "lecitina de soya", "mantequilla", "huevo", "sal"],
+    "alergenos": ["gluten", "lacteos", "huevo", "soya"],
+    "trazas": ["mani", "frutos_secos"],
+    "etiquetas_dieta": ["vegetariano"],
+    "nutriscore": "d",
+    "imagen_url": "https://images.openfoodfacts.org/images/products/780/901/200/0038/front_es.jpg",
+    "procedencia": {
+      "fuente": "openfoodfacts",
+      "url_fuente": "https://world.openfoodfacts.org/product/7809012000038",
+      "recuperado_en": "2026-10-20T14:30:09Z",
+      "modificado_en_fuente": null,
+      "run_id": "3f2b8c1e-9d4a-4e7b-8a6f-1c2d3e4f5a6b",
+      "hash_contenido": "5aaf419b2038b2c30f186a92a0e23caff2dcac3cb516715f588d058ddfa5d900"
+    },
+    "calidad": {"es_valido": true, "problemas": [], "completitud": 0.95}
+  }
+]
