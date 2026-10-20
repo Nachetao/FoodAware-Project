@@ -48,7 +48,7 @@ jobs:
           python-version: '3.10'
 
       - name: Install Python dependencies
-        run: cd python-service && pip install -r requirements.txt flake8 pytest
+        run: cd python-service && pip install -r requirements-dev.txt
 
       - name: Run Lint (Python)
         run: cd python-service && flake8 .
