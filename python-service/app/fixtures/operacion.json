@@ -1,0 +1,28 @@
+{
+  "ultima_ingesta": {
+    "run_id": "3f2b8c1e-9d4a-4e7b-8a6f-1c2d3e4f5a6b",
+    "inicio": "2026-10-20T14:29:58Z",
+    "fin": "2026-10-20T14:30:12Z",
+    "duracion_ms": 14000,
+    "recuperados": 5,
+    "validos": 4,
+    "invalidos": 1,
+    "duplicados": 1,
+    "errores": 1,
+    "estado": "completado_con_errores"
+  },
+  "metricas_calidad": {
+    "porcentaje_validos": 80.0,
+    "porcentaje_duplicados": 20.0,
+    "cobertura_ingredientes": 100.0,
+    "antiguedad_promedio_horas": 6.5,
+    "total_productos": 3
+  },
+  "metricas_evaluacion": {
+    "k": 5,
+    "precision_at_k": 0.8,
+    "recall_at_k": 0.67,
+    "consultas_evaluadas": 10,
+    "tiempo_promedio_ms": 1.2
+  }
+}

@@ -28,7 +28,9 @@ def test_header_se_ignora_por_defecto(client):
 )
 @pytest.mark.parametrize(
     "metodo, ruta",
-    [("get", PRODUCTO), ("get", "/search?q=leche")],
+    [("get", PRODUCTO), ("get", "/search?q=leche"),
+     ("post", "/ingest/runs"), ("get", "/ingest/runs/latest"),
+     ("get", "/metrics/quality"), ("get", "/metrics/evaluation")],
 )
 def test_simula_errores_en_rutas_stub(
     client, simulacion_activa, valor, status, metodo, ruta
