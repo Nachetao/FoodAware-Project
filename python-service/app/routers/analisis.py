@@ -1,27 +1,13 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
-from typing import List, Optional
+from fastapi import APIRouter
 
-app = FastAPI(title="Analista de Alimentos FoodAware")
+from app.schemas.analisis import ProductoInput
 
-
-class ProductoInput(BaseModel):
-    nombre: str
-    ingredientes: List[str]
-    marca: Optional[str] = None
+router = APIRouter(tags=["analisis"])
 
 
-@app.get("/")
-def read_root():
-    return {"status": "Servicio FastAPI activo"}
-
-
-@app.get("/health")
-def health_check():
-    return {"status": "ok", "service": "foodaware-ia"}
-
-
-@app.post("/analizar")
+# Contrato consumido por backend/src/ia/ia.service.ts: no cambiar la forma
+# de la respuesta sin coordinarlo con NestJS.
+@router.post("/analizar")
 def analizar_producto(producto: ProductoInput):
     # Lógica simulada de análisis
     ingredientes_lower = [
