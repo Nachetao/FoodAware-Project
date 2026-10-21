@@ -191,7 +191,9 @@ fin y no la degradan.
 
 Para NestJS: con 200, el servicio se puede usar (si está `degradado`, los datos
 pueden estar desactualizados o la búsqueda vacía); con 503, no. `detalle`
-muestra los datos que llevaron a cada estado.
+muestra los datos que llevaron a cada estado. El healthcheck de Docker usa este
+endpoint: el contenedor solo queda `unhealthy` con `error` (503), y el backend
+espera a que python-service esté `healthy` para arrancar.
 
 ## Errores
 
