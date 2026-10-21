@@ -1,0 +1,127 @@
+{
+  "version": 1,
+  "descripcion": "Consultas de evaluación de la búsqueda para una app de alergias en Chile. La relevancia se define con reglas sobre atributos del producto (todas las condiciones deben cumplirse), no con códigos de barras, para que sirva con cualquier corpus y el total de relevantes se conozca de forma exacta.",
+  "consultas": [
+    {
+      "id": "galletas-avena",
+      "consulta": "galletas de avena",
+      "tipo": "producto",
+      "relevancia": {"categorias_alguna": ["en:biscuits"], "nombre_alguno": ["avena"]}
+    },
+    {
+      "id": "leche-almendras",
+      "consulta": "leche de almendras",
+      "tipo": "producto",
+      "relevancia": {"categorias_alguna": ["en:plant-based-milk-alternatives"], "nombre_alguno": ["almendra", "almond"]}
+    },
+    {
+      "id": "chocolate-amargo",
+      "consulta": "chocolate amargo",
+      "tipo": "producto",
+      "relevancia": {"categorias_alguna": ["en:chocolates"], "nombre_alguno": ["amargo", "semiamargo", "bitter", "biter", "dark", "negro"]}
+    },
+    {
+      "id": "pan-integral",
+      "consulta": "pan integral",
+      "tipo": "producto",
+      "relevancia": {"categorias_alguna": ["en:breads"], "nombre_alguno": ["integral", "wholegrain"]}
+    },
+    {
+      "id": "yogurt-natural",
+      "consulta": "yogurt natural",
+      "tipo": "producto",
+      "relevancia": {"categorias_alguna": ["en:dairies"], "nombre_alguno": ["yogur", "yogurt", "yoghurt"], "nombre_todos": ["natural"]}
+    },
+    {
+      "id": "papas-fritas",
+      "consulta": "papas fritas",
+      "tipo": "producto",
+      "relevancia": {"categorias_alguna": ["en:salty-snacks"], "nombre_alguno": ["papa", "papas"]}
+    },
+    {
+      "id": "granola",
+      "consulta": "granola",
+      "tipo": "producto",
+      "relevancia": {"categorias_alguna": ["en:breakfast-cereals"], "nombre_alguno": ["granola"]}
+    },
+    {
+      "id": "avena-instantanea",
+      "consulta": "avena instantánea",
+      "tipo": "producto",
+      "relevancia": {"categorias_alguna": ["en:breakfast-cereals"], "nombre_todos": ["avena", "instantánea"]}
+    },
+    {
+      "id": "bebida-soya",
+      "consulta": "bebida de soya",
+      "tipo": "producto",
+      "relevancia": {"categorias_alguna": ["en:plant-based-milk-alternatives"], "nombre_alguno": ["soya", "soja"]}
+    },
+    {
+      "id": "queso",
+      "consulta": "queso",
+      "tipo": "producto",
+      "relevancia": {"categorias_alguna": ["en:dairies"], "nombre_alguno": ["queso", "quesillo", "ricotta"]}
+    },
+    {
+      "id": "mantequilla",
+      "consulta": "mantequilla",
+      "tipo": "producto",
+      "relevancia": {"categorias_alguna": ["en:dairies"], "nombre_alguno": ["mantequilla"]}
+    },
+    {
+      "id": "galletas-arroz",
+      "consulta": "galletas de arroz",
+      "tipo": "producto",
+      "relevancia": {"categorias_alguna": ["en:biscuits"], "nombre_alguno": ["arroz"]}
+    },
+    {
+      "id": "galletas-sin-gluten",
+      "consulta": "galletas sin gluten",
+      "tipo": "restriccion",
+      "relevancia": {"categorias_alguna": ["en:biscuits"], "sin_alergenos": ["gluten"]}
+    },
+    {
+      "id": "chocolate-sin-leche",
+      "consulta": "chocolate sin leche",
+      "tipo": "restriccion",
+      "relevancia": {"categorias_alguna": ["en:chocolates"], "sin_alergenos": ["lacteos"]}
+    },
+    {
+      "id": "snack-sin-mani",
+      "consulta": "snack sin maní",
+      "tipo": "restriccion",
+      "relevancia": {"categorias_alguna": ["en:salty-snacks"], "sin_alergenos": ["mani"]}
+    },
+    {
+      "id": "leche-sin-lactosa",
+      "consulta": "leche sin lactosa",
+      "tipo": "restriccion",
+      "relevancia": {"categorias_alguna": ["en:dairies"], "nombre_alguno": ["sin lactosa", "zero lacto", "deslactosada"]},
+      "nota": "Para intolerantes a la lactosa: sigue teniendo lácteos, por eso se define por el nombre y no por la ausencia de alérgenos."
+    },
+    {
+      "id": "pan-sin-gluten",
+      "consulta": "pan sin gluten",
+      "tipo": "restriccion",
+      "relevancia": {"categorias_alguna": ["en:breads"], "sin_alergenos": ["gluten"]}
+    },
+    {
+      "id": "cereal-sin-gluten",
+      "consulta": "cereal sin gluten",
+      "tipo": "restriccion",
+      "relevancia": {"categorias_alguna": ["en:breakfast-cereals"], "sin_alergenos": ["gluten"]}
+    },
+    {
+      "id": "bebida-vegetal-sin-soya",
+      "consulta": "bebida vegetal sin soya",
+      "tipo": "restriccion",
+      "relevancia": {"categorias_alguna": ["en:plant-based-milk-alternatives"], "sin_alergenos": ["soya"]}
+    },
+    {
+      "id": "galletas-sin-huevo",
+      "consulta": "galletas sin huevo",
+      "tipo": "restriccion",
+      "relevancia": {"categorias_alguna": ["en:biscuits"], "sin_alergenos": ["huevo"]}
+    }
+  ]
+}

@@ -16,7 +16,10 @@ class ClienteOFFFalso:
     `productos` mapea código -> payload o excepción; `paginas` es la lista
     de respuestas (o excepciones) de /api/v2/search, desde la página 1.
     `paginas_por_categoria` hace lo mismo para una categoría específica;
-    las categorías que no están ahí usan `paginas`.
+    las categorías que no están ahí usan `paginas`. Una página puede ser
+    una lista de efectos que se consumen en orden (el último se repite),
+    para simular un 503 que se recupera: [FuenteNoDisponible(...), pagina].
+    `dormir` reemplaza la pausa antes del reintento de la ingesta.
     """
 
     def __init__(self):
@@ -25,6 +28,10 @@ class ClienteOFFFalso:
         self.paginas_por_categoria = {}
         self.llamadas = []
         self.esperas_maximas = []
+        self.pausas = []
+
+    async def dormir(self, segundos):
+        self.pausas.append(segundos)
 
     async def obtener_producto(self, codigo_barras, espera_maxima=None):
         self.llamadas.append(("producto", codigo_barras))
@@ -49,6 +56,8 @@ class ClienteOFFFalso:
         if pagina > len(paginas):
             return {"products": []}
         efecto = paginas[pagina - 1]
+        if isinstance(efecto, list):
+            efecto = efecto.pop(0) if len(efecto) > 1 else efecto[0]
         if isinstance(efecto, Exception):
             raise efecto
         return efecto
@@ -76,6 +85,7 @@ def client(tmp_path, monkeypatch, off_falso):
         app.state.ingesta = ServicioIngesta(
             repositorio, off_falso, BASE_OFF, tamano_pagina=2,
             al_terminar=servicios.busqueda.reconstruir,
+            dormir=off_falso.dormir,
         )
         yield cliente_http
 

@@ -30,6 +30,11 @@ LECTURAS_POR_MINUTO = 12
 BUSQUEDAS_POR_MINUTO = 8
 MAX_REINTENTOS = 3
 TAMANO_PAGINA_MAXIMO = 100
+# /api/v2/search devuelve 503 en ráfagas más largas que la lectura de un
+# producto, y la ingesta corre en segundo plano: sus reintentos parten con
+# más espera (2, 4 y 8 s más jitter, en vez de 1, 2 y 4 s). Si OFF envía
+# Retry-After, se respeta en ambos casos.
+ESPERA_BASE_BUSQUEDAS = 2.0
 
 CAMPOS = (
     "code",
@@ -66,6 +71,7 @@ class ClienteOpenFoodFacts:
         limitador_busquedas: Optional[LimitadorTasa] = None,
         max_reintentos: int = MAX_REINTENTOS,
         espera_base: float = 1.0,
+        espera_base_busquedas: float = ESPERA_BASE_BUSQUEDAS,
         espera_maxima: float = 30.0,
         dormir: Callable[[float], Awaitable[None]] = asyncio.sleep,
         aleatorio: Callable[[], float] = random.random,
@@ -89,6 +95,7 @@ class ClienteOpenFoodFacts:
         )
         self.max_reintentos = max_reintentos
         self._espera_base = espera_base
+        self._espera_base_busquedas = espera_base_busquedas
         self._espera_maxima = espera_maxima
         self._dormir = dormir
         self._aleatorio = aleatorio
@@ -160,9 +167,11 @@ class ClienteOpenFoodFacts:
         }
         if categorias:
             params["categories_tags"] = "|".join(categorias)
-        descripcion = f"búsqueda {pais} página {pagina}"
+        filtro = f" {'|'.join(categorias)}" if categorias else ""
+        descripcion = f"búsqueda {pais}{filtro} página {pagina}"
         datos = await self._get(
-            "/api/v2/search", params, self._limitador_busquedas, descripcion
+            "/api/v2/search", params, self._limitador_busquedas, descripcion,
+            espera_base=self._espera_base_busquedas,
         )
         if not isinstance(datos.get("products"), list):
             logger.error("Respuesta sin 'products' en la %s", descripcion)
@@ -177,7 +186,10 @@ class ClienteOpenFoodFacts:
         limitador: LimitadorTasa,
         descripcion: str,
         espera_maxima: Optional[float] = None,
+        *,
+        espera_base: Optional[float] = None,
     ) -> Dict[str, Any]:
+        base = self._espera_base if espera_base is None else espera_base
         for intento in range(self.max_reintentos + 1):
             try:
                 await limitador.esperar_turno(espera_maxima)
@@ -230,7 +242,7 @@ class ClienteOpenFoodFacts:
                 logger.error("Open Food Facts falló en la %s tras %d "
                              "intentos: %s", descripcion, intento + 1, motivo)
                 raise fallo
-            espera = self._calcular_espera(intento, retry_after)
+            espera = self._calcular_espera(intento, retry_after, base)
             logger.warning("Open Food Facts falló en la %s: %s; reintento "
                            "%d/%d en %.1f s", descripcion, motivo,
                            intento + 1, self.max_reintentos, espera)
@@ -238,11 +250,10 @@ class ClienteOpenFoodFacts:
         raise AssertionError("inalcanzable")
 
     def _calcular_espera(
-        self, intento: int, retry_after: Optional[float]
+        self, intento: int, retry_after: Optional[float], base: float
     ) -> float:
-        exponencial = min(self._espera_maxima,
-                          self._espera_base * 2 ** intento)
-        espera = exponencial + self._aleatorio() * self._espera_base
+        exponencial = min(self._espera_maxima, base * 2 ** intento)
+        espera = exponencial + self._aleatorio() * base
         if retry_after is not None:
             espera = max(espera, min(retry_after, self._espera_maxima))
         return espera

@@ -5,6 +5,7 @@ from app.repositories.cache import RepositorioCache
 from app.services.busqueda import ServicioBusqueda
 from app.services.catalogo import ServicioCatalogo
 from app.services.ingesta import ServicioIngesta
+from app.services.metricas import ServicioMetricas
 
 
 def obtener_repositorio(request: Request) -> RepositorioCache:
@@ -21,3 +22,7 @@ def obtener_ingesta(request: Request) -> ServicioIngesta:
 
 def obtener_busqueda(request: Request) -> ServicioBusqueda:
     return request.app.state.busqueda
+
+
+def obtener_metricas(request: Request) -> ServicioMetricas:
+    return request.app.state.metricas

@@ -18,6 +18,7 @@ from app.schemas.ingesta import SolicitudIngesta
 from app.services.busqueda import ServicioBusqueda
 from app.services.catalogo import ServicioCatalogo
 from app.services.ingesta import ServicioIngesta
+from app.services.metricas import ServicioMetricas
 from app.services.planificador import PlanificadorIngesta
 from app.services.reprocesamiento import reprocesar_cache
 
@@ -28,6 +29,7 @@ class Servicios(NamedTuple):
     catalogo: ServicioCatalogo
     ingesta: ServicioIngesta
     busqueda: ServicioBusqueda
+    metricas: ServicioMetricas
 
 
 def construir_servicios(
@@ -47,7 +49,8 @@ def construir_servicios(
     # Al terminar cada ingesta, el índice se reconstruye con lo nuevo.
     ingesta_ = ServicioIngesta(repositorio, cliente, settings.off_base_url,
                                al_terminar=busqueda_.reconstruir)
-    return Servicios(catalogo_, ingesta_, busqueda_)
+    return Servicios(catalogo_, ingesta_, busqueda_,
+                     ServicioMetricas(repositorio, busqueda_))
 
 
 def solicitud_automatica() -> SolicitudIngesta:
@@ -89,6 +92,7 @@ async def ciclo_de_vida(app: FastAPI):
     app.state.catalogo = servicios.catalogo
     app.state.ingesta = servicios.ingesta
     app.state.busqueda = servicios.busqueda
+    app.state.metricas = servicios.metricas
     # El índice se arma después del reprocesamiento, con los datos al día.
     await servicios.busqueda.reconstruir()
     tarea = None
@@ -117,9 +121,9 @@ app = FastAPI(
     version="0.1.0",
     description=(
         "Contrato entre FastAPI y NestJS de FoodAware. Productos, búsqueda "
-        "e ingesta usan Open Food Facts y una caché local; las métricas aún "
-        "son stubs con datos de ejemplo y responden con el header "
-        "X-Stub: true."
+        "e ingesta usan Open Food Facts y una caché local; las métricas de "
+        "calidad se calculan desde la caché y las de evaluación, sobre el "
+        "índice de búsqueda vigente."
     ),
     lifespan=ciclo_de_vida,
 )

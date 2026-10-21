@@ -41,7 +41,8 @@ def crear(repo, off_falso, esperas, al_iniciar=True, cliente="falso"):
         esperas.append(segundos)
 
     servicio = ServicioIngesta(
-        repo, off_falso if cliente == "falso" else None, "https://x"
+        repo, off_falso if cliente == "falso" else None, "https://x",
+        pausa_reintento=0,
     )
     return PlanificadorIngesta(
         servicio, repo, intervalo=INTERVALO, al_iniciar=al_iniciar,

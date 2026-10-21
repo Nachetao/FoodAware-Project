@@ -1,7 +1,7 @@
 import uuid
 
 import pytest
-from fastapi import APIRouter, Depends, FastAPI
+from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
 
 from app.core.errores import (
@@ -10,7 +10,7 @@ from app.core.errores import (
     NoEncontrado,
     registrar_manejadores_error,
 )
-from app.core.request_id import RequestIdMiddleware, marcar_stub
+from app.core.request_id import RequestIdMiddleware
 from app.schemas.sistema import RespuestaError
 
 
@@ -18,9 +18,9 @@ def crear_app_prueba():
     app = FastAPI()
     app.add_middleware(RequestIdMiddleware)
     registrar_manejadores_error(app)
-    stub = APIRouter(dependencies=[Depends(marcar_stub)])
+    rutas = APIRouter()
 
-    @stub.get("/stub/{caso}")
+    @rutas.get("/prueba/{caso}")
     def lanzar(caso: str, n: int = 1):
         errores = {
             "404": NoEncontrado("Producto no encontrado"),
@@ -36,7 +36,7 @@ def crear_app_prueba():
     def normal():
         return {"ok": True}
 
-    app.include_router(stub)
+    app.include_router(rutas)
     return app
 
 
@@ -65,18 +65,18 @@ def test_request_id_ausente_o_invalido_se_genera(prueba, valor):
     ],
 )
 def test_errores_uniformes(prueba, caso, status, codigo):
-    response = prueba.get(f"/stub/{caso}", headers={"X-Request-ID": "r-1"})
+    response = prueba.get(f"/prueba/{caso}", headers={"X-Request-ID": "r-1"})
     assert response.status_code == status
     cuerpo = RespuestaError.model_validate(response.json())
     assert cuerpo.error.codigo == codigo
     assert cuerpo.error.request_id == "r-1"
     assert "fallo inesperado" not in cuerpo.error.mensaje
     assert response.headers["X-Request-ID"] == "r-1"
-    assert response.headers["X-Stub"] == "true"
+    assert "X-Stub" not in response.headers
 
 
 def test_validacion_devuelve_validation_error(prueba):
-    response = prueba.get("/stub/ok?n=abc")
+    response = prueba.get("/prueba/ok?n=abc")
     assert response.status_code == 422
     error = response.json()["error"]
     assert error["codigo"] == "VALIDATION_ERROR"
@@ -104,7 +104,7 @@ def test_rutas_legadas_conservan_errores_de_fastapi(client):
     assert es_uuid4(response.headers["X-Request-ID"])
 
 
-def test_health_tiene_request_id_sin_stub(client):
+def test_health_tiene_request_id(client):
     response = client.get("/health", headers={"X-Request-ID": "salud-1"})
     assert response.json() == {"status": "ok", "service": "foodaware-ia"}
     assert response.headers["X-Request-ID"] == "salud-1"

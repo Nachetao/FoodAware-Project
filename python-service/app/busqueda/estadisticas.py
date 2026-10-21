@@ -6,6 +6,7 @@ from typing import Counter as CounterType
 from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from app.busqueda.buscador import Instantanea
+from app.procesamiento.calidad import POSIBLE_DUPLICADO
 from app.schemas.producto import Producto
 
 Registro = Tuple[Producto, Optional[Mapping[str, Any]]]
@@ -26,6 +27,9 @@ class EstadisticasCorpus:
     # Términos promedio por campo y por producto (suma de los campos).
     largo_promedio: Dict[str, float] = field(default_factory=dict)
     largo_promedio_total: float = 0.0
+    # Válidos marcados con posible_duplicado (mismo nombre, marca y
+    # cantidad con otro código). No se descartan: se informan.
+    posibles_duplicados: int = 0
 
 
 def calcular_estadisticas(
@@ -47,6 +51,9 @@ def calcular_estadisticas(
     for producto, payload in registros:
         if producto.codigo_barras not in instantanea.productos:
             continue  # solo cuentan los indexados (válidos)
+        if any(p.startswith(f"{POSIBLE_DUPLICADO}:")
+               for p in producto.calidad.problemas):
+            resumen.posibles_duplicados += 1
         etiquetas = _etiquetas(payload)
         resumen.categorias_frecuentes.update(etiquetas)
         presentes = [c for c in categorias if c in etiquetas]

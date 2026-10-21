@@ -10,7 +10,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.core.request_id import HEADER_REQUEST_ID, HEADER_STUB
+from app.core.request_id import HEADER_REQUEST_ID
 from app.schemas.enums import CodigoError
 from app.schemas.sistema import RespuestaError
 
@@ -82,8 +82,6 @@ def respuesta_error(
     )
     # Se repiten aquí porque los 500 no pasan por RequestIdMiddleware.
     headers = {**(headers or {}), HEADER_REQUEST_ID: request_id}
-    if getattr(request.state, "stub", False):
-        headers[HEADER_STUB] = "true"
     return JSONResponse(
         cuerpo.model_dump(mode="json"),
         status_code=status_code,

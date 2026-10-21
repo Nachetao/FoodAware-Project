@@ -22,7 +22,8 @@ def simular_error(
         Optional[str], Header(include_in_schema=False)
     ] = None,
 ) -> None:
-    """Dependencia de los routers stub para probar fallas desde NestJS.
+    """Dependencia de los endpoints del contrato para probar fallas desde
+    NestJS.
 
     Solo actúa con SIMULAR_ERRORES_HABILITADO=true; si no, ignora el header.
     """

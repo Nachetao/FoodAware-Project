@@ -84,9 +84,7 @@ def mapear_producto(
                          maximo=300),
         "marca": _texto(payload, "brands", maximo=200),
         "cantidad": _texto(payload, "quantity", maximo=50),
-        "ingredientes_texto": _texto(
-            payload, "ingredients_text_es", "ingredients_text", maximo=5000
-        ),
+        "ingredientes_texto": texto_ingredientes(payload),
         "nutriscore": _nutriscore(payload.get("nutriscore_grade")),
         "imagen_url": _url(payload.get("image_front_url"))
         or _url(payload.get("image_url")),
@@ -182,6 +180,19 @@ def _traducir(
         elif isinstance(etiqueta, str) and etiqueta != "en:none":
             desconocidas.append(etiqueta)
     return _sin_repetidos(conocidas), desconocidas
+
+
+def texto_ingredientes(payload: Dict[str, Any]) -> Optional[str]:
+    """Texto de ingredientes original, en español si viene."""
+    return _texto(payload, "ingredients_text_es", "ingredients_text",
+                  maximo=5000)
+
+
+def tiene_ingredientes_utilizables(payload: Dict[str, Any]) -> bool:
+    """Si después de limpiar queda al menos un ingrediente. Sirve aunque el
+    payload no se pueda mapear (por ejemplo, con un código inválido)."""
+    return bool(analizar_ingredientes(texto_ingredientes(payload))
+                .ingredientes)
 
 
 def _texto(payload: Dict[str, Any], *claves: str, maximo: int):
