@@ -20,6 +20,11 @@ services:
     container_name: foodaware_python
     env_file:
       - .env
+    environment:
+      # La caché SQLite vive en el volumen para no perderse al reiniciar.
+      CACHE_DB_PATH: ${CACHE_DB_PATH:-/data/foodaware-cache.sqlite3}
+    volumes:
+      - python_cache:/data
     ports:
       - "8000:8000"
     restart: unless-stopped
@@ -49,3 +54,4 @@ services:
 
 volumes:
   postgres_data:
+  python_cache:

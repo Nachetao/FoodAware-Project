@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     off_timeout_segundos: float = Field(
         10.0, gt=0, validation_alias="OFF_TIMEOUT_SEGUNDOS"
     )
+    # En Docker apunta al volumen /data (ver docker-compose.yml).
+    cache_db_path: str = Field(
+        "data/foodaware-cache.sqlite3", validation_alias="CACHE_DB_PATH"
+    )
 
 
 settings = Settings()
