@@ -3,8 +3,7 @@ from fastapi.testclient import TestClient
 
 from app.core import config
 from app.core.errores import NoEncontrado
-from app.main import app
-from app.services.catalogo import ServicioCatalogo
+from app.main import app, construir_servicios
 from app.services.ingesta import ServicioIngesta
 from tests.payloads_off import productos_de_ejemplo
 
@@ -22,9 +21,11 @@ class ClienteOFFFalso:
         self.productos = {}
         self.paginas = []
         self.llamadas = []
+        self.esperas_maximas = []
 
-    async def obtener_producto(self, codigo_barras):
+    async def obtener_producto(self, codigo_barras, espera_maxima=None):
         self.llamadas.append(("producto", codigo_barras))
+        self.esperas_maximas.append(espera_maxima)
         efecto = self.productos.get(codigo_barras)
         if efecto is None:
             raise NoEncontrado(
@@ -46,6 +47,9 @@ class ClienteOFFFalso:
             raise efecto
         return efecto
 
+    async def cerrar(self):
+        pass
+
 
 @pytest.fixture
 def off_falso():
@@ -60,8 +64,7 @@ def client(tmp_path, monkeypatch, off_falso):
     monkeypatch.setattr(config.settings, "off_user_agent", None)
     with TestClient(app) as cliente_http:
         repositorio = app.state.repositorio
-        app.state.catalogo = ServicioCatalogo(repositorio, off_falso,
-                                              BASE_OFF)
+        app.state.catalogo, _ = construir_servicios(repositorio, off_falso)
         app.state.ingesta = ServicioIngesta(repositorio, off_falso,
                                             BASE_OFF, tamano_pagina=2)
         yield cliente_http

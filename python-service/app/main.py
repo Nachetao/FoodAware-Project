@@ -1,6 +1,9 @@
 import asyncio
+import contextlib
 import logging
 from contextlib import asynccontextmanager
+from datetime import timedelta
+from typing import Optional, Tuple
 
 from fastapi import FastAPI
 
@@ -12,8 +15,26 @@ from app.repositories.cache import RepositorioCache
 from app.routers import analisis, catalogo, ingesta, metricas, sistema
 from app.services.catalogo import ServicioCatalogo
 from app.services.ingesta import ServicioIngesta
+from app.services.planificador import PlanificadorIngesta
 
 logger = logging.getLogger(__name__)
+
+
+def construir_servicios(
+    repositorio: RepositorioCache,
+    cliente: Optional[ClienteOpenFoodFacts],
+) -> Tuple[ServicioCatalogo, ServicioIngesta]:
+    catalogo_ = ServicioCatalogo(
+        repositorio,
+        cliente,
+        settings.off_base_url,
+        # Una petición HTTP no espera al limitador más que este tope; la
+        # ingesta en segundo plano sí espera lo necesario.
+        espera_maxima=settings.limitador_espera_max_segundos,
+        ttl=timedelta(hours=settings.cache_ttl_horas),
+    )
+    ingesta_ = ServicioIngesta(repositorio, cliente, settings.off_base_url)
+    return catalogo_, ingesta_
 
 
 @asynccontextmanager
@@ -33,15 +54,25 @@ async def ciclo_de_vida(app: FastAPI):
         logger.error("Open Food Facts deshabilitado: %s", exc)
 
     app.state.repositorio = repositorio
-    app.state.catalogo = ServicioCatalogo(
-        repositorio, cliente, settings.off_base_url
+    app.state.catalogo, app.state.ingesta = construir_servicios(
+        repositorio, cliente
     )
-    app.state.ingesta = ServicioIngesta(
-        repositorio, cliente, settings.off_base_url
-    )
+    tarea = None
+    if cliente is not None:
+        planificador = PlanificadorIngesta(
+            app.state.ingesta,
+            repositorio,
+            intervalo=timedelta(hours=settings.ingesta_intervalo_horas),
+            al_iniciar=settings.ingesta_al_iniciar,
+        )
+        tarea = asyncio.create_task(planificador.bucle())
     try:
         yield
     finally:
+        if tarea is not None:
+            tarea.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await tarea
         if cliente is not None:
             await cliente.cerrar()
 

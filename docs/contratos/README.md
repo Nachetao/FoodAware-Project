@@ -23,9 +23,24 @@ La fuente de verdad es el código (modelos Pydantic en `python-service/app/schem
   local, que se llena con `POST /ingest/runs`. Solo se buscan productos válidos.
 - **`/products/{codigo_barras}`** lee primero la caché; si no está, lo trae de
   Open Food Facts y lo guarda. Si la fuente falla y no está en la caché,
-  responde 503 o 504.
+  responde 503 o 504. Una petición nunca espera al limitador de tasa más de
+  `LIMITADOR_ESPERA_MAX_SEGUNDOS` (3 por defecto): si tendría que esperar más,
+  responde de inmediato 503 `SOURCE_UNAVAILABLE` con el mensaje "Se alcanzó el
+  límite de consultas a Open Food Facts; intenta de nuevo en N s".
 - Requiere `OFF_USER_AGENT` en `.env` (formato `AppName/Version (correo)`); sin
   él, los endpoints que necesitan la fuente responden 503.
+
+### Estrategia de actualización
+
+| Variable | Por defecto | Efecto |
+|---|---|---|
+| `INGESTA_AL_INICIAR` | `true` | Si la caché está vacía al arrancar, lanza una ingesta inicial. |
+| `INGESTA_INTERVALO_HORAS` | `24` | Refresco periódico; la próxima se calcula desde el inicio de la última ejecución, así un reinicio no la pospone. |
+| `CACHE_TTL_HORAS` | `72` | Un producto verificado hace más de este tiempo se refresca al pedirlo si la fuente responde; si no, se devuelve el de la caché. |
+
+Las ingestas automáticas usan `SolicitudIngesta` por defecto (Chile, 100
+productos) y no se lanzan si ya hay una en curso. Para probar contra la API real
+(fuera del pipeline): `python scripts/probar_off.py` desde `python-service/`.
 
 ## Levantar el servicio
 

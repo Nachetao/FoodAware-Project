@@ -25,9 +25,22 @@ class Settings(BaseSettings):
     off_timeout_segundos: float = Field(
         10.0, gt=0, validation_alias="OFF_TIMEOUT_SEGUNDOS"
     )
+    # Tope de espera del limitador en lecturas que vienen de una petición.
+    limitador_espera_max_segundos: float = Field(
+        3.0, ge=0, validation_alias="LIMITADOR_ESPERA_MAX_SEGUNDOS"
+    )
     # En Docker apunta al volumen /data (ver docker-compose.yml).
     cache_db_path: str = Field(
         "data/foodaware-cache.sqlite3", validation_alias="CACHE_DB_PATH"
+    )
+    cache_ttl_horas: float = Field(
+        72.0, gt=0, validation_alias="CACHE_TTL_HORAS"
+    )
+    ingesta_al_iniciar: bool = Field(
+        True, validation_alias="INGESTA_AL_INICIAR"
+    )
+    ingesta_intervalo_horas: float = Field(
+        24.0, gt=0, validation_alias="INGESTA_INTERVALO_HORAS"
     )
 
 

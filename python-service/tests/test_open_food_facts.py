@@ -4,6 +4,7 @@ import httpx
 import pytest
 import respx
 
+from app.clients.limitador import LimitadorTasa
 from app.clients.open_food_facts import CAMPOS, ClienteOpenFoodFacts
 from app.core import config
 from app.core.errores import FuenteNoDisponible, FuenteTimeout, NoEncontrado
@@ -24,9 +25,11 @@ PRODUCTO_OK = {
 class LimitadorContador:
     def __init__(self):
         self.turnos = 0
+        self.esperas_maximas = []
 
-    async def esperar_turno(self):
+    async def esperar_turno(self, espera_maxima=None):
         self.turnos += 1
+        self.esperas_maximas.append(espera_maxima)
 
 
 @pytest.fixture
@@ -195,6 +198,45 @@ async def test_buscar_parametros_invalidos(cliente, pagina, tamano):
     with pytest.raises(ValueError):
         await cliente.buscar_por_pais("chile", pagina=pagina,
                                       tamano_pagina=tamano)
+
+
+async def test_espera_maxima_llega_al_limitador_de_lecturas(
+    cliente, off, lecturas, busquedas
+):
+    off.get(RUTA_PRODUCTO).respond(200, json=PRODUCTO_OK)
+    off.get("/api/v2/search").respond(200, json={"products": []})
+    await cliente.obtener_producto(CODIGO, espera_maxima=3)
+    await cliente.buscar_por_pais("chile")
+    assert lecturas.esperas_maximas == [3]
+    # La búsqueda (usada por la ingesta) espera sin tope.
+    assert busquedas.esperas_maximas == [None]
+
+
+async def test_limite_alcanzado_falla_de_inmediato(off, caplog):
+    reloj = {"ahora": 0.0}
+    esperas = []
+
+    async def dormir(segundos):
+        esperas.append(segundos)
+
+    limitador = LimitadorTasa(1, 60, reloj=lambda: reloj["ahora"],
+                              dormir=dormir)
+    ruta = off.get(RUTA_PRODUCTO).respond(200, json=PRODUCTO_OK)
+    async with ClienteOpenFoodFacts(BASE, UA, limitador_lecturas=limitador,
+                                    dormir=dormir) as cliente:
+        await cliente.obtener_producto(CODIGO, espera_maxima=3)
+        reloj["ahora"] = 10
+        with caplog.at_level(logging.WARNING):
+            with pytest.raises(FuenteNoDisponible) as error:
+                await cliente.obtener_producto(CODIGO, espera_maxima=3)
+    assert error.value.mensaje == (
+        "Se alcanzó el límite de consultas a Open Food Facts; intenta de "
+        "nuevo en 50 s"
+    )
+    assert ruta.call_count == 1
+    assert esperas == []
+    assert any("Límite de consultas" in r.getMessage()
+               for r in caplog.records)
 
 
 @pytest.mark.parametrize(

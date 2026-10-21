@@ -8,13 +8,14 @@ red, timeouts, 429 y 5xx.
 """
 import asyncio
 import logging
+import math
 import random
 import re
 from typing import Any, Awaitable, Callable, Dict, Optional, Sequence
 
 import httpx
 
-from app.clients.limitador import LimitadorTasa
+from app.clients.limitador import LimiteTasaExcedido, LimitadorTasa
 from app.core.errores import (
     ErrorAPI,
     FuenteNoDisponible,
@@ -106,14 +107,21 @@ class ClienteOpenFoodFacts:
     async def __aexit__(self, *_exc) -> None:
         await self.cerrar()
 
-    async def obtener_producto(self, codigo_barras: str) -> Dict[str, Any]:
-        """Lee un producto con la API v3 y devuelve el objeto `product`."""
+    async def obtener_producto(
+        self, codigo_barras: str, espera_maxima: Optional[float] = None
+    ) -> Dict[str, Any]:
+        """Lee un producto con la API v3 y devuelve el objeto `product`.
+
+        Con `espera_maxima`, si el limitador obligaría a esperar más, falla
+        de inmediato con FuenteNoDisponible (pensado para peticiones HTTP).
+        """
         descripcion = f"producto {codigo_barras}"
         datos = await self._get(
             f"/api/v3/product/{codigo_barras}",
             {"fields": ",".join(CAMPOS)},
             self._limitador_lecturas,
             descripcion,
+            espera_maxima,
         )
         if datos.get("status") == "failure":
             raise NoEncontrado(
@@ -165,9 +173,18 @@ class ClienteOpenFoodFacts:
         params: Dict[str, Any],
         limitador: LimitadorTasa,
         descripcion: str,
+        espera_maxima: Optional[float] = None,
     ) -> Dict[str, Any]:
         for intento in range(self.max_reintentos + 1):
-            await limitador.esperar_turno()
+            try:
+                await limitador.esperar_turno(espera_maxima)
+            except LimiteTasaExcedido as exc:
+                logger.warning("Límite de consultas alcanzado en la %s: %s",
+                               descripcion, exc)
+                raise FuenteNoDisponible(
+                    "Se alcanzó el límite de consultas a Open Food Facts; "
+                    f"intenta de nuevo en {math.ceil(exc.espera_necesaria)} s"
+                ) from None
             retry_after: Optional[float] = None
             try:
                 respuesta = await self._http.get(ruta, params=params)
