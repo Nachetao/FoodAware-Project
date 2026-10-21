@@ -15,11 +15,14 @@ class ClienteOFFFalso:
 
     `productos` mapea código -> payload o excepción; `paginas` es la lista
     de respuestas (o excepciones) de /api/v2/search, desde la página 1.
+    `paginas_por_categoria` hace lo mismo para una categoría específica;
+    las categorías que no están ahí usan `paginas`.
     """
 
     def __init__(self):
         self.productos = {}
         self.paginas = []
+        self.paginas_por_categoria = {}
         self.llamadas = []
         self.esperas_maximas = []
 
@@ -40,9 +43,12 @@ class ClienteOFFFalso:
         self.llamadas.append(
             ("busqueda", pais, tuple(categorias), pagina, tamano_pagina)
         )
-        if pagina > len(self.paginas):
+        paginas = self.paginas
+        if len(categorias) == 1:
+            paginas = self.paginas_por_categoria.get(categorias[0], paginas)
+        if pagina > len(paginas):
             return {"products": []}
-        efecto = self.paginas[pagina - 1]
+        efecto = paginas[pagina - 1]
         if isinstance(efecto, Exception):
             raise efecto
         return efecto

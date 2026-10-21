@@ -37,10 +37,19 @@ La fuente de verdad es el código (modelos Pydantic en `python-service/app/schem
 | `INGESTA_AL_INICIAR` | `true` | Si la caché está vacía al arrancar, lanza una ingesta inicial. |
 | `INGESTA_INTERVALO_HORAS` | `24` | Refresco periódico; la próxima se calcula desde el inicio de la última ejecución, así un reinicio no la pospone. |
 | `CACHE_TTL_HORAS` | `72` | Un producto verificado hace más de este tiempo se refresca al pedirlo si la fuente responde; si no, se devuelve el de la caché. |
+| `INGESTA_CATEGORIAS` | ver abajo | Categorías de Open Food Facts de las ingestas automáticas, separadas por comas (máximo 20; vacío = sin filtrar). |
+| `INGESTA_MAX_PRODUCTOS` | `500` | Tope de productos de cada ingesta automática (1 a 500). |
 
-Las ingestas automáticas usan `SolicitudIngesta` por defecto (Chile, 100
-productos) y no se lanzan si ya hay una en curso. Para probar contra la API real
-(fuera del pipeline): `python scripts/probar_off.py` desde `python-service/`.
+Las ingestas automáticas buscan productos de Chile en las categorías de
+`INGESTA_CATEGORIAS`, elegidas por ser relevantes para alergias: galletas
+(`en:biscuits`), lácteos (`en:dairies`), panes (`en:breads`), chocolates
+(`en:chocolates`), cereales (`en:breakfast-cereals`), snacks salados
+(`en:salty-snacks`; `en:snacks` ya incluye galletas y chocolates) y bebidas
+vegetales (`en:plant-based-milk-alternatives`). No se lanzan si ya hay una en
+curso. Para probar contra la API real (fuera del pipeline):
+`python scripts/probar_off.py` desde `python-service/`. Para ver cómo quedó el
+corpus: `python scripts/estadisticas_corpus.py` (productos válidos, productos por
+categoría, términos distintos del índice y largo promedio).
 
 ## Levantar el servicio
 
@@ -107,7 +116,17 @@ terminada fue `completado` o `completado_con_errores`, y `"cache"` si fue
 
 **Ingesta:** `POST /ingest/runs` responde 202 con la ejecución `en_curso` y la
 procesa en segundo plano; el resultado se consulta en `GET /ingest/runs/latest`.
-Si ya hay una en curso, devuelve esa misma en lugar de lanzar otra. Al terminar:
+Si ya hay una en curso, devuelve esa misma en lugar de lanzar otra. Con
+`categorias`, hace una búsqueda por categoría y reparte `max_productos` entre
+ellas: a cada una le toca lo que queda dividido por las categorías restantes
+(500 entre 7 = 72, 72, 72, 71, 71, 71, 71), así lo que no usa una categoría con
+pocos productos pasa a las siguientes. Un producto que aparece en dos
+categorías se procesa y se guarda una sola vez, y su repetición no gasta la
+cuota de la segunda categoría, pero sí se cuenta: suma a `recuperados` y, si es
+válido, a `validos` y `duplicados` (si es inválido, a `invalidos`). Por eso
+`recuperados` puede superar a `max_productos`, que limita los productos
+distintos. Si una categoría falla, se registra el error y sigue con las demás. Todas las búsquedas respetan el límite de 8 por
+minuto. Al terminar:
 `recuperados` (descargados), `validos`, `invalidos` (no cumplen las reglas de
 validez de `calidad`; no se guardan), `duplicados` (válidos que ya estaban con el mismo
 contenido), `errores` (peticiones a la fuente que fallaron) y `estado`. Una

@@ -7,9 +7,32 @@ import json
 from pathlib import Path
 from typing import List
 
+from app.procesamiento.calidad import digito_verificador_valido
 from app.schemas.producto import Producto
 
 FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def ean13(base: str) -> str:
+    """Completa 12 dígitos con su dígito verificador."""
+    suma = sum(int(d) * (3 if i % 2 else 1) for i, d in enumerate(base))
+    codigo = base + str((10 - suma % 10) % 10)
+    assert digito_verificador_valido(codigo)
+    return codigo
+
+
+def payload(n, nombre, ingredientes, marca="Campo Austral", **extra):
+    """Payload de OFF válido y completo; `n` (0 a 999) da un código único."""
+    return {
+        "code": ean13(f"780000000{n:03d}"),
+        "product_name_es": nombre,
+        "brands": marca,
+        "quantity": "200 g",
+        "ingredients_text_es": ingredientes,
+        "nutriscore_grade": "c",
+        "image_front_url": "https://images.openfoodfacts.org/x.jpg",
+        **extra,
+    }
 
 
 def productos_de_ejemplo() -> List[Producto]:

@@ -9,35 +9,14 @@ from fastapi.testclient import TestClient
 
 from app.core import config
 from app.main import app
-from app.procesamiento.calidad import digito_verificador_valido
 from app.repositories.cache import RepositorioCache
 from app.schemas.busqueda import RespuestaBusqueda
 from app.services.busqueda import ServicioBusqueda
 from app.services.mapeo_off import mapear_producto
+from tests.payloads_off import payload
 
 BASE = "https://world.openfoodfacts.org"
 AHORA = datetime(2026, 10, 21, 12, 0, tzinfo=timezone.utc)
-
-
-def ean13(base: str) -> str:
-    """Completa 12 dígitos con su dígito verificador."""
-    suma = sum(int(d) * (3 if i % 2 else 1) for i, d in enumerate(base))
-    codigo = base + str((10 - suma % 10) % 10)
-    assert digito_verificador_valido(codigo)
-    return codigo
-
-
-def payload(n, nombre, ingredientes, marca="Campo Austral", **extra):
-    return {
-        "code": ean13(f"78000000000{n}"),
-        "product_name_es": nombre,
-        "brands": marca,
-        "quantity": "200 g",
-        "ingredients_text_es": ingredientes,
-        "nutriscore_grade": "c",
-        "image_front_url": "https://images.openfoodfacts.org/x.jpg",
-        **extra,
-    }
 
 
 GALLETAS_AVENA = payload(1, "Galletas de avena",

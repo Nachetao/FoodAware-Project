@@ -14,6 +14,7 @@ from app.core.request_id import RequestIdMiddleware
 from app.procesamiento import VERSION_PROCESAMIENTO
 from app.repositories.cache import RepositorioCache
 from app.routers import analisis, catalogo, ingesta, metricas, sistema
+from app.schemas.ingesta import SolicitudIngesta
 from app.services.busqueda import ServicioBusqueda
 from app.services.catalogo import ServicioCatalogo
 from app.services.ingesta import ServicioIngesta
@@ -47,6 +48,15 @@ def construir_servicios(
     ingesta_ = ServicioIngesta(repositorio, cliente, settings.off_base_url,
                                al_terminar=busqueda_.reconstruir)
     return Servicios(catalogo_, ingesta_, busqueda_)
+
+
+def solicitud_automatica() -> SolicitudIngesta:
+    """Ingesta inicial y periódica: Chile, repartida entre las categorías
+    de INGESTA_CATEGORIAS, hasta INGESTA_MAX_PRODUCTOS productos."""
+    return SolicitudIngesta(
+        categorias=settings.ingesta_categorias,
+        max_productos=settings.ingesta_max_productos,
+    )
 
 
 @asynccontextmanager
@@ -88,6 +98,7 @@ async def ciclo_de_vida(app: FastAPI):
             repositorio,
             intervalo=timedelta(hours=settings.ingesta_intervalo_horas),
             al_iniciar=settings.ingesta_al_iniciar,
+            solicitud=solicitud_automatica(),
         )
         tarea = asyncio.create_task(planificador.bucle())
     try:
