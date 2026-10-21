@@ -1,7 +1,7 @@
 import { INestApplication, ValidationPipe } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import { ProductsController } from "./products.controller";
-import { FastApiClientService } from "./fastapi-client.service";
+import { ProductsService } from "./products.service";
 import { ContratoHttpException } from "./contrato-http.exception";
 import { RespuestaBusqueda } from "./contrato/busqueda";
 import { CodigoError } from "./contrato/enums";
@@ -20,14 +20,14 @@ const respuestaBusqueda: RespuestaBusqueda = {
 describe("ProductsController (GET /api/products/search)", () => {
   let app: INestApplication;
   let url: string;
-  let fastApiClient: { buscar: jest.Mock };
+  let productsService: { buscar: jest.Mock };
 
   beforeAll(async () => {
-    fastApiClient = { buscar: jest.fn() };
+    productsService = { buscar: jest.fn() };
 
     const module = await Test.createTestingModule({
       controllers: [ProductsController],
-      providers: [{ provide: FastApiClientService, useValue: fastApiClient }],
+      providers: [{ provide: ProductsService, useValue: productsService }],
     }).compile();
 
     // Misma configuración que main.ts.
@@ -41,8 +41,8 @@ describe("ProductsController (GET /api/products/search)", () => {
   afterAll(() => app.close());
 
   beforeEach(() => {
-    fastApiClient.buscar.mockReset();
-    fastApiClient.buscar.mockResolvedValue(respuestaBusqueda);
+    productsService.buscar.mockReset();
+    productsService.buscar.mockResolvedValue(respuestaBusqueda);
   });
 
   function buscar(query: string, headers: Record<string, string> = {}) {
@@ -54,7 +54,7 @@ describe("ProductsController (GET /api/products/search)", () => {
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual(respuestaBusqueda);
-    expect(fastApiClient.buscar).toHaveBeenCalledWith(
+    expect(productsService.buscar).toHaveBeenCalledWith(
       expect.objectContaining({ q: "leche", limit: 10, offset: 0 }),
       expect.any(String),
     );
@@ -63,7 +63,7 @@ describe("ProductsController (GET /api/products/search)", () => {
   it("convierte limit y offset a números", async () => {
     await buscar("q=pan&limit=5&offset=20");
 
-    expect(fastApiClient.buscar).toHaveBeenCalledWith(
+    expect(productsService.buscar).toHaveBeenCalledWith(
       expect.objectContaining({ q: "pan", limit: 5, offset: 20 }),
       expect.any(String),
     );
@@ -73,7 +73,7 @@ describe("ProductsController (GET /api/products/search)", () => {
     const res = await buscar("q=leche", { "X-Request-ID": "prueba-123" });
 
     expect(res.headers.get("x-request-id")).toBe("prueba-123");
-    expect(fastApiClient.buscar).toHaveBeenCalledWith(
+    expect(productsService.buscar).toHaveBeenCalledWith(
       expect.anything(),
       "prueba-123",
     );
@@ -90,7 +90,7 @@ describe("ProductsController (GET /api/products/search)", () => {
 
       const requestId = res.headers.get("x-request-id");
       expect(requestId).toMatch(UUID);
-      expect(fastApiClient.buscar).toHaveBeenCalledWith(
+      expect(productsService.buscar).toHaveBeenCalledWith(
         expect.anything(),
         requestId,
       );
@@ -124,7 +124,7 @@ describe("ProductsController (GET /api/products/search)", () => {
       expect(cuerpo.error.codigo).toBe(CodigoError.VALIDATION_ERROR);
       expect(cuerpo.error.mensaje).toContain(mensajeEsperado);
       expect(cuerpo.error.request_id).toBe("prueba-422");
-      expect(fastApiClient.buscar).not.toHaveBeenCalled();
+      expect(productsService.buscar).not.toHaveBeenCalled();
     },
   );
 
@@ -135,7 +135,7 @@ describe("ProductsController (GET /api/products/search)", () => {
       "El servicio de búsqueda no está disponible",
       "prueba-503",
     );
-    fastApiClient.buscar.mockRejectedValue(error);
+    productsService.buscar.mockRejectedValue(error);
 
     const res = await buscar("q=leche", { "X-Request-ID": "prueba-503" });
 

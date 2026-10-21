@@ -16,7 +16,7 @@ import { ErrorContrato } from "./contrato/error";
 import { HEADER_REQUEST_ID } from "./contrato/request-id";
 import { ContratoExceptionFilter } from "./contrato-exception.filter";
 import { BuscarProductosQueryDto } from "./dto/buscar-productos.query.dto";
-import { FastApiClientService } from "./fastapi-client.service";
+import { ProductsService } from "./products.service";
 import { resolverRequestId } from "./resolver-request-id";
 
 const HEADER_RESPUESTA = {
@@ -30,7 +30,7 @@ const HEADER_RESPUESTA = {
 @Controller("products")
 @UseFilters(ContratoExceptionFilter)
 export class ProductsController {
-  constructor(private readonly fastApiClient: FastApiClientService) {}
+  constructor(private readonly productsService: ProductsService) {}
 
   @Get("search")
   @ApiOperation({
@@ -71,6 +71,6 @@ export class ProductsController {
   ): Promise<RespuestaBusqueda> {
     const requestId = resolverRequestId(req);
     res.setHeader(HEADER_REQUEST_ID, requestId);
-    return this.fastApiClient.buscar(query, requestId);
+    return this.productsService.buscar(query, requestId);
   }
 }
