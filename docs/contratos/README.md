@@ -256,6 +256,59 @@ sobre páginas pedidas a `/api/v2/search`, separando las categorías que se
 recuperaron en el reintento de las que se perdieron. Las ingestas anteriores a
 este registro aparecen sin desglose.
 
+## Evaluación de la búsqueda (Precision@K y Recall@K)
+
+**Estrategia de evaluación:** evaluación offline con un conjunto de consultas y
+juicios de relevancia, al estilo de los benchmarks de recuperación de
+información. Cada consulta se corre contra el mismo índice BM25 que usa
+`/search` y se compara su top K con el conjunto de productos relevantes.
+
+**Conjunto de evaluación** (`python-service/app/evaluacion/consultas.json`,
+versionado): 20 consultas realistas para una app de alergias en Chile, de dos
+tipos que se promedian por separado:
+
+- **Producto** (12): "galletas de avena", "leche de almendras", "chocolate
+  amargo", "pan integral", "yogurt natural", "papas fritas", "granola", etc.
+- **Restricción** (8): "galletas sin gluten", "chocolate sin leche", "snack sin
+  maní", "leche sin lactosa", "pan sin gluten", etc.
+
+La relevancia no se fija con códigos de barras, sino con **reglas verificables
+sobre atributos del producto**, que deben cumplirse todas: categorías de Open
+Food Facts (`categorias_alguna`), frases en el nombre normalizado
+(`nombre_alguno`, `nombre_todos`) y presencia o ausencia de alérgenos
+(`con_alergenos`, `sin_alergenos`; la ausencia exige que no esté ni como
+ingrediente ni como traza). Por ejemplo, "galletas sin gluten" es relevante si
+el producto está en `en:biscuits` y no tiene gluten ni trazas de gluten. Como la
+regla se aplica a todo el corpus, se conoce el conjunto completo de relevantes:
+el recall es exacto y el conjunto sirve para cualquier corpus. El conjunto se
+diseñó revisando el corpus real (categorías y nombres frecuentes).
+
+| Métrica | Definición | Qué responde |
+|---|---|---|
+| Precision@K | relevantes en el top K / K | De lo que el usuario ve en la primera pantalla, ¿qué parte le sirve? |
+| Recall@K | relevantes en el top K / relevantes en el corpus | De todo lo que le serviría, ¿qué parte alcanzó a ver? |
+| Promedio macro | promedio simple entre consultas | Cada consulta pesa lo mismo, tenga 2 o 40 relevantes. |
+
+K = 5 por defecto: lo que cabe en una pantalla de celular. Precision@K se divide
+por K aunque el buscador devuelva menos resultados. Con pocos relevantes en el
+corpus, el máximo posible de P@K es relevantes / K; con muchos, el de R@K es
+K / relevantes. Por eso se informan juntas. Las consultas sin relevantes en el
+corpus se excluyen del promedio y se informan aparte. También se mide el tiempo
+de cada búsqueda.
+
+**Cómo correrla:** `python scripts/evaluar_busqueda.py [--k 5] [--markdown
+reporte.md]` desde `python-service/` (o con `docker compose exec python-service
+...`). Muestra una tabla por consulta (tipo, relevantes, P@K, R@K, tiempo) y los
+promedios por tipo y globales.
+
+**Cómo interpretarla:** es esperable que las consultas con restricción tengan
+menor precisión. BM25 trata "sin" como una palabra más y premia los productos
+que mencionan "gluten" en el nombre, los ingredientes o las categorías, que son
+justamente los que la persona quiere evitar. Solo acierta cuando el producto dice
+"sin gluten" en el nombre. No es un error de la implementación sino un límite de
+un ranking solo léxico: responder bien exige entender la restricción y filtrar
+por los alérgenos detectados, que es la capacidad adaptativa del Módulo 3.
+
 ## Convenciones
 
 - Campos en español `snake_case`.
