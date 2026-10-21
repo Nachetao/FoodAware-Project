@@ -6,8 +6,9 @@ La fuente de verdad es el código (modelos Pydantic en `python-service/app/schem
 
 > **Productos, búsqueda e ingesta ya son reales** (Open Food Facts + caché local
 > SQLite), con limpieza de ingredientes, detección de alérgenos, validación de
-> calidad y ranking BM25. **Las métricas siguen siendo stubs** hasta el Bloque 5:
-> devuelven datos de ejemplo y responden con el header `X-Stub: true`.
+> calidad, ranking BM25 y métricas de calidad reales. **`/metrics/evaluation`
+> sigue siendo un stub**: devuelve datos de ejemplo y responde con el header
+> `X-Stub: true`.
 
 ### Cómo se obtienen los datos
 
@@ -73,7 +74,7 @@ docker compose up --build -d python-service
 | GET | `/search?q=&limit=&offset=` | `RespuestaBusqueda` | 422, 500 | real |
 | POST | `/ingest/runs` | `ResumenIngesta` (202, `en_curso`) | 422, 500, 503 | real |
 | GET | `/ingest/runs/latest` | `ResumenIngesta` | 404, 500 | real |
-| GET | `/metrics/quality` | `MetricasCalidad` | 500 | stub |
+| GET | `/metrics/quality` | `MetricasCalidad` | 500 | real |
 | GET | `/metrics/evaluation` | `MetricasEvaluacion` | 500 | stub |
 
 Parámetros de búsqueda: `q` de 2 a 100 caracteres, `limit` de 1 a 50 (10 por
@@ -135,8 +136,10 @@ ronda (páginas perdidas de verdad); cada falla, recuperada o no, queda en el
 registro de errores de la fuente. Todas las búsquedas respetan el límite de 8 por
 minuto. Al terminar:
 `recuperados` (descargados), `validos`, `invalidos` (no cumplen las reglas de
-validez de `calidad`; no se guardan), `duplicados` (válidos que ya estaban con el mismo
-contenido), `errores` (peticiones a la fuente que fallaron) y `estado`. Una
+validez de `calidad`; no se guardan), `duplicados` (válidos que no aportaron
+un producto nuevo: repetidos en la misma ingesta o ya en la caché con el mismo
+contenido; ver [Métricas de calidad](#métricas-de-calidad-get-metricsquality)),
+`errores` (categorías con páginas perdidas tras el reintento) y `estado`. Una
 ejecución interrumpida por un reinicio queda como `fallido`.
 
 ## Errores
@@ -163,7 +166,7 @@ porque NestJS ya los consume.
 | Header | Dirección | Uso |
 |---|---|---|
 | `X-Request-ID` | petición y respuesta | Si NestJS lo envía, se devuelve igual (letras, números, `.`, `_`, `-`, máx. 128); si no, se genera un uuid4. También va en `error.request_id`. |
-| `X-Stub` | respuesta | `true` en endpoints que aún devuelven datos de ejemplo (hoy, solo `/metrics/*`). |
+| `X-Stub` | respuesta | `true` en endpoints que aún devuelven datos de ejemplo (hoy, solo `/metrics/evaluation`). |
 | `X-Simular-Error` | petición | Solo con `SIMULAR_ERRORES_HABILITADO=true` en `.env`. Valores: `SOURCE_UNAVAILABLE` (503), `SOURCE_TIMEOUT` (504), `INTERNAL_ERROR` (500). Funciona en los endpoints del contrato (no en `/`, `/health` ni `/analizar`); no aparece en OpenAPI. |
 
 ## Códigos de alérgenos (`AllergenCode`)
@@ -209,6 +212,49 @@ fuente. A mano: `python scripts/reprocesar_cache.py [--todos]` desde
 
 `/analizar` todavía devuelve `"lácteos"` y `"maní"` con tilde; para cruzarlo con
 estos códigos, NestJS debe normalizarlos.
+
+## Métricas de calidad (`GET /metrics/quality`)
+
+**Estrategia de evaluación:** medir el pipeline de datos con los registros reales
+que deja cada ingesta (cuántos productos llegaron, cuántos sirven, cuántos se
+repiten) y con el estado de la caché (cuántos hay y qué tan recientes son). Las
+ingestas se agregan **sumando conteos**, no promediando porcentajes: una ingesta
+de 400 productos pesa más que una de 10. Solo cuentan las ejecuciones
+terminadas (no `en_curso`).
+
+| Métrica | Definición | Qué indica |
+|---|---|---|
+| `porcentaje_validos` | Σ `validos` / Σ `recuperados` · 100 | Qué parte de lo que entrega Open Food Facts cumple las reglas mínimas (nombre, ingredientes, código válido). |
+| `porcentaje_duplicados` | Σ `duplicados` / Σ `validos` · 100 | Qué parte de los válidos no aportó un producto nuevo. |
+| `cobertura_ingredientes` | Σ recuperados con ingredientes utilizables tras limpiar / Σ `recuperados` · 100 | Sin ingredientes no se pueden detectar alérgenos. Solo usa ingestas que registraron este conteo. |
+| `antiguedad_promedio_horas` | promedio de horas desde la última verificación de cada producto de la caché contra la fuente | Qué tan al día está la caché (la ingesta periódica y el TTL la refrescan). |
+| `total_productos` | productos válidos en la caché | Tamaño del corpus que se busca. |
+
+Los porcentajes van de 0 a 100 con 2 decimales. Sin ingestas terminadas, las
+métricas de ingesta valen 0 y las de la caché se calculan igual.
+
+**Los dos tipos de duplicado.** `duplicados` del contrato es la suma de dos
+conteos que la caché guarda por separado en cada ejecución:
+
+- **Repetidos en la ingesta:** el mismo producto llegó más de una vez en la
+  misma ejecución (por ejemplo, en dos categorías). Se procesa y guarda una vez.
+- **Ya estaban en la caché sin cambios:** el producto ya existía con el mismo
+  hash de contenido; solo se registra que se volvió a verificar.
+
+Con ingestas periódicas domina el segundo tipo, y es lo esperable: significa que
+la caché ya estaba al día, no que haya datos duplicados. La evidencia de que no
+se almacenan duplicados es que la caché tiene **0 códigos de barras repetidos**
+(cada código es la clave primaria y cada guardado es un upsert). Aparte, los
+productos con mismo nombre, marca y cantidad y distinto código se marcan como
+`posible_duplicado` sin descartarse.
+
+`python scripts/estadisticas_corpus.py` (desde `python-service/`, o con
+`docker compose exec python-service ...`) muestra estas métricas, el desglose de
+duplicados, la verificación de códigos repetidos y, de la última ingesta, los
+motivos de invalidez y la **tasa de fallas de la fuente**: fallas registradas
+sobre páginas pedidas a `/api/v2/search`, separando las categorías que se
+recuperaron en el reintento de las que se perdieron. Las ingestas anteriores a
+este registro aparecen sin desglose.
 
 ## Convenciones
 

@@ -41,7 +41,7 @@ def test_simula_errores_en_rutas_del_contrato(
     )
     assert response.status_code == status
     assert response.json()["error"]["request_id"] == "sim-1"
-    es_stub = ruta.startswith("/metrics")
+    es_stub = ruta == "/metrics/evaluation"
     assert (response.headers.get("X-Stub") == "true") is es_stub
 
 

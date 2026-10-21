@@ -3,18 +3,34 @@ import asyncio
 import logging
 import math
 import uuid
-from dataclasses import dataclass
+from collections import Counter
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
+from typing import Any, Awaitable, Callable
+from typing import Counter as CounterType
+from typing import Dict, List, Optional, Tuple
 
 from app.clients.open_food_facts import ClienteOpenFoodFacts
 from app.core.errores import FuenteNoDisponible, FuenteTimeout
-from app.repositories.cache import RepositorioCache, ResultadoUpsert
+from app.procesamiento.calidad import INVALIDANTES
+from app.repositories.cache import (
+    DetalleIngesta,
+    RepositorioCache,
+    ResultadoUpsert,
+)
 from app.schemas.ingesta import ResumenIngesta, SolicitudIngesta
 from app.services.catalogo import SIN_CLIENTE
-from app.services.mapeo_off import ProductoInvalido, mapear_producto
+from app.services.mapeo_off import (
+    ProductoInvalido,
+    mapear_producto,
+    tiene_ingredientes_utilizables,
+)
 
 logger = logging.getLogger(__name__)
+
+# Motivo de invalidez de un payload que no se puede ni mapear: su código no
+# tiene de 8 a 14 dígitos (el contrato no lo admite como Producto).
+CODIGO_INVALIDO = "codigo_barras_invalido"
 
 TAMANO_PAGINA = 50
 # Antes de reintentar las categorías que fallaron. Los 503 de OFF llegan en
@@ -51,21 +67,85 @@ def cuota_por_categoria(restante: int, categorias_restantes: int) -> int:
     return math.ceil(restante / categorias_restantes)
 
 
-def _contar_repetido(conteo: Dict[str, int], *, era_valido: bool) -> None:
-    """Cuenta un producto que ya llegó antes en la misma ejecución.
+@dataclass(frozen=True)
+class _Resultado:
+    """Cómo resultó procesar un producto; se reutiliza si se repite."""
 
-    Es un duplicado real, así que suma a recuperados. Si era válido, es un
-    válido descartado por existir ya con el mismo contenido: suma a validos
-    y a duplicados, igual que un duplicado de la caché (así se mantiene
-    duplicados <= validos). Si era inválido, vuelve a contar como inválido:
-    `duplicados` solo cuenta válidos (validos + invalidos <= recuperados).
-    """
-    conteo["recuperados"] += 1
-    if era_valido:
-        conteo["validos"] += 1
-        conteo["duplicados"] += 1
-    else:
-        conteo["invalidos"] += 1
+    es_valido: bool
+    con_ingredientes: bool
+    motivos_invalidez: Tuple[str, ...] = ()
+
+
+@dataclass
+class _Conteo:
+    """Conteos de una ejecución: los del contrato y el detalle interno."""
+
+    recuperados: int = 0
+    validos: int = 0
+    invalidos: int = 0
+    errores: int = 0
+    repetidos_en_ejecucion: int = 0
+    existentes_sin_cambios: int = 0
+    con_ingredientes: int = 0
+    peticiones: int = 0
+    fallas_recuperadas: int = 0
+    motivos_invalidez: CounterType[str] = field(default_factory=Counter)
+
+    @property
+    def duplicados(self) -> int:
+        """El campo del contrato: válidos descartados por existir ya con el
+        mismo contenido, en la ejecución o en la caché."""
+        return self.repetidos_en_ejecucion + self.existentes_sin_cambios
+
+    def contar(self, resultado: _Resultado) -> None:
+        """Cuenta un producto recuperado (nuevo o repetido)."""
+        self.recuperados += 1
+        self.con_ingredientes += resultado.con_ingredientes
+        if resultado.es_valido:
+            self.validos += 1
+        else:
+            self.invalidos += 1
+            self.motivos_invalidez.update(resultado.motivos_invalidez)
+
+    def contar_repetido(self, resultado: _Resultado) -> None:
+        """Un producto que ya llegó antes en la misma ejecución.
+
+        Se cuenta como recuperado con el resultado de su primera vez. Si es
+        válido es un duplicado (válido descartado por repetido), así se
+        mantiene duplicados <= validos; si es inválido, solo un inválido
+        más, porque `duplicados` solo cuenta válidos.
+        """
+        self.contar(resultado)
+        if resultado.es_valido:
+            self.repetidos_en_ejecucion += 1
+
+    def resumen(self, base: ResumenIngesta, estado: str) -> ResumenIngesta:
+        fin = datetime.now(timezone.utc) if estado != "en_curso" else None
+        return ResumenIngesta(
+            run_id=base.run_id,
+            inicio=base.inicio,
+            fin=fin,
+            duracion_ms=(
+                int((fin - base.inicio).total_seconds() * 1000)
+                if fin else None
+            ),
+            recuperados=self.recuperados,
+            validos=self.validos,
+            invalidos=self.invalidos,
+            duplicados=self.duplicados,
+            errores=self.errores,
+            estado=estado,
+        )
+
+    def detalle(self) -> DetalleIngesta:
+        return DetalleIngesta(
+            repetidos_en_ejecucion=self.repetidos_en_ejecucion,
+            existentes_sin_cambios=self.existentes_sin_cambios,
+            con_ingredientes=self.con_ingredientes,
+            peticiones=self.peticiones,
+            fallas_recuperadas=self.fallas_recuperadas,
+            motivos_invalidez=dict(self.motivos_invalidez),
+        )
 
 
 class ServicioIngesta:
@@ -131,12 +211,11 @@ class ServicioIngesta:
         falló (ver _reintentar). `errores` cuenta solo las categorías que
         siguen fallando en esa ronda: las páginas perdidas de verdad.
         """
-        conteo = dict(recuperados=0, validos=0, invalidos=0, duplicados=0,
-                      errores=0)
-        # Código -> si fue válido, de los productos ya procesados en esta
+        conteo = _Conteo()
+        # Código -> resultado, de los productos ya procesados en esta
         # ejecución. Un producto que está en dos categorías se procesa una
-        # sola vez; las repeticiones solo se cuentan (ver _contar_repetido).
-        vistos: Dict[str, bool] = {}
+        # sola vez; las repeticiones solo se cuentan (contar_repetido).
+        vistos: Dict[str, _Resultado] = {}
         # Productos distintos traídos: es lo que limita max_productos y las
         # cuotas. `recuperados` incluye además las repeticiones, así que
         # puede superar a max_productos.
@@ -163,15 +242,17 @@ class ServicioIngesta:
                 nuevos += traidos
                 if avance.fallo:
                     reservado += cuota - traidos
+            fallidas_primera_ronda = sum(a.fallo for a in avances)
             nuevos += await self._reintentar(
                 resumen, solicitud, avances, nuevos, conteo, vistos
             )
             # Cada falla, recuperada o no, ya quedó en errores_fuente.
-            conteo["errores"] = sum(a.fallo for a in avances)
+            conteo.errores = sum(a.fallo for a in avances)
+            conteo.fallas_recuperadas = fallidas_primera_ronda - conteo.errores
 
-            if conteo["errores"] == 0:
+            if conteo.errores == 0:
                 estado = "completado"
-            elif conteo["recuperados"] > 0:
+            elif conteo.recuperados > 0:
                 estado = "completado_con_errores"
         except Exception:
             logger.exception("Ingesta %s abortada", resumen.run_id)
@@ -198,8 +279,8 @@ class ServicioIngesta:
         solicitud: SolicitudIngesta,
         avances: List[_Avance],
         nuevos: int,
-        conteo: Dict[str, int],
-        vistos: Dict[str, bool],
+        conteo: _Conteo,
+        vistos: Dict[str, _Resultado],
     ) -> int:
         """Segunda y última ronda para las categorías que fallaron.
 
@@ -232,8 +313,8 @@ class ServicioIngesta:
         pais: str,
         avance: _Avance,
         cuota: int,
-        conteo: Dict[str, int],
-        vistos: Dict[str, bool],
+        conteo: _Conteo,
+        vistos: Dict[str, _Resultado],
         *,
         reintento: bool = False,
     ) -> int:
@@ -247,6 +328,7 @@ class ServicioIngesta:
         avance.fallo = False
         traidos = 0
         while traidos < cuota:
+            conteo.peticiones += 1
             try:
                 datos = await self._cliente.buscar_por_pais(
                     pais, avance.categorias, avance.pagina, avance.tamano
@@ -269,13 +351,13 @@ class ServicioIngesta:
                 if codigo in vistos:
                     # Ya vino en otra categoría de esta ejecución: se cuenta,
                     # pero no gasta la cuota de esta categoría.
-                    _contar_repetido(conteo, era_valido=vistos[codigo])
+                    conteo.contar_repetido(vistos[codigo])
                     continue
                 traidos += 1
-                es_valido = await self._procesar(payload, resumen.run_id,
+                resultado = await self._procesar(payload, resumen.run_id,
                                                  conteo)
                 if codigo:
-                    vistos[codigo] = es_valido
+                    vistos[codigo] = resultado
             await self._guardar(resumen, conteo, "en_curso")
             if len(datos["products"]) < avance.tamano:
                 break  # última página
@@ -286,9 +368,10 @@ class ServicioIngesta:
                     traidos, cuota, " (falló)" if avance.fallo else "")
         return traidos
 
-    async def _procesar(self, payload, run_id: uuid.UUID, conteo) -> bool:
-        """Mapea, valida y guarda; devuelve si el producto es válido."""
-        conteo["recuperados"] += 1
+    async def _procesar(
+        self, payload, run_id: uuid.UUID, conteo: _Conteo
+    ) -> _Resultado:
+        """Mapea, valida y guarda un producto nuevo en la ejecución."""
         try:
             producto = mapear_producto(
                 payload,
@@ -297,36 +380,33 @@ class ServicioIngesta:
                 base_url=self._base_url,
             )
         except ProductoInvalido:
-            conteo["invalidos"] += 1
-            return False
-        if not producto.calidad.es_valido:
-            conteo["invalidos"] += 1
-            return False
-        conteo["validos"] += 1
-        resultado = await asyncio.to_thread(
-            self._repositorio.guardar_producto, producto, payload
+            resultado = _Resultado(
+                es_valido=False,
+                con_ingredientes=tiene_ingredientes_utilizables(payload),
+                motivos_invalidez=(CODIGO_INVALIDO,),
+            )
+            conteo.contar(resultado)
+            return resultado
+        resultado = _Resultado(
+            es_valido=producto.calidad.es_valido,
+            con_ingredientes=bool(producto.ingredientes),
+            motivos_invalidez=tuple(p for p in producto.calidad.problemas
+                                    if p in INVALIDANTES),
         )
-        if resultado is ResultadoUpsert.duplicado:
-            conteo["duplicados"] += 1
-        return True
+        conteo.contar(resultado)
+        if resultado.es_valido:
+            guardado = await asyncio.to_thread(
+                self._repositorio.guardar_producto, producto, payload
+            )
+            if guardado is ResultadoUpsert.duplicado:
+                conteo.existentes_sin_cambios += 1
+        return resultado
 
     async def _guardar(
-        self, resumen: ResumenIngesta, conteo, estado: str
+        self, resumen: ResumenIngesta, conteo: _Conteo, estado: str
     ) -> ResumenIngesta:
-        terminado = estado != "en_curso"
-        fin = datetime.now(timezone.utc) if terminado else None
-        actualizado = ResumenIngesta(
-            run_id=resumen.run_id,
-            inicio=resumen.inicio,
-            fin=fin,
-            duracion_ms=(
-                int((fin - resumen.inicio).total_seconds() * 1000)
-                if fin else None
-            ),
-            estado=estado,
-            **conteo,
-        )
+        actualizado = conteo.resumen(resumen, estado)
         await asyncio.to_thread(
-            self._repositorio.guardar_ejecucion, actualizado
+            self._repositorio.guardar_ejecucion, actualizado, conteo.detalle()
         )
         return actualizado

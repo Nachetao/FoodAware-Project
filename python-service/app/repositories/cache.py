@@ -5,11 +5,11 @@ Las operaciones son síncronas; desde endpoints async se llaman en un hilo.
 import json
 import sqlite3
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Tuple
+from typing import Any, Dict, Iterator, List, Mapping, Optional, Tuple
 from uuid import UUID
 
 from app.procesamiento import VERSION_PROCESAMIENTO
@@ -67,10 +67,23 @@ CREATE INDEX IF NOT EXISTS idx_errores_fuente_fecha
 # Columnas agregadas después de la primera versión del esquema; las bases
 # existentes las reciben con ALTER TABLE al inicializar.
 _COLUMNAS_AGREGADAS = {
-    # 0 = procesado antes de que existiera VERSION_PROCESAMIENTO.
-    "version_procesamiento": "INTEGER NOT NULL DEFAULT 0",
-    "clave_duplicado": "TEXT",
+    "productos": {
+        # 0 = procesado antes de que existiera VERSION_PROCESAMIENTO.
+        "version_procesamiento": "INTEGER NOT NULL DEFAULT 0",
+        "clave_duplicado": "TEXT",
+    },
+    # Detalle interno de cada ejecución (no es parte del contrato). NULL =
+    # ejecución anterior a que se registrara.
+    "ejecuciones_ingesta": {
+        "repetidos_en_ejecucion": "INTEGER",
+        "existentes_sin_cambios": "INTEGER",
+        "con_ingredientes": "INTEGER",
+        "peticiones": "INTEGER",
+        "fallas_recuperadas": "INTEGER",
+        "motivos_invalidez": "TEXT",  # JSON {problema: cantidad}
+    },
 }
+_COLUMNAS_DETALLE = tuple(_COLUMNAS_AGREGADAS["ejecuciones_ingesta"])
 
 _COLUMNAS_EJECUCION = (
     "run_id", "inicio", "fin", "duracion_ms", "recuperados", "validos",
@@ -101,6 +114,39 @@ class RegistroCrudo:
 
 
 @dataclass(frozen=True)
+class DetalleIngesta:
+    """Conteos internos de una ejecución, además de ResumenIngesta.
+
+    `duplicados` del contrato = repetidos_en_ejecucion +
+    existentes_sin_cambios.
+    """
+
+    # El mismo producto llegó más de una vez en la ejecución (p. ej. en
+    # dos categorías); se procesó una sola vez.
+    repetidos_en_ejecucion: int = 0
+    # Ya estaba en la caché con el mismo hash de contenido.
+    existentes_sin_cambios: int = 0
+    # Recuperados que tenían al menos un ingrediente tras la limpieza.
+    con_ingredientes: int = 0
+    # Páginas pedidas a /api/v2/search (cada una con sus reintentos HTTP).
+    peticiones: int = 0
+    # Categorías que fallaron en la primera ronda y se recuperaron en el
+    # reintento; las perdidas son `errores` del resumen.
+    fallas_recuperadas: int = 0
+    # Problema que invalidó -> cantidad (un producto puede tener varios).
+    motivos_invalidez: Mapping[str, int] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class EjecucionRegistrada:
+    resumen: ResumenIngesta
+    # None si la ejecución es anterior a que se guardara el detalle.
+    detalle: Optional[DetalleIngesta]
+    # Filas de errores_fuente de la ejecución (recuperadas o no).
+    fallas_registradas: int
+
+
+@dataclass(frozen=True)
 class ErrorFuente:
     fecha: datetime
     run_id: Optional[UUID]
@@ -117,15 +163,16 @@ class RepositorioCache:
         with self._conexion() as con:
             con.execute("PRAGMA journal_mode=WAL")
             con.executescript(_ESQUEMA)
-            existentes = {
-                f["name"]
-                for f in con.execute("PRAGMA table_info(productos)")
-            }
-            for columna, tipo in _COLUMNAS_AGREGADAS.items():
-                if columna not in existentes:
-                    con.execute(
-                        f"ALTER TABLE productos ADD COLUMN {columna} {tipo}"
-                    )
+            for tabla, columnas in _COLUMNAS_AGREGADAS.items():
+                existentes = {
+                    f["name"]
+                    for f in con.execute(f"PRAGMA table_info({tabla})")
+                }
+                for columna, tipo in columnas.items():
+                    if columna not in existentes:
+                        con.execute(
+                            f"ALTER TABLE {tabla} ADD COLUMN {columna} {tipo}"
+                        )
             con.execute(
                 "CREATE INDEX IF NOT EXISTS idx_productos_clave_duplicado "
                 "ON productos (clave_duplicado)"
@@ -314,10 +361,37 @@ class RepositorioCache:
         with self._conexion() as con:
             return con.execute("SELECT COUNT(*) FROM productos").fetchone()[0]
 
+    def estado_productos(self) -> List[Tuple[bool, datetime]]:
+        """(es_valido, verificado_en) de cada producto, sin deserializar el
+        producto completo; para las métricas de calidad."""
+        with self._conexion() as con:
+            filas = con.execute(
+                "SELECT json_extract(producto_json, '$.calidad.es_valido') "
+                "AS es_valido, verificado_en FROM productos"
+            ).fetchall()
+        return [(bool(f["es_valido"]), _desde_iso(f["verificado_en"]))
+                for f in filas]
+
+    def codigos_repetidos(self) -> List[Tuple[str, int]]:
+        """Códigos de barras guardados más de una vez. Debe ser vacío: es la
+        prueba de que la deduplicación por código funciona (la columna es
+        PRIMARY KEY y cada guardado es un upsert)."""
+        with self._conexion() as con:
+            filas = con.execute(
+                "SELECT codigo_barras, COUNT(*) AS veces FROM productos "
+                "GROUP BY codigo_barras HAVING COUNT(*) > 1"
+            ).fetchall()
+        return [(f["codigo_barras"], f["veces"]) for f in filas]
+
     # --- ejecuciones de ingesta -------------------------------------------
 
-    def guardar_ejecucion(self, resumen: ResumenIngesta) -> None:
-        """Crea la ejecución o actualiza su resumen."""
+    def guardar_ejecucion(
+        self,
+        resumen: ResumenIngesta,
+        detalle: Optional[DetalleIngesta] = None,
+    ) -> None:
+        """Crea la ejecución o actualiza su resumen (y su detalle, si
+        viene; si no, conserva el que tenía)."""
         datos = resumen.model_dump(mode="json")
         datos["inicio"] = _a_iso(resumen.inicio)
         datos["fin"] = _a_iso(resumen.fin) if resumen.fin else None
@@ -333,6 +407,47 @@ class RepositorioCache:
                 f"ON CONFLICT (run_id) DO UPDATE SET {actualizacion}",
                 [datos[c] for c in _COLUMNAS_EJECUCION],
             )
+            if detalle is not None:
+                valores = asdict(detalle)
+                valores["motivos_invalidez"] = json.dumps(
+                    dict(detalle.motivos_invalidez), sort_keys=True
+                )
+                asignaciones = ", ".join(f"{c} = ?" for c in _COLUMNAS_DETALLE)
+                con.execute(
+                    f"UPDATE ejecuciones_ingesta SET {asignaciones} "
+                    "WHERE run_id = ?",
+                    [*(valores[c] for c in _COLUMNAS_DETALLE),
+                     str(resumen.run_id)],
+                )
+
+    def obtener_detalle(self, run_id: UUID) -> Optional[DetalleIngesta]:
+        with self._conexion() as con:
+            fila = con.execute(
+                "SELECT * FROM ejecuciones_ingesta WHERE run_id = ?",
+                (str(run_id),),
+            ).fetchone()
+        return _detalle(fila) if fila else None
+
+    def listar_ejecuciones_terminadas(self) -> List[EjecucionRegistrada]:
+        """Ejecuciones que no están en curso, de la más antigua a la más
+        reciente, con su detalle y cuántas fallas registró la fuente."""
+        with self._conexion() as con:
+            filas = con.execute(
+                "SELECT e.*, (SELECT COUNT(*) FROM errores_fuente f "
+                "WHERE f.run_id = e.run_id) AS fallas_registradas "
+                "FROM ejecuciones_ingesta e WHERE e.estado != 'en_curso' "
+                "ORDER BY e.inicio"
+            ).fetchall()
+        return [
+            EjecucionRegistrada(
+                resumen=ResumenIngesta.model_validate(
+                    {c: f[c] for c in _COLUMNAS_EJECUCION}
+                ),
+                detalle=_detalle(f),
+                fallas_registradas=f["fallas_registradas"],
+            )
+            for f in filas
+        ]
 
     def obtener_ejecucion(self, run_id: UUID) -> Optional[ResumenIngesta]:
         with self._conexion() as con:
@@ -415,6 +530,16 @@ class RepositorioCache:
             )
             for f in filas
         ]
+
+
+def _detalle(fila: sqlite3.Row) -> Optional[DetalleIngesta]:
+    if fila["repetidos_en_ejecucion"] is None:
+        return None
+    valores = {c: fila[c] for c in _COLUMNAS_DETALLE}
+    valores["motivos_invalidez"] = json.loads(
+        fila["motivos_invalidez"] or "{}"
+    )
+    return DetalleIngesta(**valores)
 
 
 def _a_iso(fecha: datetime) -> str:

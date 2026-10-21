@@ -4,18 +4,28 @@ from app.schemas.tipos import Porcentaje, Proporcion
 
 
 class MetricasCalidad(BaseModel):
-    porcentaje_validos: Porcentaje = Field(examples=[92.0])
-    porcentaje_duplicados: Porcentaje = Field(examples=[5.0])
+    porcentaje_validos: Porcentaje = Field(
+        description="Válidos sobre recuperados en las ingestas terminadas.",
+        examples=[92.0],
+    )
+    porcentaje_duplicados: Porcentaje = Field(
+        description="Duplicados sobre válidos en las ingestas terminadas.",
+        examples=[5.0],
+    )
     cobertura_ingredientes: Porcentaje = Field(
-        description="Porcentaje de productos con ingredientes.",
+        description="Porcentaje de productos recuperados con ingredientes "
+        "utilizables tras la limpieza.",
         examples=[87.5],
     )
     antiguedad_promedio_horas: float = Field(
         ge=0,
-        description="Horas promedio desde recuperado_en.",
+        description="Horas promedio desde la última verificación de cada "
+        "producto contra la fuente.",
         examples=[18.2],
     )
-    total_productos: int = Field(ge=0, examples=[1240])
+    total_productos: int = Field(
+        ge=0, description="Productos válidos en la caché.", examples=[1240]
+    )
 
 
 class MetricasEvaluacion(BaseModel):
