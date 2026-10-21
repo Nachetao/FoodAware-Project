@@ -1,7 +1,24 @@
-"""Payloads de ejemplo con la forma real de la API de Open Food Facts.
+"""Datos de prueba.
 
-Los campos coinciden con CAMPOS del cliente; marcas y códigos son ficticios.
+Los payloads tienen la forma real de la API de Open Food Facts (los campos
+coinciden con CAMPOS del cliente); marcas y códigos son ficticios.
 """
+import json
+from pathlib import Path
+from typing import List
+
+from app.schemas.producto import Producto
+
+FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def productos_de_ejemplo() -> List[Producto]:
+    """Productos ya normalizados (tests/fixtures/productos.json)."""
+    datos = json.loads(
+        (FIXTURES / "productos.json").read_text(encoding="utf-8")
+    )
+    return [Producto.model_validate(p) for p in datos]
+
 
 LECHE = {
     "code": "7802920000015",

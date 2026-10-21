@@ -241,6 +241,29 @@ class RepositorioCache:
             ).fetchone()
         return ResumenIngesta.model_validate(dict(fila)) if fila else None
 
+    def ultima_ejecucion_terminada(self) -> Optional[ResumenIngesta]:
+        with self._conexion() as con:
+            fila = con.execute(
+                "SELECT * FROM ejecuciones_ingesta WHERE estado != 'en_curso' "
+                "ORDER BY inicio DESC LIMIT 1"
+            ).fetchone()
+        return ResumenIngesta.model_validate(dict(fila)) if fila else None
+
+    def marcar_ejecuciones_interrumpidas(
+        self, fin: Optional[datetime] = None
+    ) -> int:
+        """Marca como fallidas las ejecuciones que quedaron en curso.
+
+        Ocurre si el servicio se reinició a mitad de una ingesta.
+        """
+        with self._conexion() as con:
+            cursor = con.execute(
+                "UPDATE ejecuciones_ingesta SET estado = 'fallido', fin = ? "
+                "WHERE estado = 'en_curso'",
+                (_a_iso(fin or datetime.now(timezone.utc)),),
+            )
+            return cursor.rowcount
+
     # --- errores de la fuente ---------------------------------------------
 
     def registrar_error_fuente(

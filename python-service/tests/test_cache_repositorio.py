@@ -112,6 +112,21 @@ def test_ejecuciones_crear_actualizar_y_ultima(repo):
     assert repo.obtener_ejecucion(uuid.uuid4()) is None
 
 
+def test_ultima_terminada_e_interrumpidas(repo):
+    terminada, en_curso = uuid.uuid4(), uuid.uuid4()
+    repo.guardar_ejecucion(resumen(
+        terminada, AHORA - timedelta(hours=2), "completado",
+        fin=AHORA - timedelta(hours=1),
+    ))
+    repo.guardar_ejecucion(resumen(en_curso, AHORA))
+    assert repo.ultima_ejecucion().run_id == en_curso
+    assert repo.ultima_ejecucion_terminada().run_id == terminada
+    assert repo.marcar_ejecuciones_interrumpidas(AHORA) == 1
+    interrumpida = repo.obtener_ejecucion(en_curso)
+    assert interrumpida.estado == "fallido" and interrumpida.fin == AHORA
+    assert repo.marcar_ejecuciones_interrumpidas() == 0
+
+
 def test_errores_fuente(repo):
     otro = uuid.uuid4()
     repo.registrar_error_fuente("SOURCE_TIMEOUT", "lento", RUN_ID, AHORA)

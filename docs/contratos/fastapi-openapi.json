@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Analista de Alimentos FoodAware",
-    "description": "Contrato entre FastAPI y NestJS de FoodAware. Los endpoints de productos, búsqueda, ingesta y métricas son stubs con datos de ejemplo y responden con el header X-Stub: true.",
+    "description": "Contrato entre FastAPI y NestJS de FoodAware. Productos, búsqueda e ingesta usan Open Food Facts y una caché local; las métricas aún son stubs con datos de ejemplo y responden con el header X-Stub: true.",
     "version": "0.1.0"
   },
   "paths": {
