@@ -10,7 +10,7 @@ def simulacion_activa(monkeypatch):
     monkeypatch.setattr(config.settings, "simular_errores_habilitado", True)
 
 
-def test_header_se_ignora_por_defecto(client):
+def test_header_se_ignora_por_defecto(client, catalogo_sembrado):
     response = client.get(
         PRODUCTO, headers={"X-Simular-Error": "SOURCE_UNAVAILABLE"}
     )
@@ -32,7 +32,7 @@ def test_header_se_ignora_por_defecto(client):
      ("post", "/ingest/runs"), ("get", "/ingest/runs/latest"),
      ("get", "/metrics/quality"), ("get", "/metrics/evaluation")],
 )
-def test_simula_errores_en_rutas_stub(
+def test_simula_errores_en_rutas_del_contrato(
     client, simulacion_activa, valor, status, metodo, ruta
 ):
     response = client.request(
@@ -41,7 +41,8 @@ def test_simula_errores_en_rutas_stub(
     )
     assert response.status_code == status
     assert response.json()["error"]["request_id"] == "sim-1"
-    assert response.headers["X-Stub"] == "true"
+    es_stub = ruta.startswith("/metrics")
+    assert (response.headers.get("X-Stub") == "true") is es_stub
 
 
 def test_rutas_legadas_no_simulan(client, simulacion_activa):
