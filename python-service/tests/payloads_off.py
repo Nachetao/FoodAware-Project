@@ -41,7 +41,7 @@ LECHE = {
 }
 
 GALLETAS = {
-    "code": "7802215000040",
+    "code": "7802215000041",
     "product_name": "Galletas de vainilla rellenas",
     "brands": "Campo Austral, Austral Snacks",
     "quantity": "140 g",
@@ -61,7 +61,7 @@ GALLETAS = {
 }
 
 INCOMPLETO = {
-    "code": "7801111000011",
+    "code": "7801111000018",
     "brands": "",
     "allergens_tags": [],
     "traces_tags": [],

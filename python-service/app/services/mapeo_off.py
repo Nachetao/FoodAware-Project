@@ -1,7 +1,7 @@
-"""Mapeo básico de un producto de Open Food Facts al esquema Producto.
+"""Mapeo de un producto de Open Food Facts al esquema Producto.
 
-La limpieza profunda de ingredientes queda para el Bloque 3; aquí solo se
-traducen etiquetas, se elige el idioma y se evalúa la calidad mínima.
+Traduce etiquetas, elige el idioma y evalúa la calidad mínima; la limpieza
+de ingredientes y la detección de alérgenos viven en app.procesamiento.
 """
 import hashlib
 import json
@@ -12,8 +12,14 @@ from uuid import UUID
 
 from pydantic import HttpUrl, TypeAdapter, ValidationError
 
+from app.procesamiento.alergenos import (
+    alergenos_en_etiqueta,
+    detectar_alergenos,
+)
+from app.procesamiento.calidad import evaluar_calidad
+from app.procesamiento.ingredientes import analizar_ingredientes
 from app.schemas.enums import AllergenCode, DietLabel
-from app.schemas.producto import Calidad, Procedencia, Producto
+from app.schemas.producto import Procedencia, Producto
 
 # IDs canónicos de la taxonomía de alérgenos de OFF (taxonomies/allergens.txt)
 ALERGENOS_OFF: Dict[str, AllergenCode] = {
@@ -41,15 +47,6 @@ ETIQUETAS_OFF: Dict[str, DietLabel] = {
     "en:no-lactose": DietLabel.sin_lactosa,
 }
 
-# Campo de Producto -> problema registrado en calidad si falta.
-_PROBLEMA_SI_FALTA = {
-    "nombre": "sin_nombre",
-    "marca": "sin_marca",
-    "cantidad": "sin_cantidad",
-    "ingredientes_texto": "sin_ingredientes",
-    "nutriscore": "sin_nutriscore",
-    "imagen_url": "sin_imagen",
-}
 _CODIGO_VALIDO = re.compile(r"\d{8,14}")
 _URL = TypeAdapter(HttpUrl)
 _HASH_PROVISORIO = "0" * 64
@@ -71,10 +68,12 @@ def mapear_producto(
     if not _CODIGO_VALIDO.fullmatch(codigo):
         raise ProductoInvalido(f"Código de barras inválido: {codigo!r}")
 
-    alergenos, desconocidos = _traducir(
-        payload.get("allergens_tags"), ALERGENOS_OFF
+    alergenos_off, desconocidos = _alergenos_de_etiquetas(
+        payload.get("allergens_tags")
     )
-    trazas, desconocidas = _traducir(payload.get("traces_tags"), ALERGENOS_OFF)
+    trazas_off, desconocidas = _alergenos_de_etiquetas(
+        payload.get("traces_tags")
+    )
     etiquetas, _ = _traducir(payload.get("labels_tags"), ETIQUETAS_OFF)
     vegano = DietLabel.vegano in etiquetas
     if vegano and DietLabel.vegetariano not in etiquetas:
@@ -92,15 +91,28 @@ def mapear_producto(
         "imagen_url": _url(payload.get("image_front_url"))
         or _url(payload.get("image_url")),
     }
-    problemas = [p for c, p in _PROBLEMA_SI_FALTA.items() if campos[c] is None]
+    lista = analizar_ingredientes(campos["ingredientes_texto"])
+    ingredientes = [i.texto for i in lista.ingredientes]
+    deteccion = detectar_alergenos(lista)
+    # Unión de OFF y del texto: ante la duda, el alérgeno se marca.
+    alergenos = _sin_repetidos([*alergenos_off, *deteccion.alergenos])
+    trazas = _sin_repetidos([*trazas_off, *deteccion.trazas])
+
+    informativos = []
     if desconocidos or desconocidas:
-        problemas.append("alergenos_no_reconocidos")
-    presentes = sum(valor is not None for valor in campos.values())
+        informativos.append("alergenos_no_reconocidos")
+    # Trazabilidad de lo que OFF no declaraba en sus etiquetas.
+    informativos += [f"alergeno_detectado_en_texto:{a.value}"
+                     for a in deteccion.alergenos if a not in alergenos_off]
+    informativos += [f"traza_detectada_en_texto:{t.value}"
+                     for t in deteccion.trazas if t not in trazas_off]
+    informativos += [f"alergeno_posible:{a.value}"
+                     for a in deteccion.posibles if a not in alergenos]
 
     producto = Producto(
         codigo_barras=codigo,
         **{**campos, "nombre": campos["nombre"] or f"Producto {codigo}"},
-        ingredientes=separar_ingredientes(campos["ingredientes_texto"]),
+        ingredientes=ingredientes,
         alergenos=alergenos,
         trazas=trazas,
         etiquetas_dieta=etiquetas,
@@ -111,11 +123,11 @@ def mapear_producto(
             run_id=run_id,
             hash_contenido=_HASH_PROVISORIO,
         ),
-        calidad=Calidad(
-            es_valido=campos["nombre"] is not None
-            and campos["ingredientes_texto"] is not None,
-            problemas=problemas,
-            completitud=round(presentes / len(campos), 2),
+        calidad=evaluar_calidad(
+            codigo_barras=codigo,
+            ingredientes=ingredientes,
+            otros_problemas=informativos,
+            **campos,
         ),
     )
     procedencia = producto.procedencia.model_copy(
@@ -135,27 +147,25 @@ def hash_contenido(producto: Producto) -> str:
     return hashlib.sha256(canonico.encode("utf-8")).hexdigest()
 
 
-def separar_ingredientes(texto: Optional[str]) -> List[str]:
-    """Separa por comas o punto y coma de primer nivel (respeta paréntesis).
-
-    OFF marca los alérgenos con guiones bajos (_leche_); se quitan.
-    """
-    if not texto:
-        return []
-    partes, actual, profundidad = [], [], 0
-    for caracter in texto.replace("_", ""):
-        if caracter in "([":
-            profundidad += 1
-        elif caracter in ")]":
-            profundidad = max(0, profundidad - 1)
-        if caracter in ",;" and profundidad == 0:
-            partes.append("".join(actual))
-            actual = []
+def _alergenos_de_etiquetas(
+    etiquetas: Any,
+) -> Tuple[List[AllergenCode], List[str]]:
+    """Traduce la taxonomía de OFF y resuelve por sinónimos las etiquetas
+    fuera de ella ("es:avellanas"). Devuelve (códigos, no reconocidas)."""
+    if not isinstance(etiquetas, list):
+        return [], []
+    codigos: List[AllergenCode] = []
+    desconocidas: List[str] = []
+    for etiqueta in etiquetas:
+        if not isinstance(etiqueta, str) or etiqueta == "en:none":
+            continue
+        if etiqueta in ALERGENOS_OFF:
+            codigos.append(ALERGENOS_OFF[etiqueta])
+        elif resueltos := alergenos_en_etiqueta(etiqueta):
+            codigos.extend(resueltos)
         else:
-            actual.append(caracter)
-    partes.append("".join(actual))
-    limpias = (" ".join(p.split()).strip(" .").lower() for p in partes)
-    return _sin_repetidos(p for p in limpias if p)
+            desconocidas.append(etiqueta)
+    return _sin_repetidos(codigos), desconocidas
 
 
 def _traducir(

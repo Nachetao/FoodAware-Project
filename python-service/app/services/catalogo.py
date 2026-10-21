@@ -2,7 +2,6 @@
 import asyncio
 import logging
 import time
-import unicodedata
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Callable, List, Optional, Sequence, Tuple
@@ -13,10 +12,10 @@ from app.core.errores import (
     FuenteTimeout,
     NoEncontrado,
 )
+from app.procesamiento.texto import tokenizar
 from app.repositories.cache import (
     ProductoCacheado,
     RepositorioCache,
-    ResultadoUpsert,
 )
 from app.schemas.busqueda import RespuestaBusqueda, ResultadoBusqueda
 from app.schemas.producto import Producto
@@ -94,16 +93,15 @@ class ServicioCatalogo:
             raise NoEncontrado(
                 f"El producto {codigo_barras} no tiene datos utilizables"
             ) from None
-        resultado = await asyncio.to_thread(
+        await asyncio.to_thread(
             self._repositorio.guardar_producto, producto, payload
         )
-        if resultado is ResultadoUpsert.duplicado:
-            # Sin cambios: la caché conserva su procedencia original.
-            guardado = await asyncio.to_thread(
-                self._repositorio.obtener_producto, producto.codigo_barras
-            )
-            return guardado.producto
-        return producto
+        # Se relee: si no hubo cambios, la caché conserva su procedencia
+        # original, y así vienen marcados los posibles duplicados.
+        guardado = await asyncio.to_thread(
+            self._repositorio.obtener_producto, producto.codigo_barras
+        )
+        return guardado.producto
 
     async def buscar(
         self, consulta: str, limit: int, offset: int
@@ -126,13 +124,6 @@ class ServicioCatalogo:
         )
 
 
-def tokens(texto: str) -> List[str]:
-    """Minúsculas, sin tildes y separado por caracteres no alfanuméricos."""
-    sin_tildes = unicodedata.normalize("NFKD", texto.lower())
-    sin_tildes = "".join(c for c in sin_tildes if not unicodedata.combining(c))
-    return "".join(c if c.isalnum() else " " for c in sin_tildes).split()
-
-
 def rankear(
     productos: Sequence[Producto], consulta: str, limit: int, offset: int
 ) -> Tuple[int, List[ResultadoBusqueda]]:
@@ -140,13 +131,13 @@ def rankear(
 
     Se reemplazará por BM25 en el Bloque 4.
     """
-    terminos = set(tokens(consulta))
+    terminos = set(tokenizar(consulta))
     puntuados = []
     for producto in productos:
         texto = " ".join(
             [producto.nombre, producto.marca or "", *producto.ingredientes]
         )
-        score = float(len(terminos & set(tokens(texto))))
+        score = float(len(terminos & set(tokenizar(texto))))
         if score > 0:
             puntuados.append((score, producto))
     puntuados.sort(key=lambda par: (-par[0], par[1].nombre))

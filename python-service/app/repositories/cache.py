@@ -12,6 +12,12 @@ from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional
 from uuid import UUID
 
+from app.procesamiento import VERSION_PROCESAMIENTO
+from app.procesamiento.calidad import (
+    clave_duplicado,
+    con_duplicados,
+    marcar_duplicados,
+)
 from app.schemas.ingesta import ResumenIngesta
 from app.schemas.producto import Producto
 
@@ -25,7 +31,9 @@ CREATE TABLE IF NOT EXISTS productos (
     recuperado_en TEXT NOT NULL,
     verificado_en TEXT NOT NULL,
     url_fuente TEXT NOT NULL,
-    modificado_en_fuente TEXT
+    modificado_en_fuente TEXT,
+    version_procesamiento INTEGER NOT NULL DEFAULT 0,
+    clave_duplicado TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_productos_verificado_en
     ON productos (verificado_en);
@@ -56,6 +64,14 @@ CREATE INDEX IF NOT EXISTS idx_errores_fuente_fecha
     ON errores_fuente (fecha);
 """
 
+# Columnas agregadas después de la primera versión del esquema; las bases
+# existentes las reciben con ALTER TABLE al inicializar.
+_COLUMNAS_AGREGADAS = {
+    # 0 = procesado antes de que existiera VERSION_PROCESAMIENTO.
+    "version_procesamiento": "INTEGER NOT NULL DEFAULT 0",
+    "clave_duplicado": "TEXT",
+}
+
 _COLUMNAS_EJECUCION = (
     "run_id", "inicio", "fin", "duracion_ms", "recuperados", "validos",
     "invalidos", "duplicados", "errores", "estado",
@@ -76,6 +92,15 @@ class ProductoCacheado:
 
 
 @dataclass(frozen=True)
+class RegistroCrudo:
+    """Lo necesario para reprocesar un producto sin consultar OFF."""
+
+    producto: Producto
+    payload_off: Dict[str, Any]
+    version_procesamiento: int
+
+
+@dataclass(frozen=True)
 class ErrorFuente:
     fecha: datetime
     run_id: Optional[UUID]
@@ -92,6 +117,19 @@ class RepositorioCache:
         with self._conexion() as con:
             con.execute("PRAGMA journal_mode=WAL")
             con.executescript(_ESQUEMA)
+            existentes = {
+                f["name"]
+                for f in con.execute("PRAGMA table_info(productos)")
+            }
+            for columna, tipo in _COLUMNAS_AGREGADAS.items():
+                if columna not in existentes:
+                    con.execute(
+                        f"ALTER TABLE productos ADD COLUMN {columna} {tipo}"
+                    )
+            con.execute(
+                "CREATE INDEX IF NOT EXISTS idx_productos_clave_duplicado "
+                "ON productos (clave_duplicado)"
+            )
 
     @contextmanager
     def _conexion(self) -> Iterator[sqlite3.Connection]:
@@ -110,6 +148,7 @@ class RepositorioCache:
         producto: Producto,
         payload_off: Dict[str, Any],
         verificado_en: Optional[datetime] = None,
+        version: int = VERSION_PROCESAMIENTO,
     ) -> ResultadoUpsert:
         """Upsert por código de barras.
 
@@ -136,8 +175,9 @@ class RepositorioCache:
                 INSERT INTO productos (
                     codigo_barras, producto_json, payload_off,
                     hash_contenido, run_id, recuperado_en, verificado_en,
-                    url_fuente, modificado_en_fuente
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    url_fuente, modificado_en_fuente, version_procesamiento,
+                    clave_duplicado
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (codigo_barras) DO UPDATE SET
                     producto_json = excluded.producto_json,
                     payload_off = excluded.payload_off,
@@ -146,7 +186,9 @@ class RepositorioCache:
                     recuperado_en = excluded.recuperado_en,
                     verificado_en = excluded.verificado_en,
                     url_fuente = excluded.url_fuente,
-                    modificado_en_fuente = excluded.modificado_en_fuente
+                    modificado_en_fuente = excluded.modificado_en_fuente,
+                    version_procesamiento = excluded.version_procesamiento,
+                    clave_duplicado = excluded.clave_duplicado
                 """,
                 (
                     producto.codigo_barras,
@@ -159,6 +201,8 @@ class RepositorioCache:
                     str(procedencia.url_fuente),
                     _a_iso(procedencia.modificado_en_fuente)
                     if procedencia.modificado_en_fuente else None,
+                    version,
+                    clave_duplicado(producto),
                 ),
             )
         if fila:
@@ -168,16 +212,24 @@ class RepositorioCache:
     def obtener_producto(
         self, codigo_barras: str
     ) -> Optional[ProductoCacheado]:
+        """Producto con sus posibles duplicados ya marcados."""
         with self._conexion() as con:
             fila = con.execute(
-                "SELECT producto_json, verificado_en FROM productos "
-                "WHERE codigo_barras = ?",
+                "SELECT producto_json, verificado_en, clave_duplicado "
+                "FROM productos WHERE codigo_barras = ?",
                 (codigo_barras,),
             ).fetchone()
-        if fila is None:
-            return None
+            if fila is None:
+                return None
+            otros = con.execute(
+                "SELECT codigo_barras FROM productos "
+                "WHERE clave_duplicado = ? AND codigo_barras != ?",
+                (fila["clave_duplicado"], codigo_barras),
+            ).fetchall() if fila["clave_duplicado"] else []
+        producto = Producto.model_validate_json(fila["producto_json"])
         return ProductoCacheado(
-            producto=Producto.model_validate_json(fila["producto_json"]),
+            producto=con_duplicados(producto,
+                                    (o["codigo_barras"] for o in otros)),
             verificado_en=_desde_iso(fila["verificado_en"]),
         )
 
@@ -192,14 +244,62 @@ class RepositorioCache:
         return json.loads(fila["payload_off"]) if fila else None
 
     def listar_productos(self) -> List[Producto]:
+        """Todos los productos, con sus posibles duplicados marcados.
+
+        Las marcas se calculan al leer para que siempre reflejen la caché
+        actual, aunque después llegue o cambie el otro producto.
+        """
         with self._conexion() as con:
             filas = con.execute(
                 "SELECT producto_json FROM productos ORDER BY codigo_barras"
             ).fetchall()
-        return [
+        return marcar_duplicados([
             Producto.model_validate_json(fila["producto_json"])
             for fila in filas
+        ])
+
+    def listar_para_reprocesar(
+        self, version_menor_a: Optional[int] = None
+    ) -> List[RegistroCrudo]:
+        """Productos procesados con una versión anterior (todos si es
+        None), junto con el payload crudo de OFF."""
+        consulta = ("SELECT producto_json, payload_off, version_procesamiento "
+                    "FROM productos")
+        parametros: List[Any] = []
+        if version_menor_a is not None:
+            consulta += " WHERE version_procesamiento < ?"
+            parametros.append(version_menor_a)
+        with self._conexion() as con:
+            filas = con.execute(
+                consulta + " ORDER BY codigo_barras", parametros
+            ).fetchall()
+        return [
+            RegistroCrudo(
+                producto=Producto.model_validate_json(f["producto_json"]),
+                payload_off=json.loads(f["payload_off"]),
+                version_procesamiento=f["version_procesamiento"],
+            )
+            for f in filas
         ]
+
+    def actualizar_procesamiento(
+        self, producto: Producto, version: int = VERSION_PROCESAMIENTO
+    ) -> None:
+        """Guarda un producto reprocesado sin tocar payload, procedencia de
+        la fila ni verificado_en."""
+        with self._conexion() as con:
+            con.execute(
+                "UPDATE productos SET producto_json = ?, hash_contenido = ?, "
+                "version_procesamiento = ?, clave_duplicado = ? "
+                "WHERE codigo_barras = ?",
+                (
+                    producto.model_dump_json(),
+                    producto.procedencia.hash_contenido,
+                    version,
+                    clave_duplicado(producto),
+                    producto.codigo_barras,
+                ),
+            )
 
     def contar_productos(self) -> int:
         with self._conexion() as con:

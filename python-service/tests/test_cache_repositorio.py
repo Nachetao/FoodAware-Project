@@ -1,3 +1,4 @@
+import json
 import sqlite3
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -5,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from app.core import config
+from app.procesamiento import VERSION_PROCESAMIENTO
 from app.repositories.cache import RepositorioCache, ResultadoUpsert
 from app.schemas.ingesta import ResumenIngesta
 from app.services.mapeo_off import mapear_producto
@@ -145,6 +147,85 @@ def test_los_datos_persisten_en_el_archivo(repo):
     repo.guardar_producto(mapear(LECHE), LECHE)
     otra_instancia = RepositorioCache(repo.ruta)
     assert otra_instancia.obtener_producto(LECHE["code"]) is not None
+
+
+def test_guarda_version_de_procesamiento(repo):
+    repo.guardar_producto(mapear(LECHE), LECHE)
+    repo.guardar_producto(mapear(GALLETAS), GALLETAS, version=0)
+    assert [r.producto.codigo_barras
+            for r in repo.listar_para_reprocesar(VERSION_PROCESAMIENTO)] == [
+        GALLETAS["code"]
+    ]
+    todos = repo.listar_para_reprocesar()
+    assert {r.version_procesamiento for r in todos} == {
+        0, VERSION_PROCESAMIENTO
+    }
+    assert todos[0].payload_off in (LECHE, GALLETAS)
+
+
+def test_migra_una_base_sin_columnas_nuevas(tmp_path):
+    ruta = str(tmp_path / "vieja.sqlite3")
+    con = sqlite3.connect(ruta)
+    con.executescript("""
+        CREATE TABLE productos (
+            codigo_barras TEXT PRIMARY KEY, producto_json TEXT NOT NULL,
+            payload_off TEXT NOT NULL, hash_contenido TEXT NOT NULL,
+            run_id TEXT NOT NULL, recuperado_en TEXT NOT NULL,
+            verificado_en TEXT NOT NULL, url_fuente TEXT NOT NULL,
+            modificado_en_fuente TEXT
+        );
+    """)
+    producto = mapear(LECHE)
+    con.execute(
+        "INSERT INTO productos VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)",
+        (producto.codigo_barras, producto.model_dump_json(), json.dumps(LECHE),
+         producto.procedencia.hash_contenido, str(RUN_ID),
+         "2026-10-21T12:00:00.000000Z", "2026-10-21T12:00:00.000000Z",
+         str(producto.procedencia.url_fuente)),
+    )
+    con.commit()
+    con.close()
+
+    repo = RepositorioCache(ruta)
+    repo.inicializar()
+    repo.inicializar()  # idempotente
+    pendientes = repo.listar_para_reprocesar(VERSION_PROCESAMIENTO)
+    assert [r.version_procesamiento for r in pendientes] == [0]
+    assert repo.obtener_producto(LECHE["code"]).producto == producto
+
+
+def test_duplicados_se_marcan_al_leer(repo):
+    gemela_payload = {**LECHE, "code": "7801234000018", "quantity": "1L"}
+    repo.guardar_producto(mapear(LECHE), LECHE)
+    assert repo.obtener_producto(LECHE["code"]).producto.calidad.problemas \
+        == []
+    repo.guardar_producto(mapear(gemela_payload), gemela_payload)
+    repo.guardar_producto(mapear(GALLETAS), GALLETAS)
+
+    leche = repo.obtener_producto(LECHE["code"]).producto
+    assert leche.calidad.problemas == ["posible_duplicado:7801234000018"]
+    gemela = repo.obtener_producto("7801234000018").producto
+    assert gemela.calidad.problemas == [
+        f"posible_duplicado:{LECHE['code']}"
+    ]
+    marcados = {
+        p.codigo_barras: p.calidad.problemas for p in repo.listar_productos()
+    }
+    assert marcados[LECHE["code"]] == ["posible_duplicado:7801234000018"]
+    assert "posible_duplicado" not in str(marcados[GALLETAS["code"]])
+    # No se descartan.
+    assert repo.contar_productos() == 3
+
+
+def test_actualizar_procesamiento_no_toca_payload_ni_verificacion(repo):
+    repo.guardar_producto(mapear(LECHE), LECHE, AHORA, version=0)
+    reprocesado = mapear({**LECHE, "quantity": "2 L"})
+    repo.actualizar_procesamiento(reprocesado)
+    cacheado = repo.obtener_producto(LECHE["code"])
+    assert cacheado.producto.cantidad == "2 L"
+    assert cacheado.verificado_en == AHORA
+    assert repo.obtener_payload_off(LECHE["code"]) == LECHE
+    assert repo.listar_para_reprocesar(VERSION_PROCESAMIENTO) == []
 
 
 def test_cache_db_path_desde_entorno(monkeypatch):

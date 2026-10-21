@@ -9,7 +9,6 @@ from app.services.mapeo_off import (
     ALERGENOS_OFF,
     ProductoInvalido,
     mapear_producto,
-    separar_ingredientes,
 )
 from tests.payloads_off import GALLETAS, INCOMPLETO, LECHE
 
@@ -61,15 +60,14 @@ def test_mapea_alergenos_trazas_y_calidad():
     assert producto.nutriscore is None
     assert str(producto.imagen_url).endswith("front_es.5.400.jpg")
     assert producto.calidad.es_valido is True
-    assert producto.calidad.problemas == [
-        "sin_nutriscore", "alergenos_no_reconocidos"
-    ]
+    # "es:avellanas" ya se resuelve y todo lo del texto venía en OFF.
+    assert producto.calidad.problemas == ["sin_nutriscore"]
     assert producto.calidad.completitud == 0.83
 
 
 def test_producto_incompleto_es_invalido():
     producto = mapear(INCOMPLETO)
-    assert producto.nombre == "Producto 7801111000011"
+    assert producto.nombre == "Producto 7801111000018"
     assert producto.calidad.es_valido is False
     assert producto.calidad.problemas == [
         "sin_nombre", "sin_marca", "sin_cantidad", "sin_ingredientes",
@@ -82,11 +80,98 @@ def test_producto_incompleto_es_invalido():
 
 @pytest.mark.parametrize("etiqueta, codigo", sorted(ALERGENOS_OFF.items()))
 def test_los_14_alergenos(etiqueta, codigo):
-    payload = {**LECHE, "allergens_tags": [etiqueta],
-               "traces_tags": [etiqueta]}
+    payload = {**LECHE, "ingredients_text_es": "Agua, sal.",
+               "allergens_tags": [etiqueta], "traces_tags": [etiqueta]}
     producto = mapear(payload)
     assert producto.alergenos == [codigo]
     assert producto.trazas == [codigo]
+
+
+def test_union_de_etiquetas_y_texto_con_trazabilidad():
+    payload = {
+        **LECHE,
+        "ingredients_text_es": (
+            "Harina de trigo, azúcar, mantequilla, huevo, sal. Puede "
+            "contener trazas de maní y sésamo."
+        ),
+        "allergens_tags": ["en:gluten"],
+        "traces_tags": ["en:peanuts"],
+    }
+    producto = mapear(payload)
+    assert [a.value for a in producto.alergenos] == [
+        "gluten", "lacteos", "huevo"
+    ]
+    assert [t.value for t in producto.trazas] == ["mani", "sesamo"]
+    assert producto.calidad.problemas == [
+        "alergeno_detectado_en_texto:lacteos",
+        "alergeno_detectado_en_texto:huevo",
+        "traza_detectada_en_texto:sesamo",
+    ]
+
+
+def test_detecta_en_texto_sin_etiquetas_de_off():
+    payload = {**LECHE, "allergens_tags": [], "traces_tags": []}
+    producto = mapear(payload)
+    assert [a.value for a in producto.alergenos] == ["lacteos"]
+    assert "alergeno_detectado_en_texto:lacteos" in producto.calidad.problemas
+
+
+@pytest.mark.parametrize(
+    "etiqueta, esperado",
+    [
+        ("es:avellanas", ["frutos_secos"]),
+        ("es:leche", ["lacteos"]),
+        ("es:trazas-de-frutos-secos", ["frutos_secos"]),
+        ("es:crustaceos", ["crustaceos"]),
+        ("es:mariscos", ["crustaceos", "moluscos"]),
+        ("es:sulfitos", ["sulfitos"]),
+    ],
+)
+def test_resuelve_etiquetas_fuera_de_la_taxonomia(etiqueta, esperado):
+    payload = {**LECHE, "ingredients_text_es": "Agua.",
+               "allergens_tags": [etiqueta], "traces_tags": []}
+    producto = mapear(payload)
+    assert [a.value for a in producto.alergenos] == esperado
+    assert "alergenos_no_reconocidos" not in producto.calidad.problemas
+
+
+def test_e322_sin_origen_queda_como_alergeno_posible():
+    payload = {**LECHE, "ingredients_text_es": "Agua, emulsionante (INS 322)",
+               "allergens_tags": [], "traces_tags": []}
+    producto = mapear(payload)
+    assert producto.alergenos == []
+    assert producto.calidad.problemas == ["alergeno_posible:soya"]
+    assert producto.calidad.es_valido is True
+    # Si OFF ya declara soya, no es solo un indicio.
+    producto = mapear({**payload, "allergens_tags": ["en:soybeans"]})
+    assert "alergeno_posible:soya" not in producto.calidad.problemas
+
+
+@pytest.mark.parametrize(
+    "cambios, problema",
+    [
+        ({"code": "7802920000016"},
+         "codigo_barras_digito_verificador_invalido"),
+        ({"code": "78029200000"}, "codigo_barras_longitud_invalida"),
+        ({"ingredients_text_es": "Ingredientes: (30%)."},
+         "ingredientes_vacios"),
+        ({"ingredients_text_es": None, "ingredients_text": None},
+         "sin_ingredientes"),
+        ({"product_name_es": None, "product_name": " "}, "sin_nombre"),
+    ],
+)
+def test_reglas_de_validez_en_el_mapeo(cambios, problema):
+    producto = mapear({**LECHE, **cambios})
+    assert producto.calidad.es_valido is False
+    assert problema in producto.calidad.problemas
+
+
+def test_etiqueta_irreconocible_queda_registrada():
+    payload = {**LECHE, "ingredients_text_es": "Agua.",
+               "allergens_tags": ["fr:lait", "en:none"]}
+    producto = mapear(payload)
+    assert producto.alergenos == []
+    assert "alergenos_no_reconocidos" in producto.calidad.problemas
 
 
 def test_tabla_cubre_todos_los_codigos_del_contrato():
@@ -147,16 +232,11 @@ def test_normaliza_campos(cambios, campo, esperado):
         assert producto.procedencia.modificado_en_fuente is None
 
 
-@pytest.mark.parametrize(
-    "texto, esperado",
-    [
-        (None, []),
-        ("", []),
-        ("Agua, sal.", ["agua", "sal"]),
-        ("Chocolate (azúcar, cacao), leche; sal",
-         ["chocolate (azúcar, cacao)", "leche", "sal"]),
-        ("_Leche_ entera,  _LECHE_ entera , sal", ["leche entera", "sal"]),
-    ],
-)
-def test_separar_ingredientes(texto, esperado):
-    assert separar_ingredientes(texto) == esperado
+def test_lista_de_ingredientes_limpia():
+    producto = mapear(GALLETAS)
+    assert producto.ingredientes_texto == GALLETAS["ingredients_text"]
+    assert producto.ingredientes == [
+        "harina de trigo enriquecida (harina de trigo, hierro, tiamina)",
+        "azúcar", "aceite vegetal", "suero de leche en polvo", "huevo",
+        "emulsionante (lecitina de soya)", "sal",
+    ]
