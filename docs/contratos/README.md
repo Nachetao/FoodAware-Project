@@ -67,7 +67,7 @@ docker compose up --build -d python-service
 
 | Método | Ruta | Respuesta | Errores | Estado |
 |---|---|---|---|---|
-| GET | `/health` | `{"status", "service"}` | — | real |
+| GET | `/health` | `RespuestaSalud` (200 `ok`/`degradado`, 503 `error`) | — | real |
 | POST | `/analizar` | análisis por reglas (sin cambios) | 422 nativo de FastAPI | real |
 | GET | `/products/{codigo_barras}` | `Producto` | 404, 422, 500, 503, 504 | real |
 | GET | `/search?q=&limit=&offset=` | `RespuestaBusqueda` | 422, 500 | real |
@@ -147,6 +147,52 @@ contenido; ver [Métricas de calidad](#métricas-de-calidad-get-metricsquality))
 `errores` (categorías con páginas perdidas tras el reintento) y `estado`. Una
 ejecución interrumpida por un reinicio queda como `fallido`.
 
+### Salud (`GET /health`)
+
+```json
+{
+  "estado": "degradado",
+  "servicio": "python-service",
+  "version": "0.1.0",
+  "verificado_en": "2026-10-21T21:40:00Z",
+  "dependencias": {"cache": "ok", "indice": "ok", "openfoodfacts": "degradado"},
+  "detalle": {
+    "cache": {"productos": 812},
+    "indice": {"cargado": true, "productos": 790},
+    "openfoodfacts": {
+      "ultima_ingesta": "completado_con_errores",
+      "ultima_ingesta_fin": "2026-10-21T20:02:30Z",
+      "ultima_falla": "2026-10-21T20:01:10Z"
+    }
+  }
+}
+```
+
+Cada dependencia vale `ok`, `degradado`, `error` o `no_verificado`:
+
+| Dependencia | `ok` | `degradado` | `error` | `no_verificado` |
+|---|---|---|---|---|
+| `cache` | La base SQLite abre y responde una consulta | — | La base no existe o no responde | — |
+| `indice` | Cargado y con productos | Cargado pero vacío | Todavía no se construyó | — |
+| `openfoodfacts` | La última ingesta terminó `completado` | La última ingesta terminó `completado_con_errores` o `fallido`, o hubo una falla de la fuente en los últimos 15 minutos, después de esa ingesta | — | Nunca hubo una ingesta terminada |
+
+`/health` **no consulta Open Food Facts** (gastaría el límite de tasa): su
+estado sale de la última ingesta terminada y del registro de fallas de la
+fuente. Las fallas que una ingesta recuperó en su reintento son anteriores a su
+fin y no la degradan.
+
+**Estado global y código HTTP:**
+
+| `estado` | Cuándo | HTTP |
+|---|---|---|
+| `ok` | Todas las dependencias `ok` (`no_verificado` no cuenta como falla) | 200 |
+| `degradado` | La caché responde, pero el índice o Open Food Facts no están `ok`. El servicio sigue respondiendo desde la caché. | 200 |
+| `error` | La caché no responde | 503 |
+
+Para NestJS: con 200, el servicio se puede usar (si está `degradado`, los datos
+pueden estar desactualizados o la búsqueda vacía); con 503, no. `detalle`
+muestra los datos que llevaron a cada estado.
+
 ## Errores
 
 Los endpoints del contrato responden siempre con esta forma:
@@ -171,6 +217,7 @@ porque NestJS ya los consume.
 | Header | Dirección | Uso |
 |---|---|---|
 | `X-Request-ID` | petición y respuesta | Si NestJS lo envía, se devuelve igual (letras, números, `.`, `_`, `-`, máx. 128); si no, se genera un uuid4. También va en `error.request_id`. |
+| `X-Response-Time-ms` | respuesta | Milisegundos que tardó el servicio hasta enviar la respuesta (p. ej. `12.345`). Va en todas las respuestas, también en los errores. |
 | `X-Simular-Error` | petición | Solo con `SIMULAR_ERRORES_HABILITADO=true` en `.env`. Valores: `SOURCE_UNAVAILABLE` (503), `SOURCE_TIMEOUT` (504), `INTERNAL_ERROR` (500). Funciona en los endpoints del contrato (no en `/`, `/health` ni `/analizar`); no aparece en OpenAPI. |
 
 ## Códigos de alérgenos (`AllergenCode`)

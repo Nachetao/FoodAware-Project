@@ -14,7 +14,6 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="IA_", extra="ignore")
 
     app_name: str = "Analista de Alimentos FoodAware"
-    service_name: str = "foodaware-ia"
     # Las siguientes van sin prefijo IA_: son los nombres de .env.example.
     simular_errores_habilitado: bool = Field(
         False, validation_alias="SIMULAR_ERRORES_HABILITADO"

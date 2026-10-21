@@ -30,14 +30,27 @@
         "tags": [
           "sistema"
         ],
-        "summary": "Health Check",
+        "summary": "Estado del servicio y de sus dependencias",
+        "description": "200 con estado `ok` o `degradado` (el servicio responde desde la caché); 503 con estado `error` si la caché no responde. No consulta Open Food Facts: su estado sale de la última ingesta y de la última falla registrada.",
         "operationId": "health_check_health_get",
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaSalud"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "La caché no responde (estado error).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaSalud"
+                }
               }
             }
           }
@@ -540,6 +553,28 @@
         "title": "CodigoError",
         "description": "Códigos de error uniformes del contrato."
       },
+      "DetalleCache": {
+        "properties": {
+          "productos": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Productos",
+            "description": "Productos en la caché; nulo si no responde.",
+            "examples": [
+              812
+            ]
+          }
+        },
+        "type": "object",
+        "title": "DetalleCache"
+      },
       "DetalleError": {
         "properties": {
           "codigo": {
@@ -574,6 +609,109 @@
           "request_id"
         ],
         "title": "DetalleError"
+      },
+      "DetalleIndice": {
+        "properties": {
+          "cargado": {
+            "type": "boolean",
+            "title": "Cargado",
+            "description": "El índice de búsqueda ya se construyó desde la caché.",
+            "examples": [
+              true
+            ]
+          },
+          "productos": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Productos",
+            "examples": [
+              812
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "cargado",
+          "productos"
+        ],
+        "title": "DetalleIndice"
+      },
+      "DetalleOpenFoodFacts": {
+        "properties": {
+          "ultima_ingesta": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "completado",
+                  "completado_con_errores",
+                  "fallido"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ultima Ingesta",
+            "description": "Estado de la última ingesta terminada; nulo si nunca hubo una.",
+            "examples": [
+              "completado"
+            ]
+          },
+          "ultima_ingesta_fin": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ultima Ingesta Fin",
+            "examples": [
+              "2026-10-20T14:02:30Z"
+            ]
+          },
+          "ultima_falla": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ultima Falla",
+            "description": "Última falla registrada de la fuente.",
+            "examples": [
+              "2026-10-20T13:10:00Z"
+            ]
+          }
+        },
+        "type": "object",
+        "title": "DetalleOpenFoodFacts"
+      },
+      "DetalleSalud": {
+        "properties": {
+          "cache": {
+            "$ref": "#/components/schemas/DetalleCache"
+          },
+          "indice": {
+            "$ref": "#/components/schemas/DetalleIndice"
+          },
+          "openfoodfacts": {
+            "$ref": "#/components/schemas/DetalleOpenFoodFacts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cache",
+          "indice",
+          "openfoodfacts"
+        ],
+        "title": "DetalleSalud"
       },
       "DietLabel": {
         "type": "string",
@@ -1076,6 +1214,84 @@
           "error"
         ],
         "title": "RespuestaError"
+      },
+      "RespuestaSalud": {
+        "properties": {
+          "estado": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "degradado",
+              "error"
+            ],
+            "title": "Estado",
+            "examples": [
+              "ok"
+            ]
+          },
+          "servicio": {
+            "type": "string",
+            "title": "Servicio",
+            "examples": [
+              "python-service"
+            ]
+          },
+          "version": {
+            "type": "string",
+            "title": "Version",
+            "examples": [
+              "1.0.0"
+            ]
+          },
+          "verificado_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Verificado En",
+            "examples": [
+              "2026-10-20T14:30:00Z"
+            ]
+          },
+          "dependencias": {
+            "additionalProperties": {
+              "type": "string",
+              "enum": [
+                "ok",
+                "degradado",
+                "error",
+                "no_verificado"
+              ]
+            },
+            "type": "object",
+            "title": "Dependencias",
+            "description": "Estado de cada dependencia: cache, indice y openfoodfacts.",
+            "examples": [
+              {
+                "cache": "ok",
+                "indice": "ok",
+                "openfoodfacts": "ok"
+              }
+            ]
+          },
+          "detalle": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DetalleSalud"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Datos con que se decidió cada estado; GET /health siempre lo incluye."
+          }
+        },
+        "type": "object",
+        "required": [
+          "estado",
+          "servicio",
+          "version",
+          "verificado_en"
+        ],
+        "title": "RespuestaSalud"
       },
       "ResultadoBusqueda": {
         "properties": {
