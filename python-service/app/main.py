@@ -50,7 +50,7 @@ def construir_servicios(
     ingesta_ = ServicioIngesta(repositorio, cliente, settings.off_base_url,
                                al_terminar=busqueda_.reconstruir)
     return Servicios(catalogo_, ingesta_, busqueda_,
-                     ServicioMetricas(repositorio))
+                     ServicioMetricas(repositorio, busqueda_))
 
 
 def solicitud_automatica() -> SolicitudIngesta:
@@ -120,10 +120,10 @@ app = FastAPI(
     title=settings.app_name,
     version="0.1.0",
     description=(
-        "Contrato entre FastAPI y NestJS de FoodAware. Productos, búsqueda, "
-        "ingesta y métricas de calidad usan Open Food Facts y una caché "
-        "local; /metrics/evaluation aún es un stub con datos de ejemplo y "
-        "responde con el header X-Stub: true."
+        "Contrato entre FastAPI y NestJS de FoodAware. Productos, búsqueda "
+        "e ingesta usan Open Food Facts y una caché local; las métricas de "
+        "calidad se calculan desde la caché y las de evaluación, sobre el "
+        "índice de búsqueda vigente."
     ),
     lifespan=ciclo_de_vida,
 )

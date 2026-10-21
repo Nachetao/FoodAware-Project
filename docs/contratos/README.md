@@ -4,11 +4,10 @@ Contrato HTTP entre `backend/` (NestJS) y `python-service/` (FastAPI) para la EP
 La fuente de verdad es el código (modelos Pydantic en `python-service/app/schemas/`);
 [`fastapi-openapi.json`](fastapi-openapi.json) se genera desde ahí.
 
-> **Productos, búsqueda e ingesta ya son reales** (Open Food Facts + caché local
-> SQLite), con limpieza de ingredientes, detección de alérgenos, validación de
-> calidad, ranking BM25 y métricas de calidad reales. **`/metrics/evaluation`
-> sigue siendo un stub**: devuelve datos de ejemplo y responde con el header
-> `X-Stub: true`.
+> **Todos los endpoints son reales** (Open Food Facts + caché local SQLite), con
+> limpieza de ingredientes, detección de alérgenos, validación de calidad,
+> ranking BM25, métricas de calidad de los datos y evaluación de la búsqueda.
+> Ninguno devuelve datos de ejemplo.
 
 ### Cómo se obtienen los datos
 
@@ -75,7 +74,7 @@ docker compose up --build -d python-service
 | POST | `/ingest/runs` | `ResumenIngesta` (202, `en_curso`) | 422, 500, 503 | real |
 | GET | `/ingest/runs/latest` | `ResumenIngesta` | 404, 500 | real |
 | GET | `/metrics/quality` | `MetricasCalidad` | 500 | real |
-| GET | `/metrics/evaluation` | `MetricasEvaluacion` | 500 | stub |
+| GET | `/metrics/evaluation` | `MetricasEvaluacion` | 500 | real |
 
 Parámetros de búsqueda: `q` de 2 a 100 caracteres, `limit` de 1 a 50 (10 por
 defecto), `offset` ≥ 0. Códigos de barras: 8 a 14 dígitos.
@@ -172,7 +171,6 @@ porque NestJS ya los consume.
 | Header | Dirección | Uso |
 |---|---|---|
 | `X-Request-ID` | petición y respuesta | Si NestJS lo envía, se devuelve igual (letras, números, `.`, `_`, `-`, máx. 128); si no, se genera un uuid4. También va en `error.request_id`. |
-| `X-Stub` | respuesta | `true` en endpoints que aún devuelven datos de ejemplo (hoy, solo `/metrics/evaluation`). |
 | `X-Simular-Error` | petición | Solo con `SIMULAR_ERRORES_HABILITADO=true` en `.env`. Valores: `SOURCE_UNAVAILABLE` (503), `SOURCE_TIMEOUT` (504), `INTERNAL_ERROR` (500). Funciona en los endpoints del contrato (no en `/`, `/health` ni `/analizar`); no aparece en OpenAPI. |
 
 ## Códigos de alérgenos (`AllergenCode`)
@@ -334,6 +332,34 @@ justamente los que la persona quiere evitar. Solo acierta cuando el producto dic
 "sin gluten" en el nombre. No es un error de la implementación sino un límite de
 un ranking solo léxico: responder bien exige entender la restricción y filtrar
 por los alérgenos detectados, que es la capacidad adaptativa del Módulo 3.
+
+### `GET /metrics/evaluation`
+
+Devuelve la evaluación del índice que está respondiendo `/search`. Se calcula
+cada vez que el índice se reconstruye (al iniciar el servicio y al terminar cada
+ingesta), junto con el índice nuevo, y se publica con él: no se evalúa en cada
+petición, y la evaluación siempre corresponde al índice vigente.
+
+| Campo | Definición |
+|---|---|
+| `k` | Resultados que se miran por consulta (5). |
+| `precision_at_k` | Promedio macro de Precision@K de las consultas evaluadas (0 a 1, 4 decimales). |
+| `recall_at_k` | Promedio macro de Recall@K de las consultas evaluadas (0 a 1, 4 decimales). |
+| `consultas_evaluadas` | Consultas del conjunto con al menos un relevante en el corpus. |
+| `tiempo_promedio_ms` | Tiempo promedio de búsqueda de esas consultas, en el servicio. |
+
+Incluye ambos tipos de consulta, de producto y con restricción. El desglose por
+consulta y por tipo, y la comparación con la línea base, están en
+`scripts/evaluar_busqueda.py`. Con el índice vacío responde 200 con
+`consultas_evaluadas: 0` y el resto en 0.
+
+**Cómo interpretar el endpoint:** `precision_at_k` 0.51 significa que, en
+promedio, la mitad de los 5 primeros resultados le sirve al usuario. Como el
+máximo posible depende de cuántos relevantes tenga cada consulta en el corpus,
+el número sirve sobre todo para **comparar** el mismo conjunto entre versiones
+del buscador o corpus (por ejemplo, antes y después de los sinónimos), no como
+nota absoluta. Si `consultas_evaluadas` baja, el corpus perdió cobertura de
+algún tipo de producto.
 
 ## Convenciones
 
