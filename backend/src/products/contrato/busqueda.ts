@@ -21,6 +21,7 @@ export class ResultadoBusqueda {
   score: number;
 
   @ApiProperty({
+    type: "integer",
     minimum: 1,
     description: "Posición en el ranking, desde 1.",
     example: 1,
@@ -38,6 +39,7 @@ export class RespuestaBusqueda {
   consulta: string;
 
   @ApiProperty({
+    type: "integer",
     minimum: 0,
     description: "Total de coincidencias antes de paginar.",
     example: 23,
