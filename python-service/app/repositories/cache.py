@@ -361,6 +361,16 @@ class RepositorioCache:
         with self._conexion() as con:
             return con.execute("SELECT COUNT(*) FROM productos").fetchone()[0]
 
+    def verificar(self) -> int:
+        """Abre la base y cuenta los productos, para GET /health.
+
+        Lanza sqlite3.Error si la base no responde. No la crea si falta
+        (sqlite3.connect sí lo haría): una caché perdida es un error.
+        """
+        if not Path(self.ruta).is_file():
+            raise sqlite3.OperationalError("la base de la caché no existe")
+        return self.contar_productos()
+
     def estado_productos(self) -> List[Tuple[bool, datetime]]:
         """(es_valido, verificado_en) de cada producto, sin deserializar el
         producto completo; para las métricas de calidad."""

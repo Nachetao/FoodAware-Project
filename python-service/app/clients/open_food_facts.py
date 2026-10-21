@@ -22,6 +22,7 @@ from app.core.errores import (
     FuenteTimeout,
     NoEncontrado,
 )
+from app.core.logs import run_id_actual
 
 logger = logging.getLogger(__name__)
 
@@ -126,11 +127,13 @@ class ClienteOpenFoodFacts:
         de inmediato con FuenteNoDisponible (pensado para peticiones HTTP).
         """
         descripcion = f"producto {codigo_barras}"
+        contexto = {"operacion": "producto", "codigo_barras": codigo_barras}
         datos = await self._get(
             f"/api/v3/product/{codigo_barras}",
             {"fields": ",".join(CAMPOS)},
             self._limitador_lecturas,
             descripcion,
+            contexto,
             espera_maxima,
         )
         if datos.get("status") == "failure":
@@ -139,7 +142,9 @@ class ClienteOpenFoodFacts:
             )
         producto = datos.get("product")
         if not isinstance(producto, dict):
-            logger.error("Respuesta sin 'product' para el %s", descripcion)
+            _log_fuente(logging.ERROR, "Respuesta sin 'product' para el %s",
+                        descripcion, campos={**contexto, "codigo_http": 200,
+                                             "motivo": "sin_product"})
             raise FuenteNoDisponible("Open Food Facts devolvió una respuesta "
                                      "inválida")
         return producto
@@ -169,12 +174,17 @@ class ClienteOpenFoodFacts:
             params["categories_tags"] = "|".join(categorias)
         filtro = f" {'|'.join(categorias)}" if categorias else ""
         descripcion = f"búsqueda {pais}{filtro} página {pagina}"
+        contexto = {"operacion": "busqueda", "pais": pais,
+                    "categoria": "|".join(categorias) or None,
+                    "pagina": pagina}
         datos = await self._get(
             "/api/v2/search", params, self._limitador_busquedas, descripcion,
-            espera_base=self._espera_base_busquedas,
+            contexto, espera_base=self._espera_base_busquedas,
         )
         if not isinstance(datos.get("products"), list):
-            logger.error("Respuesta sin 'products' en la %s", descripcion)
+            _log_fuente(logging.ERROR, "Respuesta sin 'products' en la %s",
+                        descripcion, campos={**contexto, "codigo_http": 200,
+                                             "motivo": "sin_products"})
             raise FuenteNoDisponible("Open Food Facts devolvió una respuesta "
                                      "inválida")
         return datos
@@ -185,17 +195,22 @@ class ClienteOpenFoodFacts:
         params: Dict[str, Any],
         limitador: LimitadorTasa,
         descripcion: str,
+        contexto: Dict[str, Any],
         espera_maxima: Optional[float] = None,
         *,
         espera_base: Optional[float] = None,
     ) -> Dict[str, Any]:
         base = self._espera_base if espera_base is None else espera_base
         for intento in range(self.max_reintentos + 1):
+            campos = {**contexto, "intento": intento + 1,
+                      "max_intentos": self.max_reintentos + 1}
             try:
                 await limitador.esperar_turno(espera_maxima)
             except LimiteTasaExcedido as exc:
-                logger.warning("Límite de consultas alcanzado en la %s: %s",
-                               descripcion, exc)
+                _log_fuente(logging.WARNING,
+                            "Límite de consultas alcanzado en la %s: %s",
+                            descripcion, exc,
+                            campos={**campos, "motivo": "limite_de_tasa"})
                 raise FuenteNoDisponible(
                     "Se alcanzó el límite de consultas a Open Food Facts; "
                     f"intenta de nuevo en {math.ceil(exc.espera_necesaria)} s"
@@ -215,6 +230,7 @@ class ClienteOpenFoodFacts:
                 motivo = f"error de red ({type(exc).__name__}: {exc})"
             else:
                 estado = respuesta.status_code
+                campos["codigo_http"] = estado
                 if estado == 404:
                     raise NoEncontrado(
                         f"El {descripcion} no existe en Open Food Facts"
@@ -230,22 +246,27 @@ class ClienteOpenFoodFacts:
                     motivo = f"HTTP {estado}"
                     retry_after = _segundos_retry_after(respuesta)
                 elif estado >= 400:
-                    logger.error("Open Food Facts rechazó la %s: HTTP %d",
-                                 descripcion, estado)
+                    _log_fuente(logging.ERROR,
+                                "Open Food Facts rechazó la %s: HTTP %d",
+                                descripcion, estado,
+                                campos={**campos, "motivo": f"HTTP {estado}"})
                     raise FuenteNoDisponible(
                         f"Open Food Facts rechazó la petición (HTTP {estado})"
                     )
                 else:
-                    return self._leer_json(respuesta, descripcion)
+                    return self._leer_json(respuesta, descripcion, campos)
 
+            campos["motivo"] = motivo
             if intento == self.max_reintentos:
-                logger.error("Open Food Facts falló en la %s tras %d "
-                             "intentos: %s", descripcion, intento + 1, motivo)
+                _log_fuente(logging.ERROR, "Open Food Facts falló en la %s "
+                            "tras %d intentos: %s", descripcion, intento + 1,
+                            motivo, campos=campos)
                 raise fallo
             espera = self._calcular_espera(intento, retry_after, base)
-            logger.warning("Open Food Facts falló en la %s: %s; reintento "
-                           "%d/%d en %.1f s", descripcion, motivo,
-                           intento + 1, self.max_reintentos, espera)
+            _log_fuente(logging.WARNING, "Open Food Facts falló en la %s: %s; "
+                        "reintento %d/%d en %.1f s", descripcion, motivo,
+                        intento + 1, self.max_reintentos, espera,
+                        campos={**campos, "espera_s": round(espera, 3)})
             await self._dormir(espera)
         raise AssertionError("inalcanzable")
 
@@ -260,23 +281,43 @@ class ClienteOpenFoodFacts:
 
     @staticmethod
     def _leer_json(
-        respuesta: httpx.Response, descripcion: str
+        respuesta: httpx.Response, descripcion: str, campos: Dict[str, Any]
     ) -> Dict[str, Any]:
         try:
             datos = respuesta.json()
         except ValueError:
-            logger.error("Open Food Facts devolvió JSON inválido en la %s",
-                         descripcion)
+            _log_fuente(logging.ERROR,
+                        "Open Food Facts devolvió JSON inválido en la %s",
+                        descripcion,
+                        campos={**campos, "motivo": "json_invalido"})
             raise FuenteNoDisponible(
                 "Open Food Facts devolvió una respuesta inválida"
             ) from None
         if not isinstance(datos, dict):
-            logger.error("Open Food Facts devolvió un JSON inesperado en la "
-                         "%s", descripcion)
+            _log_fuente(logging.ERROR, "Open Food Facts devolvió un JSON "
+                        "inesperado en la %s", descripcion,
+                        campos={**campos, "motivo": "json_inesperado"})
             raise FuenteNoDisponible(
                 "Open Food Facts devolvió una respuesta inválida"
             )
         return datos
+
+
+def _log_fuente(
+    nivel: int, mensaje: str, *args: Any, campos: Dict[str, Any]
+) -> None:
+    """Falla de Open Food Facts como log estructurado. Siempre trae los
+    mismos campos; run_id es null si la petición no viene de una ingesta."""
+    logger.log(nivel, mensaje, *args, extra={
+        "evento": "error_fuente",
+        "categoria": None,
+        "pagina": None,
+        "intento": None,
+        "codigo_http": None,
+        "motivo": None,
+        **campos,
+        "run_id": run_id_actual(),
+    })
 
 
 def _segundos_retry_after(respuesta: httpx.Response) -> Optional[float]:

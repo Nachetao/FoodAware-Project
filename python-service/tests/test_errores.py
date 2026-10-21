@@ -106,6 +106,6 @@ def test_rutas_legadas_conservan_errores_de_fastapi(client):
 
 def test_health_tiene_request_id(client):
     response = client.get("/health", headers={"X-Request-ID": "salud-1"})
-    assert response.json() == {"status": "ok", "service": "foodaware-ia"}
+    assert response.json()["servicio"] == "python-service"
     assert response.headers["X-Request-ID"] == "salud-1"
     assert "X-Stub" not in response.headers

@@ -12,7 +12,27 @@ services:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # $$ = variables del contenedor; -h fuerza TCP, que solo responde
+      # cuando terminó la inicialización de la base.
+      test: ["CMD-SHELL", "pg_isready -h localhost -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+      start_interval: 2s
     restart: unless-stopped
+
+  # Paso de un solo uso antes de python-service: deja el volumen de la caché a
+  # nombre del usuario sin privilegios del servicio (UID 10001, ver
+  # python-service/Dockerfile). Los volúmenes creados cuando el servicio corría
+  # como root tienen archivos de root que ese usuario no podría escribir.
+  python-cache-permisos:
+    image: python:3.11-slim
+    user: root
+    command: ["chown", "-R", "10001:10001", "/data"]
+    volumes:
+      - python_cache:/data
 
   python-service:
     build:
@@ -27,6 +47,17 @@ services:
       - python_cache:/data
     ports:
       - "8000:8000"
+    depends_on:
+      python-cache-permisos:
+        condition: service_completed_successfully
+    healthcheck:
+      # Mismo chequeo que el HEALTHCHECK del Dockerfile: 503 = unhealthy.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=4)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+      start_interval: 2s
     restart: unless-stopped
 
   backend:
@@ -38,8 +69,10 @@ services:
     ports:
       - "3000:3000"
     depends_on:
-      - db
-      - python-service
+      db:
+        condition: service_healthy
+      python-service:
+        condition: service_healthy
     restart: unless-stopped
 
   frontend:

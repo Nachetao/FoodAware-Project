@@ -37,16 +37,39 @@ def test_metricas_evaluacion_invalidas(cambios):
 
 
 def test_salud_valida():
-    salud = RespuestaSalud(estado="ok", servicio="foodaware-ia",
+    salud = RespuestaSalud(estado="ok", servicio="python-service",
                            version="1.0.0",
                            verificado_en="2026-10-20T14:30:00Z",
                            dependencias={"openfoodfacts": "no_verificado"})
     assert salud.dependencias["openfoodfacts"] == "no_verificado"
+    assert salud.detalle is None
+
+
+def test_salud_con_degradado_y_detalle():
+    salud = RespuestaSalud(
+        estado="degradado", servicio="python-service", version="1.0.0",
+        verificado_en="2026-10-20T14:30:00Z",
+        dependencias={"cache": "ok", "indice": "degradado",
+                      "openfoodfacts": "degradado"},
+        detalle={
+            "cache": {"productos": 0},
+            "indice": {"cargado": True, "productos": 0},
+            "openfoodfacts": {"ultima_ingesta": "fallido",
+                              "ultima_ingesta_fin": "2026-10-20T14:00:00Z"},
+        },
+    )
+    assert salud.detalle.openfoodfacts.ultima_falla is None
+    with pytest.raises(ValidationError):
+        RespuestaSalud.model_validate({
+            **salud.model_dump(),
+            "detalle": {**salud.detalle.model_dump(),
+                        "indice": {"cargado": True, "productos": -1}},
+        })
 
 
 def test_salud_invalida():
     with pytest.raises(ValidationError):
-        RespuestaSalud(estado="ok", servicio="foodaware-ia", version="1",
+        RespuestaSalud(estado="ok", servicio="python-service", version="1",
                        verificado_en="2026-10-20T14:30:00Z",
                        dependencias={"openfoodfacts": "caido"})
 

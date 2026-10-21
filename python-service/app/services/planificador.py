@@ -87,5 +87,6 @@ class PlanificadorIngesta:
         if not es_nueva:
             logger.info("Ya hay una ingesta en curso; se omite el %s", motivo)
             return None
-        logger.info("Ingesta %s lanzada: %s", resumen.run_id, motivo)
+        logger.info("Ingesta %s lanzada: %s", resumen.run_id, motivo,
+                    extra={"run_id": str(resumen.run_id)})
         return await self._servicio.ejecutar(resumen, self._solicitud)

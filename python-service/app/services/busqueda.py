@@ -57,10 +57,16 @@ class ServicioBusqueda:
             vacia, evaluar_instantanea(self._conjunto, [], vacia, self._k)
         )
         self._candado = threading.Lock()
+        # False hasta la primera reconstrucción desde la caché.
+        self._cargado = False
 
     @property
     def instantanea(self) -> Instantanea:
         return self._publicado[0]
+
+    @property
+    def cargado(self) -> bool:
+        return self._cargado
 
     @property
     def evaluacion(self) -> ResultadoEvaluacion:
@@ -79,6 +85,7 @@ class ServicioBusqueda:
             evaluacion = evaluar_instantanea(self._conjunto, registros,
                                              nueva, self._k)
             self._publicado = (nueva, evaluacion)  # el reemplazo atómico
+            self._cargado = True
         promedio = evaluacion.promedio()
         logger.info(
             "Índice de búsqueda: %d productos, %d términos (%.0f ms); "

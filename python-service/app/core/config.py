@@ -5,6 +5,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Mismo límite que SolicitudIngesta.categorias en el contrato.
 MAX_CATEGORIAS = 20
+NIVELES_LOG = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
 
 
 class Settings(BaseSettings):
@@ -13,11 +14,12 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="IA_", extra="ignore")
 
     app_name: str = "Analista de Alimentos FoodAware"
-    service_name: str = "foodaware-ia"
     # Las siguientes van sin prefijo IA_: son los nombres de .env.example.
     simular_errores_habilitado: bool = Field(
         False, validation_alias="SIMULAR_ERRORES_HABILITADO"
     )
+    # Nivel mínimo de los logs JSON (ver app.core.logs).
+    log_level: str = Field("INFO", validation_alias="LOG_LEVEL")
     off_base_url: str = Field(
         "https://world.openfoodfacts.org", validation_alias="OFF_BASE_URL"
     )
@@ -60,6 +62,16 @@ class Settings(BaseSettings):
     ingesta_max_productos: int = Field(
         500, ge=1, le=500, validation_alias="INGESTA_MAX_PRODUCTOS"
     )
+
+    @field_validator("log_level")
+    @classmethod
+    def _nivel_log_valido(cls, valor: str) -> str:
+        nivel = valor.strip().upper()
+        if nivel not in NIVELES_LOG:
+            raise ValueError(
+                f"LOG_LEVEL debe ser uno de: {', '.join(NIVELES_LOG)}"
+            )
+        return nivel
 
     @field_validator("ingesta_categorias_texto")
     @classmethod
