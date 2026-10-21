@@ -83,10 +83,14 @@ def test_caida_a_mitad_de_la_ingesta(client, off_falso, repositorio, error,
     off_falso.paginas = [pagina(LECHE, GALLETAS), error]
     creada, final = ingestar(client)
     assert final.estado == "completado_con_errores"
+    # La página 2 falló también en el reintento: una página perdida.
     assert (final.recuperados, final.errores) == (2, 1)
+    assert off_falso.pausas == [60.0]
+    # Las dos fallas quedan registradas (la más reciente primero).
     errores = repositorio.listar_errores_fuente(creada.run_id)
-    assert [(e.tipo, e.run_id) for e in errores] == [(tipo, creada.run_id)]
-    assert "página 2" in errores[0].mensaje
+    assert [(e.tipo, e.run_id) for e in errores] == [(tipo, creada.run_id)] * 2
+    assert errores[0].mensaje.startswith("reintento, página 2:")
+    assert errores[1].mensaje.startswith("página 2:")
 
 
 def test_caida_en_la_primera_pagina_es_fallida(client, off_falso):

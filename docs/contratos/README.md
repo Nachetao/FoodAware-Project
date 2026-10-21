@@ -17,7 +17,9 @@ La fuente de verdad es el código (modelos Pydantic en `python-service/app/schem
 - **Límites:** el servicio se queda bajo los oficiales (15 lecturas y 10
   búsquedas por minuto por IP): como máximo 12 lecturas y 8 búsquedas por minuto.
   Reintenta hasta 3 veces con backoff exponencial y jitter solo ante errores de
-  red, timeouts, 429 y 5xx.
+  red, timeouts, 429 y 5xx, respetando `Retry-After` si viene. Las lecturas
+  parten con 1 s de espera; las búsquedas de la ingesta, con 2 s, porque
+  `/api/v2/search` devuelve 503 en ráfagas más largas.
 - **`/search` nunca consulta Open Food Facts en vivo:** busca en un índice en
   memoria construido desde la caché local, que se llena con `POST /ingest/runs`.
   Solo se indexan productos válidos (ver [Búsqueda](#búsqueda-score-bm25)).
@@ -125,7 +127,12 @@ categorías se procesa y se guarda una sola vez, y su repetición no gasta la
 cuota de la segunda categoría, pero sí se cuenta: suma a `recuperados` y, si es
 válido, a `validos` y `duplicados` (si es inválido, a `invalidos`). Por eso
 `recuperados` puede superar a `max_productos`, que limita los productos
-distintos. Si una categoría falla, se registra el error y sigue con las demás. Todas las búsquedas respetan el límite de 8 por
+distintos. Si una categoría falla (la fuente sigue fallando tras los reintentos),
+sigue con las demás y le reserva la cuota que no alcanzó a usar. Al final, tras
+una pausa de 60 s, una segunda ronda reintenta esas categorías desde la página
+que falló. `errores` cuenta solo las categorías que siguen fallando en esa
+ronda (páginas perdidas de verdad); cada falla, recuperada o no, queda en el
+registro de errores de la fuente. Todas las búsquedas respetan el límite de 8 por
 minuto. Al terminar:
 `recuperados` (descargados), `validos`, `invalidos` (no cumplen las reglas de
 validez de `calidad`; no se guardan), `duplicados` (válidos que ya estaban con el mismo

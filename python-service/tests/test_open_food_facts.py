@@ -181,6 +181,29 @@ async def test_buscar_por_pais(cliente, off, lecturas, busquedas):
     assert (lecturas.turnos, busquedas.turnos) == (0, 1)
 
 
+async def test_busqueda_reintenta_con_mas_espera_que_la_lectura(
+    cliente, off, esperas, caplog
+):
+    ruta = off.get("/api/v2/search").respond(503)
+    with caplog.at_level(logging.WARNING):
+        with pytest.raises(FuenteNoDisponible):
+            await cliente.buscar_por_pais("chile", ["en:dairies"])
+    assert ruta.call_count == 4
+    # Base 2 s (lectura: 1 s) más jitter de 0.5 · base.
+    assert esperas == [3.0, 5.0, 9.0]
+    # El log dice de qué categoría era la búsqueda.
+    assert "búsqueda chile en:dairies página 1" in caplog.text
+
+
+async def test_busqueda_respeta_retry_after(cliente, off, esperas):
+    off.get("/api/v2/search").mock(side_effect=[
+        httpx.Response(503, headers={"Retry-After": "20"}),
+        httpx.Response(200, json={"products": []}),
+    ])
+    await cliente.buscar_por_pais("chile")
+    assert esperas == [20.0]
+
+
 async def test_buscar_sin_categorias_no_envia_filtro(cliente, off):
     ruta = off.get("/api/v2/search").respond(200, json={"products": []})
     await cliente.buscar_por_pais("chile")

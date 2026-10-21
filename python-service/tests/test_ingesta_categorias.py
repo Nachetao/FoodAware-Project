@@ -190,9 +190,80 @@ def test_si_falla_una_categoria_sigue_con_las_demas(client, off_falso,
     final = ingestar(client, categorias=[GALLETAS, LACTEOS],
                      max_productos=4)
     assert final.estado == "completado_con_errores"
-    assert (final.recuperados, final.errores) == (4, 1)
-    error, = repositorio.listar_errores_fuente(final.run_id)
-    assert f"categoría {GALLETAS}, página 1" in error.mensaje
+    # La cuota de galletas (2) quedó reservada para su reintento, que
+    # también falló: lácteos trae solo su parte.
+    assert (final.recuperados, final.errores) == (2, 1)
+    reintento, primera = repositorio.listar_errores_fuente(final.run_id)
+    assert primera.mensaje.startswith(f"categoría {GALLETAS}, página 1:")
+    assert reintento.mensaje.startswith(
+        f"reintento, categoría {GALLETAS}, página 1:")
+
+
+# --- Reintento de categorías que fallaron ----------------------------------
+
+
+def test_categoria_que_falla_se_recupera_en_el_reintento(
+    client, off_falso, repositorio
+):
+    off_falso.paginas_por_categoria = {
+        # Página 1 de galletas: 503 la primera vez, bien la segunda.
+        GALLETAS: [[FuenteNoDisponible("HTTP 503"),
+                    {"products": productos(1, 2, GALLETAS)}]],
+        LACTEOS: paginas(productos(11, 5, LACTEOS)),
+    }
+    final = ingestar(client, categorias=[GALLETAS, LACTEOS],
+                     max_productos=4)
+
+    # Se recuperó: no es un error del resumen y la ejecución termina bien.
+    assert final.estado == "completado"
+    assert (final.recuperados, final.validos, final.errores) == (4, 4, 0)
+    # Pero la falla queda registrada.
+    falla, = repositorio.listar_errores_fuente(final.run_id)
+    assert falla.mensaje.startswith(f"categoría {GALLETAS}, página 1:")
+    # Pausa antes del reintento y orden de las búsquedas.
+    assert off_falso.pausas == [60.0]
+    assert busquedas(off_falso) == [
+        (GALLETAS, 1, 2), (LACTEOS, 1, 2), (GALLETAS, 1, 2),
+    ]
+    # La cuota reservada mantuvo el corpus parejo.
+    por_categoria = calcular_estadisticas(
+        repositorio.listar_productos_con_payload(), [GALLETAS, LACTEOS]
+    ).por_categoria
+    assert por_categoria == {GALLETAS: 2, LACTEOS: 2}
+
+
+def test_reintento_sigue_desde_la_pagina_que_fallo(client, off_falso):
+    off_falso.paginas_por_categoria = {
+        GALLETAS: [
+            {"products": productos(1, 2, GALLETAS)},
+            [FuenteNoDisponible("HTTP 503"),
+             {"products": productos(3, 2, GALLETAS)}],
+        ],
+        LACTEOS: paginas(productos(11, 5, LACTEOS)),
+    }
+    final = ingestar(client, categorias=[GALLETAS, LACTEOS],
+                     max_productos=6)
+    assert (final.recuperados, final.errores) == (6, 0)
+    # Galletas: cuota 3, trae 2 y falla en la página 2 (1 reservado).
+    # Lácteos: cuota 3. Reintento: galletas sigue en la página 2 con el
+    # mismo tamaño de página, así no se salta ni repite productos.
+    assert busquedas(off_falso) == [
+        (GALLETAS, 1, 2), (GALLETAS, 2, 2),
+        (LACTEOS, 1, 2), (LACTEOS, 2, 2),
+        (GALLETAS, 2, 2),
+    ]
+
+
+def test_sin_fallas_no_hay_pausa_ni_reintento(client, off_falso):
+    off_falso.paginas_por_categoria = {
+        GALLETAS: paginas(productos(1, 2, GALLETAS)),
+        LACTEOS: paginas(productos(11, 2, LACTEOS)),
+    }
+    final = ingestar(client, categorias=[GALLETAS, LACTEOS],
+                     max_productos=4)
+    assert final.estado == "completado"
+    assert off_falso.pausas == []
+    assert len(busquedas(off_falso)) == 2
 
 
 def test_sin_categorias_hace_una_sola_busqueda_por_pais(client, off_falso):
