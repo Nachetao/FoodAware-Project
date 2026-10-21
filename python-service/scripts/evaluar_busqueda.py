@@ -5,10 +5,16 @@ el servicio, corre el conjunto de evaluación (app/evaluacion/consultas.json)
 y muestra una tabla por consulta (tipo, relevantes en el corpus, P@K, R@K,
 tiempo) y los promedios macro por tipo y globales.
 
+Si hay una línea base comparable (app/evaluacion/linea_base.json, mismo K y
+misma versión del conjunto), el reporte agrega la comparación antes/después
+por consulta y por grupo.
+
 Uso, desde python-service/:
     python scripts/evaluar_busqueda.py
     python scripts/evaluar_busqueda.py --k 10
     python scripts/evaluar_busqueda.py --markdown reporte_evaluacion.md
+    python scripts/evaluar_busqueda.py --guardar-linea-base ruta.json \\
+        --descripcion "Versión 1, sin sinónimos"
 
 Con Docker Compose, sobre la caché del volumen:
     docker compose exec python-service python scripts/evaluar_busqueda.py
@@ -17,7 +23,7 @@ import argparse
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 RAIZ_SERVICIO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAIZ_SERVICIO))
@@ -28,6 +34,7 @@ from app.evaluacion.conjunto import (  # noqa: E402
     RUTA_CONSULTAS,
     cargar_conjunto,
 )
+from app.evaluacion import linea_base as lb  # noqa: E402
 from app.evaluacion.evaluador import (  # noqa: E402
     K_POR_DEFECTO,
     ResultadoEvaluacion,
@@ -71,6 +78,12 @@ def leer_argumentos(argv=None) -> argparse.Namespace:
                         help="Conjunto de evaluación en JSON.")
     parser.add_argument("--markdown", type=Path, default=None,
                         help="Además, guarda el reporte en este archivo.")
+    parser.add_argument("--linea-base", type=Path, default=lb.RUTA_LINEA_BASE,
+                        help="Línea base con la que comparar, si existe.")
+    parser.add_argument("--guardar-linea-base", type=Path, default=None,
+                        help="Guarda este resultado como línea base.")
+    parser.add_argument("--descripcion", default="",
+                        help="Descripción de la línea base que se guarda.")
     args = parser.parse_args(argv)
     if not 1 <= args.k <= 50:
         parser.error("--k debe estar entre 1 y 50")
@@ -81,7 +94,63 @@ def _numero(valor) -> str:
     return "—" if valor is None else f"{valor:.2f}"
 
 
-def reporte(resultado: ResultadoEvaluacion, fecha: datetime) -> str:
+def _cambio(antes, ahora) -> str:
+    if antes is None or ahora is None:
+        return "—"
+    delta = ahora - antes
+    return "=" if abs(delta) < 0.005 else f"{delta:+.2f}"
+
+
+def comparacion(resultado: ResultadoEvaluacion,
+                base: Optional[lb.LineaBase]) -> List[str]:
+    """Sección antes/después contra la línea base, si es comparable."""
+    if base is None:
+        return []
+    k = resultado.k
+    lineas = ["", "## Comparación con la línea base", "",
+              f"Línea base: {base.descripcion} ({base.fecha}, "
+              f"{base.total_productos} productos)."]
+    motivo = base.motivo_no_comparable(resultado)
+    if motivo:
+        return lineas + ["", f"No es comparable: {motivo}."]
+    lineas += [
+        "",
+        f"| Consulta | Relevantes | P@{k} antes | P@{k} ahora | Cambio | "
+        f"R@{k} antes | R@{k} ahora | Cambio |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    for r in resultado.por_consulta:
+        antes = base.consultas.get(r.consulta.id)
+        p_antes = antes.precision if antes else None
+        r_antes = antes.recall if antes else None
+        lineas.append(
+            f"| {r.consulta.consulta} | {r.relevantes} | "
+            f"{_numero(p_antes)} | {_numero(r.precision)} | "
+            f"{_cambio(p_antes, r.precision)} | {_numero(r_antes)} | "
+            f"{_numero(r.recall)} | {_cambio(r_antes, r.recall)} |"
+        )
+    lineas += [
+        "",
+        f"| Grupo | P@{k} antes | P@{k} ahora | Cambio | R@{k} antes | "
+        f"R@{k} ahora | Cambio |",
+        "|---|---:|---:|---:|---:|---:|---:|",
+    ]
+    nombres = {**TIPOS, "global": "**Global**"}
+    for grupo in lb.GRUPOS:
+        antes = base.grupos[grupo]
+        ahora = resultado.promedio(None if grupo == "global" else grupo)
+        lineas.append(
+            f"| {nombres[grupo]} | {antes.precision:.2f} | "
+            f"{ahora.precision:.2f} | "
+            f"{_cambio(antes.precision, ahora.precision)} | "
+            f"{antes.recall:.2f} | {ahora.recall:.2f} | "
+            f"{_cambio(antes.recall, ahora.recall)} |"
+        )
+    return lineas
+
+
+def reporte(resultado: ResultadoEvaluacion, fecha: datetime,
+            base: Optional[lb.LineaBase] = None) -> str:
     k = resultado.k
     lineas: List[str] = [
         "# Evaluación de la búsqueda (BM25)",
@@ -120,6 +189,7 @@ def reporte(resultado: ResultadoEvaluacion, fecha: datetime) -> str:
                ""]
     lineas += ([f"- {r.consulta.consulta} ({r.consulta.id})"
                 for r in resultado.excluidas] or ["- Ninguna."])
+    lineas += comparacion(resultado, base)
     lineas += ["", LECTURA.format(k=k)]
     return "\n".join(lineas)
 
@@ -136,12 +206,20 @@ def main(argv=None) -> int:
         cargar_conjunto(args.consultas), registros,
         Instantanea.construir(registros), args.k,
     )
-    texto = reporte(resultado, datetime.now(timezone.utc))
+    fecha = datetime.now(timezone.utc)
+    base = (lb.cargar(args.linea_base)
+            if args.linea_base and args.linea_base.exists() else None)
+    texto = reporte(resultado, fecha, base)
     print(texto)
     if args.markdown is not None:
         args.markdown.parent.mkdir(parents=True, exist_ok=True)
         args.markdown.write_text(texto, encoding="utf-8")
         print(f"\nReporte guardado en {args.markdown}")
+    if args.guardar_linea_base is not None:
+        lb.guardar(args.guardar_linea_base, resultado,
+                   args.descripcion or "Sin descripción",
+                   f"{fecha:%Y-%m-%d %H:%M} UTC")
+        print(f"\nLínea base guardada en {args.guardar_linea_base}")
     return 0
 
 

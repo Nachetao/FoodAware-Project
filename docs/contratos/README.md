@@ -88,9 +88,15 @@ terminada fue `completado` o `completado_con_errores`, y `"cache"` si fue
 ### Búsqueda (score BM25)
 
 - **Tokenización** (la misma para productos y consultas): minúsculas, sin
-  tildes, singular básico y sin stopwords. "Galletas de AVENA" y "galleta avena"
-  dan los mismos términos; una consulta solo con stopwords ("de la") no
-  devuelve resultados.
+  tildes, singular básico, sin stopwords y con **sinónimos de vocabulario**
+  llevados a una forma canónica: variantes regionales (soja → soya, cacahuete →
+  maní, yoghurt → yogurt, galletita → galleta, fresa → frutilla, patata → papa)
+  y el inglés que mezcla Open Food Facts, cuyas categorías vienen en inglés
+  (almond → almendra, milk → leche, biscuits → galleta…). "Galletas de AVENA" y
+  "galleta avena" dan los mismos términos, igual que "Bebida de Soja" y
+  "bebida de soya"; una consulta solo con stopwords ("de la") no devuelve
+  resultados. Los sinónimos son solo equivalencias de palabras encontradas en
+  el corpus, no reglas pensadas para alguna consulta.
 - **Índice:** un índice invertido por campo (término → productos y cuántas
   veces aparece, más el largo de cada producto y el largo promedio). Se arma en
   memoria al iniciar el servicio y se reconstruye al terminar cada ingesta; las
@@ -300,6 +306,26 @@ de cada búsqueda.
 reporte.md]` desde `python-service/` (o con `docker compose exec python-service
 ...`). Muestra una tabla por consulta (tipo, relevantes, P@K, R@K, tiempo) y los
 promedios por tipo y globales.
+
+**Línea base:** `python-service/app/evaluacion/linea_base.json` guarda el
+resultado de la versión 1 del conjunto sobre el corpus real (347 productos), con
+BM25 **sin sinónimos**. El reporte compara cada evaluación con ella, consulta
+por consulta y por grupo, si usa el mismo K y la misma versión del conjunto
+(`--guardar-linea-base` guarda una nueva). Con los sinónimos:
+
+| Grupo | P@5 antes | P@5 ahora | R@5 antes | R@5 ahora |
+|---|---:|---:|---:|---:|
+| Producto | 0.62 | 0.72 | 0.59 | 0.66 |
+| Restricción | 0.25 | 0.20 | 0.23 | 0.22 |
+| Global | 0.47 | 0.51 | 0.44 | 0.48 |
+
+Mejoran las consultas cuyo vocabulario no coincidía con el de los productos
+("bebida de soya" frente a "Soja …": P@5 de 0.20 a 1.00; "yogurt natural",
+"leche de almendras"). Y empeora "bebida vegetal sin soya" (0.40 a 0.00): ahora
+"soya" también encuentra las bebidas de soja, que son justo las que hay que
+excluir. Mejorar el emparejamiento léxico ayuda a las consultas de producto y
+perjudica a las de restricción, lo que confirma que la negación no se resuelve
+con texto.
 
 **Cómo interpretarla:** es esperable que las consultas con restricción tengan
 menor precisión. BM25 trata "sin" como una palabra más y premia los productos

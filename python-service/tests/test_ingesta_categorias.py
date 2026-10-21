@@ -391,9 +391,9 @@ def test_estadisticas_del_corpus():
     assert resumen.categorias_frecuentes[GALLETAS] == 2
     assert resumen.categorias_frecuentes["en:snacks"] == 1
     # galleta, avena, campo, austral, harina, leche, pan, amasado, agua,
-    # sal y, de las categorías, snacks, biscuits y dairie (el singular
-    # básico es para español; con el inglés no siempre acierta).
-    assert resumen.terminos_distintos == 13
+    # sal y, de las categorías, snack y lacteo: "biscuits" queda como
+    # galleta por los sinónimos del tokenizador.
+    assert resumen.terminos_distintos == 12
     assert resumen.largo_promedio["nombre"] == 2.0
     assert resumen.largo_promedio_total == pytest.approx(
         sum(resumen.largo_promedio.values())

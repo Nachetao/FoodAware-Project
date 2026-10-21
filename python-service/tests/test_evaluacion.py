@@ -1,6 +1,7 @@
 """Evaluación de la búsqueda: métricas, conjunto, evaluador y script."""
 import importlib.util
 import itertools
+import json
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -8,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from app.busqueda.buscador import Instantanea
+from app.evaluacion import linea_base
 from app.evaluacion.conjunto import (
     Regla,
     cargar_conjunto,
@@ -311,6 +313,70 @@ def test_script_k_configurable(cache_con_corpus, capsys):
     assert script.main(["--db", cache_con_corpus, "--k", "1"]) == 0
     salida = capsys.readouterr().out
     assert "- K = 1" in salida and "| P@1 | R@1 |" in salida
+
+
+def test_linea_base_guardar_cargar_y_comparar(tmp_path):
+    resultado = evaluar_instantanea(CONJUNTO, CORPUS,
+                                    Instantanea.construir(CORPUS))
+    ruta = tmp_path / "base.json"
+    linea_base.guardar(ruta, resultado, "Prueba", "2026-10-21 12:00 UTC")
+    base = linea_base.cargar(ruta)
+    assert (base.k, base.version_conjunto, base.total_productos) == (5, 3, 4)
+    assert base.consultas["sin-gluten"].aciertos == 2
+    assert base.consultas["quinoa"].recall is None
+    assert base.grupos["global"].precision == pytest.approx(0.3)
+    assert base.motivo_no_comparable(resultado) is None
+    otro_k = evaluar_instantanea(CONJUNTO, CORPUS,
+                                 Instantanea.construir(CORPUS), k=3)
+    assert "K = 5" in base.motivo_no_comparable(otro_k)
+
+
+def test_linea_base_versionada_del_repositorio():
+    # Resultado del Bloque 5, Parte 2 sobre la caché real, sin sinónimos.
+    base = linea_base.cargar()
+    conjunto = cargar_conjunto()
+    assert (base.k, base.version_conjunto) == (5, conjunto.version)
+    assert set(base.consultas) == {c.id for c in conjunto.consultas}
+    assert round(base.grupos["global"].precision, 2) == 0.47
+
+
+def test_script_compara_con_la_linea_base(cache_con_corpus, tmp_path,
+                                          capsys):
+    consultas = tmp_path / "consultas.json"
+    consultas.write_text(json.dumps({"version": 3, "consultas": [
+        {"id": "avena", "consulta": "galletas de avena", "tipo": "producto",
+         "relevancia": {"categorias_alguna": ["en:biscuits"],
+                        "nombre_alguno": ["avena"]}},
+        {"id": "sin-gluten", "consulta": "galletas sin gluten",
+         "tipo": "restriccion",
+         "relevancia": {"categorias_alguna": ["en:biscuits"],
+                        "sin_alergenos": ["gluten"]}},
+    ]}), encoding="utf-8")
+    base = tmp_path / "base.json"
+    argumentos = ["--db", cache_con_corpus, "--consultas", str(consultas)]
+    assert script.main([*argumentos, "--guardar-linea-base", str(base),
+                        "--descripcion", "Antes"]) == 0
+    capsys.readouterr()
+
+    assert script.main([*argumentos, "--linea-base", str(base)]) == 0
+    salida = capsys.readouterr().out
+    assert "## Comparación con la línea base" in salida
+    assert "Línea base: Antes (" in salida
+    # Mismo índice: sin cambios.
+    assert "| galletas de avena | 1 | 0.20 | 0.20 | = | 1.00 | 1.00 | = |" \
+        in salida
+    assert "| **Global** | 0.30 | 0.30 | = | 1.00 | 1.00 | = |" in salida
+
+    assert script.main([*argumentos, "--linea-base", str(base),
+                        "--k", "3"]) == 0
+    assert "No es comparable: usa K = 5" in capsys.readouterr().out
+
+
+def test_cambio_entre_linea_base_y_ahora():
+    assert script._cambio(0.2, 0.6) == "+0.40"
+    assert script._cambio(0.6, 0.2) == "-0.40"
+    assert script._cambio(0.5, 0.5) == "="
+    assert script._cambio(None, 0.5) == "—"
 
 
 def test_script_errores(tmp_path, capsys):
