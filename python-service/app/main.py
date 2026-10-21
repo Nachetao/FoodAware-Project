@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from app.clients.open_food_facts import ClienteOpenFoodFacts
 from app.core.config import settings
 from app.core.errores import registrar_manejadores_error
+from app.core.logs import configurar_logs
 from app.core.request_id import RequestIdMiddleware
 from app.procesamiento import VERSION_PROCESAMIENTO
 from app.repositories.cache import RepositorioCache
@@ -22,6 +23,8 @@ from app.services.metricas import ServicioMetricas
 from app.services.planificador import PlanificadorIngesta
 from app.services.reprocesamiento import reprocesar_cache
 
+# Al importar la app, después de que uvicorn configuró sus loggers.
+configurar_logs(settings.log_level)
 logger = logging.getLogger(__name__)
 
 

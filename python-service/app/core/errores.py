@@ -10,7 +10,11 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.core.request_id import HEADER_REQUEST_ID
+from app.core.request_id import (
+    HEADER_REQUEST_ID,
+    HEADER_TIEMPO_RESPUESTA,
+    tiempo_respuesta,
+)
 from app.schemas.enums import CodigoError
 from app.schemas.sistema import RespuestaError
 
@@ -82,6 +86,9 @@ def respuesta_error(
     )
     # Se repiten aquí porque los 500 no pasan por RequestIdMiddleware.
     headers = {**(headers or {}), HEADER_REQUEST_ID: request_id}
+    inicio = getattr(request.state, "inicio", None)
+    if inicio is not None:
+        headers[HEADER_TIEMPO_RESPUESTA] = tiempo_respuesta(inicio)
     return JSONResponse(
         cuerpo.model_dump(mode="json"),
         status_code=status_code,
@@ -91,7 +98,9 @@ def respuesta_error(
 
 async def _manejar_error_api(request: Request, exc: ErrorAPI):
     if exc.status_code >= 500:
-        logger.warning("%s: %s", exc.codigo.value, exc.mensaje)
+        logger.warning("%s: %s", exc.codigo.value, exc.mensaje,
+                       extra={"codigo": exc.codigo.value,
+                              "codigo_estado": exc.status_code})
     return respuesta_error(request, exc.status_code, exc.codigo, exc.mensaje)
 
 
@@ -126,7 +135,9 @@ async def _manejar_http(request: Request, exc: StarletteHTTPException):
 
 
 async def _manejar_inesperado(request: Request, exc: Exception):
-    logger.exception("Error no controlado", exc_info=exc)
+    logger.exception("Error no controlado", exc_info=exc,
+                     extra={"codigo": CodigoError.INTERNAL_ERROR.value,
+                            "codigo_estado": 500})
     return respuesta_error(
         request, 500, CodigoError.INTERNAL_ERROR, "Error interno del servicio"
     )

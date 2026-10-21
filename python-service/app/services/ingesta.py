@@ -12,6 +12,7 @@ from typing import Dict, List, Optional, Tuple
 
 from app.clients.open_food_facts import ClienteOpenFoodFacts
 from app.core.errores import FuenteNoDisponible, FuenteTimeout
+from app.core.logs import contexto_ejecucion
 from app.procesamiento.calidad import INVALIDANTES
 from app.repositories.cache import (
     DetalleIngesta,
@@ -191,11 +192,21 @@ class ServicioIngesta:
         )
         self._activa = resumen
         await asyncio.to_thread(self._repositorio.guardar_ejecucion, resumen)
-        logger.info("Ingesta %s iniciada: %s", resumen.run_id,
-                    solicitud.model_dump())
+        # Se registra en el contexto de quien la pidió (la petición POST o
+        # el planificador): este log une su request_id con el run_id.
+        logger.info("Ingesta %s iniciada", resumen.run_id,
+                    extra={"run_id": str(resumen.run_id),
+                           "solicitud": solicitud.model_dump()})
         return resumen, True
 
     async def ejecutar(
+        self, resumen: ResumenIngesta, solicitud: SolicitudIngesta
+    ) -> ResumenIngesta:
+        """Corre la ingesta con su run_id como request_id de los logs."""
+        with contexto_ejecucion(resumen.run_id):
+            return await self._ejecutar(resumen, solicitud)
+
+    async def _ejecutar(
         self, resumen: ResumenIngesta, solicitud: SolicitudIngesta
     ) -> ResumenIngesta:
         """Recorre las páginas de OFF y actualiza el resumen al terminar.
@@ -262,7 +273,8 @@ class ServicioIngesta:
             finally:
                 self._activa = None
             logger.info("Ingesta %s terminada: %s", resumen.run_id,
-                        final.model_dump(mode="json"))
+                        final.estado,
+                        extra={"resumen": final.model_dump(mode="json")})
         if self._al_terminar is not None:
             try:
                 await self._al_terminar()
