@@ -8,6 +8,7 @@ import { UsersModule } from "./users/users.module";
 import { IaModule } from "./ia/ia.module";
 import { FoodsModule } from "./foods/foods.module";
 import { AuthModule } from "./auth/auth.module";
+import { ProductsModule } from "./products/products.module";
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { AuthModule } from "./auth/auth.module";
     IaModule,
     FoodsModule,
     AuthModule,
+    ProductsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
