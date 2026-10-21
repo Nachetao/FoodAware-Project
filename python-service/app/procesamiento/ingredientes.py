@@ -65,7 +65,7 @@ _INICIOS_DECLARACION = (
     "producida", "envasado en", "envasada en", "procesado en",
     "sin", "libre de", "libres de", "exento de", "exenta de",
     "no contiene", "alergeno", "alergenos", "informacion para alergicos",
-    "advertencia", "apto para",
+    "advertencia", "apto para", "este producto",
     "may contain", "may also contain", "contains", "traces",
     "manufactured", "produced", "made in", "made on", "packed in",
     "free from", "gluten free",
@@ -113,14 +113,16 @@ def limpiar_texto_ingredientes(texto: Optional[str]) -> str:
 
     Conserva mayúsculas y tildes; separa las oraciones con ". ".
     """
-    return ". ".join(_oraciones(texto or ""))
+    return ". ".join(oracion for oracion, _ in _oraciones(texto or ""))
 
 
 def analizar_ingredientes(texto: Optional[str]) -> ListaIngredientes:
     ingredientes: List[Ingrediente] = []
     declaraciones: List[str] = []
-    for oracion in _oraciones(texto or ""):
-        if _es_declaracion(oracion):
+    for oracion, es_nota in _oraciones(texto or ""):
+        # Una nota al pie ("*Contiene leche") no es un ingrediente, pero se
+        # guarda para que la detección de alérgenos también la revise.
+        if es_nota or _es_declaracion(oracion):
             declaraciones.append(_limpiar_fragmento(oracion))
             continue
         etiqueta = _ETIQUETA.match(oracion)
@@ -141,18 +143,18 @@ def separar_ingredientes(texto: Optional[str]) -> List[str]:
     return [i.texto for i in analizar_ingredientes(texto).ingredientes]
 
 
-def _oraciones(texto: str) -> Iterator[str]:
+def _oraciones(texto: str) -> Iterator[Tuple[str, bool]]:
+    """Oraciones limpias, cada una con si es una nota al pie."""
     texto = " ".join(texto.split())
     texto = _MENOS_DE.sub(" ", texto)
     texto = _PORCENTAJE_ENTRE_PARENTESIS.sub(" ", texto)
     texto = _PORCENTAJE.sub(" ", texto).replace("%", " ")
     for oracion in _dividir(texto, _es_fin_de_oracion):
-        if _es_nota_al_pie(oracion):
-            continue
+        es_nota = _es_nota_al_pie(oracion)
         oracion = _PREFIJO.sub("", _MARCAS.sub("", oracion))
         oracion = _limpiar_puntuacion(oracion)
         if oracion:
-            yield oracion
+            yield oracion, es_nota
 
 
 def _analizar_lista(

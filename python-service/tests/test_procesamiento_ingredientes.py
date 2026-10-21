@@ -130,10 +130,17 @@ def test_dos_puntos_en_medio_se_conserva():
     ) == ["harina", "emulsionante: lecitina de soja", "sal"]
 
 
-def test_nota_al_pie_de_organicos_se_descarta():
-    assert separar_ingredientes(
+def test_nota_al_pie_sale_de_la_lista_pero_se_conserva():
+    lista = analizar_ingredientes(
         "Azúcar*, cacao*, leche en polvo*. *Ingredientes de origen orgánico."
-    ) == ["azúcar", "cacao", "leche en polvo"]
+        " *Contiene leche."
+    )
+    assert [i.texto for i in lista.ingredientes] == [
+        "azúcar", "cacao", "leche en polvo"
+    ]
+    assert lista.declaraciones == (
+        "ingredientes de origen orgánico", "contiene leche"
+    )
 
 
 @pytest.mark.parametrize(

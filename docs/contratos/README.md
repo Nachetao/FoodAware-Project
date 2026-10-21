@@ -115,6 +115,14 @@ Sin tildes: `lacteos`, `gluten`, `huevo`, `mani`, `frutos_secos`, `soya`, `pesca
 
 Etiquetas de dieta (`DietLabel`): `vegano`, `vegetariano`, `sin_gluten`, `sin_lactosa`.
 
+`alergenos` y `trazas` son la unión de las etiquetas de Open Food Facts y de lo
+detectado en el texto de ingredientes (sinónimos en español e inglés, con
+excepciones como "leche de coco" o "manteca de cacao" y negaciones como "sin
+gluten"). Lo que sigue a "puede contener", "trazas de" o "elaborado en una línea
+que procesa" va a `trazas`. Ante la duda se marca el alérgeno. Lo detectado
+solo en el texto queda en `calidad.problemas` como
+`alergeno_detectado_en_texto:<código>` o `traza_detectada_en_texto:<código>`.
+
 `/analizar` todavía devuelve `"lácteos"` y `"maní"` con tilde; para cruzarlo con
 estos códigos, NestJS debe normalizarlos.
 
