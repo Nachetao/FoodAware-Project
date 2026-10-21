@@ -3,7 +3,7 @@ import asyncio
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Optional, Tuple
+from typing import Any, Awaitable, Callable, Optional, Tuple
 
 from app.clients.open_food_facts import ClienteOpenFoodFacts
 from app.core.errores import FuenteNoDisponible, FuenteTimeout
@@ -24,11 +24,15 @@ class ServicioIngesta:
         cliente: Optional[ClienteOpenFoodFacts],
         base_url: str,
         tamano_pagina: int = TAMANO_PAGINA,
+        al_terminar: Optional[Callable[[], Awaitable[Any]]] = None,
     ) -> None:
         self._repositorio = repositorio
         self._cliente = cliente
         self._base_url = base_url
         self._tamano_pagina = tamano_pagina
+        # Se llama al terminar cada ejecución (p. ej. reconstruir el índice
+        # de búsqueda con los productos nuevos).
+        self._al_terminar = al_terminar
         self._activa: Optional[ResumenIngesta] = None
 
     async def iniciar(
@@ -100,6 +104,14 @@ class ServicioIngesta:
                 self._activa = None
             logger.info("Ingesta %s terminada: %s", resumen.run_id,
                         final.model_dump(mode="json"))
+        if self._al_terminar is not None:
+            try:
+                await self._al_terminar()
+            except Exception:
+                # El resumen ya quedó guardado; el índice anterior sigue
+                # sirviendo búsquedas.
+                logger.exception("Falló el aviso de fin de la ingesta %s",
+                                 resumen.run_id)
         return final
 
     async def _procesar(self, payload, run_id: uuid.UUID, conteo) -> None:

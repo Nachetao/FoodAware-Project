@@ -3,7 +3,7 @@ import contextlib
 import logging
 from contextlib import asynccontextmanager
 from datetime import timedelta
-from typing import Optional, Tuple
+from typing import NamedTuple, Optional
 
 from fastapi import FastAPI
 
@@ -14,6 +14,7 @@ from app.core.request_id import RequestIdMiddleware
 from app.procesamiento import VERSION_PROCESAMIENTO
 from app.repositories.cache import RepositorioCache
 from app.routers import analisis, catalogo, ingesta, metricas, sistema
+from app.services.busqueda import ServicioBusqueda
 from app.services.catalogo import ServicioCatalogo
 from app.services.ingesta import ServicioIngesta
 from app.services.planificador import PlanificadorIngesta
@@ -22,10 +23,17 @@ from app.services.reprocesamiento import reprocesar_cache
 logger = logging.getLogger(__name__)
 
 
+class Servicios(NamedTuple):
+    catalogo: ServicioCatalogo
+    ingesta: ServicioIngesta
+    busqueda: ServicioBusqueda
+
+
 def construir_servicios(
     repositorio: RepositorioCache,
     cliente: Optional[ClienteOpenFoodFacts],
-) -> Tuple[ServicioCatalogo, ServicioIngesta]:
+) -> Servicios:
+    busqueda_ = ServicioBusqueda(repositorio)
     catalogo_ = ServicioCatalogo(
         repositorio,
         cliente,
@@ -35,8 +43,10 @@ def construir_servicios(
         espera_maxima=settings.limitador_espera_max_segundos,
         ttl=timedelta(hours=settings.cache_ttl_horas),
     )
-    ingesta_ = ServicioIngesta(repositorio, cliente, settings.off_base_url)
-    return catalogo_, ingesta_
+    # Al terminar cada ingesta, el índice se reconstruye con lo nuevo.
+    ingesta_ = ServicioIngesta(repositorio, cliente, settings.off_base_url,
+                               al_terminar=busqueda_.reconstruir)
+    return Servicios(catalogo_, ingesta_, busqueda_)
 
 
 @asynccontextmanager
@@ -65,9 +75,12 @@ async def ciclo_de_vida(app: FastAPI):
         logger.error("Open Food Facts deshabilitado: %s", exc)
 
     app.state.repositorio = repositorio
-    app.state.catalogo, app.state.ingesta = construir_servicios(
-        repositorio, cliente
-    )
+    servicios = construir_servicios(repositorio, cliente)
+    app.state.catalogo = servicios.catalogo
+    app.state.ingesta = servicios.ingesta
+    app.state.busqueda = servicios.busqueda
+    # El índice se arma después del reprocesamiento, con los datos al día.
+    await servicios.busqueda.reconstruir()
     tarea = None
     if cliente is not None:
         planificador = PlanificadorIngesta(

@@ -1,10 +1,12 @@
-"""Productos y búsqueda sobre la caché local de Open Food Facts."""
+"""Productos por código de barras sobre la caché local de Open Food Facts.
+
+La búsqueda por texto vive en app.services.busqueda.
+"""
 import asyncio
 import logging
-import time
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Callable, List, Optional, Sequence, Tuple
+from typing import Callable, Optional
 
 from app.clients.open_food_facts import ClienteOpenFoodFacts
 from app.core.errores import (
@@ -12,12 +14,10 @@ from app.core.errores import (
     FuenteTimeout,
     NoEncontrado,
 )
-from app.procesamiento.texto import tokenizar
 from app.repositories.cache import (
     ProductoCacheado,
     RepositorioCache,
 )
-from app.schemas.busqueda import RespuestaBusqueda, ResultadoBusqueda
 from app.schemas.producto import Producto
 from app.services.mapeo_off import ProductoInvalido, mapear_producto
 
@@ -102,48 +102,3 @@ class ServicioCatalogo:
             self._repositorio.obtener_producto, producto.codigo_barras
         )
         return guardado.producto
-
-    async def buscar(
-        self, consulta: str, limit: int, offset: int
-    ) -> RespuestaBusqueda:
-        """Nunca consulta OFF en vivo: busca solo en la caché local."""
-        inicio = time.perf_counter()
-        productos, ultima = await asyncio.gather(
-            asyncio.to_thread(self._repositorio.listar_productos),
-            asyncio.to_thread(self._repositorio.ultima_ejecucion_terminada),
-        )
-        validos = [p for p in productos if p.calidad.es_valido]
-        total, resultados = rankear(validos, consulta, limit, offset)
-        terminada_bien = ultima is not None and ultima.estado != "fallido"
-        return RespuestaBusqueda(
-            consulta=consulta,
-            total=total,
-            tiempo_ms=round((time.perf_counter() - inicio) * 1000, 3),
-            resultados=resultados,
-            estado_fuente="online" if terminada_bien else "cache",
-        )
-
-
-def rankear(
-    productos: Sequence[Producto], consulta: str, limit: int, offset: int
-) -> Tuple[int, List[ResultadoBusqueda]]:
-    """Ranking simple: cantidad de términos de la consulta presentes.
-
-    Se reemplazará por BM25 en el Bloque 4.
-    """
-    terminos = set(tokenizar(consulta))
-    puntuados = []
-    for producto in productos:
-        texto = " ".join(
-            [producto.nombre, producto.marca or "", *producto.ingredientes]
-        )
-        score = float(len(terminos & set(tokenizar(texto))))
-        if score > 0:
-            puntuados.append((score, producto))
-    puntuados.sort(key=lambda par: (-par[0], par[1].nombre))
-    pagina = puntuados[offset:offset + limit]
-    resultados = [
-        ResultadoBusqueda(producto=p, score=s, posicion=offset + i + 1)
-        for i, (s, p) in enumerate(pagina)
-    ]
-    return len(puntuados), resultados

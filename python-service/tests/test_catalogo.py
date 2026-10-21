@@ -134,7 +134,7 @@ def test_busqueda_ordena_y_pagina(client, catalogo_sembrado):
         "/search", params={"q": "pan integral"}
     ).json()["resultados"][0]
     assert primero["producto"]["codigo_barras"] == PAN
-    assert primero["score"] == 2
+    assert primero["score"] > 0
     datos = client.get(
         "/search", params={"q": "trigo", "limit": 1, "offset": 1}
     ).json()
@@ -142,13 +142,16 @@ def test_busqueda_ordena_y_pagina(client, catalogo_sembrado):
     assert [r["posicion"] for r in datos["resultados"]] == [2]
 
 
-def test_busqueda_excluye_productos_invalidos(client, repositorio):
+def test_busqueda_excluye_productos_invalidos(client, repositorio,
+                                              busqueda):
     producto = Producto.model_validate({
         **catalogo_json(LECHE),
         "calidad": {"es_valido": False, "problemas": ["sin_ingredientes"],
                     "completitud": 0.5},
     })
     repositorio.guardar_producto(producto, {})
+    busqueda.reconstruir_ahora()
+    assert busqueda.instantanea.indice.n_documentos == 0
     assert client.get("/search", params={"q": "leche"}).json()["total"] == 0
 
 
