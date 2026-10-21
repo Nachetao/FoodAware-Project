@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -9,9 +11,19 @@ class Settings(BaseSettings):
 
     app_name: str = "Analista de Alimentos FoodAware"
     service_name: str = "foodaware-ia"
-    # Sin prefijo IA_: es el nombre documentado en .env.example.
+    # Las siguientes van sin prefijo IA_: son los nombres de .env.example.
     simular_errores_habilitado: bool = Field(
         False, validation_alias="SIMULAR_ERRORES_HABILITADO"
+    )
+    off_base_url: str = Field(
+        "https://world.openfoodfacts.org", validation_alias="OFF_BASE_URL"
+    )
+    # Obligatorio para llamar a Open Food Facts; lo valida el cliente.
+    off_user_agent: Optional[str] = Field(
+        None, validation_alias="OFF_USER_AGENT"
+    )
+    off_timeout_segundos: float = Field(
+        10.0, gt=0, validation_alias="OFF_TIMEOUT_SEGUNDOS"
     )
 
 
