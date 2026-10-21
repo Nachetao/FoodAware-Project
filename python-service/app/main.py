@@ -11,11 +11,13 @@ from app.clients.open_food_facts import ClienteOpenFoodFacts
 from app.core.config import settings
 from app.core.errores import registrar_manejadores_error
 from app.core.request_id import RequestIdMiddleware
+from app.procesamiento import VERSION_PROCESAMIENTO
 from app.repositories.cache import RepositorioCache
 from app.routers import analisis, catalogo, ingesta, metricas, sistema
 from app.services.catalogo import ServicioCatalogo
 from app.services.ingesta import ServicioIngesta
 from app.services.planificador import PlanificadorIngesta
+from app.services.reprocesamiento import reprocesar_cache
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +49,15 @@ async def ciclo_de_vida(app: FastAPI):
     if interrumpidas:
         logger.warning("%d ingesta(s) interrumpida(s) marcadas como fallidas",
                        interrumpidas)
+    # Antes de atender peticiones: los productos procesados con reglas
+    # anteriores se rehacen desde el payload guardado, sin llamar a OFF.
+    reprocesado = await asyncio.to_thread(
+        reprocesar_cache, repositorio, settings.off_base_url
+    )
+    if reprocesado.reprocesados or reprocesado.errores:
+        logger.info("Caché reprocesada (versión %d): %d productos, %d "
+                    "errores", VERSION_PROCESAMIENTO,
+                    reprocesado.reprocesados, reprocesado.errores)
     try:
         cliente = ClienteOpenFoodFacts.desde_settings(settings)
     except ValueError as exc:

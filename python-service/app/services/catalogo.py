@@ -16,7 +16,6 @@ from app.procesamiento.texto import tokenizar
 from app.repositories.cache import (
     ProductoCacheado,
     RepositorioCache,
-    ResultadoUpsert,
 )
 from app.schemas.busqueda import RespuestaBusqueda, ResultadoBusqueda
 from app.schemas.producto import Producto
@@ -94,16 +93,15 @@ class ServicioCatalogo:
             raise NoEncontrado(
                 f"El producto {codigo_barras} no tiene datos utilizables"
             ) from None
-        resultado = await asyncio.to_thread(
+        await asyncio.to_thread(
             self._repositorio.guardar_producto, producto, payload
         )
-        if resultado is ResultadoUpsert.duplicado:
-            # Sin cambios: la caché conserva su procedencia original.
-            guardado = await asyncio.to_thread(
-                self._repositorio.obtener_producto, producto.codigo_barras
-            )
-            return guardado.producto
-        return producto
+        # Se relee: si no hubo cambios, la caché conserva su procedencia
+        # original, y así vienen marcados los posibles duplicados.
+        guardado = await asyncio.to_thread(
+            self._repositorio.obtener_producto, producto.codigo_barras
+        )
+        return guardado.producto
 
     async def buscar(
         self, consulta: str, limit: int, offset: int

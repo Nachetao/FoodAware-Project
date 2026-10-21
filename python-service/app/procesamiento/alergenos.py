@@ -13,6 +13,7 @@ from app.procesamiento.ingredientes import ListaIngredientes
 from app.procesamiento.sinonimos_alergenos import (
     EXCEPCIONES,
     FRASES_TRAZAS,
+    POSIBLES,
     SINONIMOS,
 )
 from app.procesamiento.texto import normalizar
@@ -36,6 +37,7 @@ _TERMINOS = {codigo: _patron(SINONIMOS[codigo]) for codigo in AllergenCode}
 _EXCEPCIONES = {
     codigo: _patron(EXCEPCIONES.get(codigo, ())) for codigo in AllergenCode
 }
+_POSIBLES = {codigo: _patron(frases) for codigo, frases in POSIBLES.items()}
 _TRAZAS = _patron(FRASES_TRAZAS)
 # Sobre texto normalizado: "libres" ya quedó como "libre".
 _NEGACION_PREVIA = re.compile(
@@ -49,6 +51,8 @@ _NEGACION_POSTERIOR = re.compile(r"^\sfree\b")
 class Deteccion:
     alergenos: Tuple[AllergenCode, ...] = ()
     trazas: Tuple[AllergenCode, ...] = ()
+    # Indicios sin confirmar (E322 sin origen); no van a alergenos.
+    posibles: Tuple[AllergenCode, ...] = ()
 
 
 def detectar_en_texto(texto: str) -> Deteccion:
@@ -73,7 +77,14 @@ def detectar_alergenos(lista: ListaIngredientes) -> Deteccion:
         deteccion = detectar_en_texto(texto)
         alergenos.update(deteccion.alergenos)
         trazas.update(deteccion.trazas)
-    return Deteccion(_ordenar(alergenos), _ordenar(trazas))
+    # Los indicios se revisan con el ingrediente completo, subingredientes
+    # incluidos, para ver si declara su origen: "lecitina de girasol (E322)".
+    posibles: Set[AllergenCode] = set()
+    textos = [i.texto for i in lista.ingredientes]
+    for texto in (*textos, *lista.declaraciones):
+        posibles.update(_posibles(normalizar(texto)))
+    return Deteccion(_ordenar(alergenos), _ordenar(trazas),
+                     _ordenar(posibles - alergenos))
 
 
 def alergenos_en_etiqueta(etiqueta: str) -> List[AllergenCode]:
@@ -101,6 +112,14 @@ def _coincidencias(plano: str) -> List[Tuple[AllergenCode, int]]:
             if not any(a <= inicio and fin <= b for a, b in descartados)
         )
     return encontradas
+
+
+def _posibles(plano: str) -> Set[AllergenCode]:
+    return {
+        codigo for codigo, patron in _POSIBLES.items()
+        if _tramos(patron, plano)
+        and not _tramos(_EXCEPCIONES[codigo], plano)
+    }
 
 
 def _tramos(patron: Optional[Pattern[str]], plano: str) -> List[Tramo]:

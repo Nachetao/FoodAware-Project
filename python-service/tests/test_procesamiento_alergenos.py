@@ -241,6 +241,29 @@ def test_texto_real_en_mayusculas_y_mezclado_con_ingles():
 
 
 @pytest.mark.parametrize(
+    "texto, alergenos_esperados, posibles",
+    [
+        # E322 sin origen: no se marca soya, pero queda como posible.
+        ("Azúcar, emulsionante (E322), sal", [], ["soya"]),
+        ("Azúcar, emulsionante (INS 322), sal", [], ["soya"]),
+        ("Azúcar, emulsionante: E-322", [], ["soya"]),
+        # Con origen declarado no es un indicio de soya.
+        ("Azúcar, lecitina de girasol (E322)", [], []),
+        ("Azúcar, emulsionante (lecitina de girasol, INS 322)", [], []),
+        # Si la soya ya se detectó, no hace falta el posible.
+        ("Azúcar, emulsionante (lecitina de soya, E322)", ["soya"], []),
+        ("Azúcar, lecitina (E322)", ["soya"], []),
+        ("Azúcar, sal", [], []),
+    ],
+)
+def test_e322_sin_origen_es_alergeno_posible(texto, alergenos_esperados,
+                                             posibles):
+    deteccion = detectar_alergenos(analizar_ingredientes(texto))
+    assert [a.value for a in deteccion.alergenos] == alergenos_esperados
+    assert [p.value for p in deteccion.posibles] == posibles
+
+
+@pytest.mark.parametrize(
     "etiqueta, esperado",
     [
         ("es:avellanas", ["frutos_secos"]),

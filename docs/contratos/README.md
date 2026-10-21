@@ -5,10 +5,10 @@ La fuente de verdad es el código (modelos Pydantic en `python-service/app/schem
 [`fastapi-openapi.json`](fastapi-openapi.json) se genera desde ahí.
 
 > **Productos, búsqueda e ingesta ya son reales** (Open Food Facts + caché local
-> SQLite). **Las métricas siguen siendo stubs** hasta el Bloque 5: devuelven datos
-> de ejemplo y responden con el header `X-Stub: true`. La limpieza profunda de
-> ingredientes (Bloque 3) y el ranking BM25 (Bloque 4) llegarán detrás de este
-> mismo contrato.
+> SQLite), con limpieza de ingredientes, detección de alérgenos y validación de
+> calidad. **Las métricas siguen siendo stubs** hasta el Bloque 5: devuelven datos
+> de ejemplo y responden con el header `X-Stub: true`. El ranking BM25 (Bloque 4)
+> llegará detrás de este mismo contrato.
 
 ### Cómo se obtienen los datos
 
@@ -76,8 +76,8 @@ terminada fue `completado` o `completado_con_errores`, y `"cache"` si fue
 **Ingesta:** `POST /ingest/runs` responde 202 con la ejecución `en_curso` y la
 procesa en segundo plano; el resultado se consulta en `GET /ingest/runs/latest`.
 Si ya hay una en curso, devuelve esa misma en lugar de lanzar otra. Al terminar:
-`recuperados` (descargados), `validos`, `invalidos` (sin nombre o sin
-ingredientes; no se guardan), `duplicados` (válidos que ya estaban con el mismo
+`recuperados` (descargados), `validos`, `invalidos` (no cumplen las reglas de
+validez de `calidad`; no se guardan), `duplicados` (válidos que ya estaban con el mismo
 contenido), `errores` (peticiones a la fuente que fallaron) y `estado`. Una
 ejecución interrumpida por un reinicio queda como `fallido`.
 
@@ -122,6 +122,32 @@ gluten"). Lo que sigue a "puede contener", "trazas de" o "elaborado en una líne
 que procesa" va a `trazas`. Ante la duda se marca el alérgeno. Lo detectado
 solo en el texto queda en `calidad.problemas` como
 `alergeno_detectado_en_texto:<código>` o `traza_detectada_en_texto:<código>`.
+
+## Calidad (`calidad`)
+
+`es_valido` es `false` si aparece alguno de estos problemas:
+
+| Problema | Regla |
+|---|---|
+| `sin_nombre` | La fuente no trae nombre (`nombre` queda como "Producto <código>"). |
+| `sin_ingredientes` | La fuente no trae texto de ingredientes. |
+| `ingredientes_vacios` | Hay texto, pero tras limpiarlo no queda ningún ingrediente. |
+| `codigo_barras_longitud_invalida` | No es EAN-8, UPC-A ni EAN-13 (8, 12 o 13 dígitos). |
+| `codigo_barras_digito_verificador_invalido` | El dígito verificador GS1 no coincide. |
+
+Los demás problemas solo informan: `sin_marca`, `sin_cantidad`, `sin_nutriscore`,
+`sin_imagen`, `alergenos_no_reconocidos`, `alergeno_detectado_en_texto:<código>`,
+`traza_detectada_en_texto:<código>`, `alergeno_posible:<código>` (indicio sin
+confirmar, como la lecitina E322 sin origen: no va en `alergenos`) y
+`posible_duplicado:<código de barras>` (mismo nombre, marca y cantidad
+normalizados con otro código; ninguno se descarta). `completitud` es la fracción
+de nombre, marca, cantidad, ingredientes limpios, Nutri-Score e imagen presentes.
+
+**Reprocesamiento:** la caché guarda el payload crudo de Open Food Facts y la
+versión de procesamiento de cada producto. Al iniciar, el servicio rehace desde
+ese payload los productos procesados con una versión anterior, sin consultar la
+fuente. A mano: `python scripts/reprocesar_cache.py [--todos]` desde
+`python-service/` (o con `docker compose exec python-service ...`).
 
 `/analizar` todavía devuelve `"lácteos"` y `"maní"` con tilde; para cruzarlo con
 estos códigos, NestJS debe normalizarlos.

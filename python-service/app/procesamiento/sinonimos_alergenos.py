@@ -160,6 +160,14 @@ EXCEPCIONES: Dict[A, Tuple[str, ...]] = {
     ),
 }
 
+# Indicios que no bastan para marcar el alérgeno, pero se registran como
+# "alergeno_posible:<código>". La lecitina E322 suele ser de soya, pero
+# también de girasol: solo cuenta si el ingrediente no dice su origen (las
+# EXCEPCIONES del mismo código, como "lecitina de girasol").
+POSIBLES: Dict[A, Tuple[str, ...]] = {
+    A.soya: ("E322",),
+}
+
 # Frases que pasan lo que sigue a trazas: "puede contener maní".
 FRASES_TRAZAS: Tuple[str, ...] = (
     "puede contener", "pueden contener", "podría contener", "puede tener",

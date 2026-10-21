@@ -67,7 +67,7 @@ def test_mapea_alergenos_trazas_y_calidad():
 
 def test_producto_incompleto_es_invalido():
     producto = mapear(INCOMPLETO)
-    assert producto.nombre == "Producto 7801111000011"
+    assert producto.nombre == "Producto 7801111000018"
     assert producto.calidad.es_valido is False
     assert producto.calidad.problemas == [
         "sin_nombre", "sin_marca", "sin_cantidad", "sin_ingredientes",
@@ -133,6 +133,37 @@ def test_resuelve_etiquetas_fuera_de_la_taxonomia(etiqueta, esperado):
     producto = mapear(payload)
     assert [a.value for a in producto.alergenos] == esperado
     assert "alergenos_no_reconocidos" not in producto.calidad.problemas
+
+
+def test_e322_sin_origen_queda_como_alergeno_posible():
+    payload = {**LECHE, "ingredients_text_es": "Agua, emulsionante (INS 322)",
+               "allergens_tags": [], "traces_tags": []}
+    producto = mapear(payload)
+    assert producto.alergenos == []
+    assert producto.calidad.problemas == ["alergeno_posible:soya"]
+    assert producto.calidad.es_valido is True
+    # Si OFF ya declara soya, no es solo un indicio.
+    producto = mapear({**payload, "allergens_tags": ["en:soybeans"]})
+    assert "alergeno_posible:soya" not in producto.calidad.problemas
+
+
+@pytest.mark.parametrize(
+    "cambios, problema",
+    [
+        ({"code": "7802920000016"},
+         "codigo_barras_digito_verificador_invalido"),
+        ({"code": "78029200000"}, "codigo_barras_longitud_invalida"),
+        ({"ingredients_text_es": "Ingredientes: (30%)."},
+         "ingredientes_vacios"),
+        ({"ingredients_text_es": None, "ingredients_text": None},
+         "sin_ingredientes"),
+        ({"product_name_es": None, "product_name": " "}, "sin_nombre"),
+    ],
+)
+def test_reglas_de_validez_en_el_mapeo(cambios, problema):
+    producto = mapear({**LECHE, **cambios})
+    assert producto.calidad.es_valido is False
+    assert problema in producto.calidad.problemas
 
 
 def test_etiqueta_irreconocible_queda_registrada():

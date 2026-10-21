@@ -16,9 +16,10 @@ from app.procesamiento.alergenos import (
     alergenos_en_etiqueta,
     detectar_alergenos,
 )
+from app.procesamiento.calidad import evaluar_calidad
 from app.procesamiento.ingredientes import analizar_ingredientes
 from app.schemas.enums import AllergenCode, DietLabel
-from app.schemas.producto import Calidad, Procedencia, Producto
+from app.schemas.producto import Procedencia, Producto
 
 # IDs canónicos de la taxonomía de alérgenos de OFF (taxonomies/allergens.txt)
 ALERGENOS_OFF: Dict[str, AllergenCode] = {
@@ -46,15 +47,6 @@ ETIQUETAS_OFF: Dict[str, DietLabel] = {
     "en:no-lactose": DietLabel.sin_lactosa,
 }
 
-# Campo de Producto -> problema registrado en calidad si falta.
-_PROBLEMA_SI_FALTA = {
-    "nombre": "sin_nombre",
-    "marca": "sin_marca",
-    "cantidad": "sin_cantidad",
-    "ingredientes_texto": "sin_ingredientes",
-    "nutriscore": "sin_nutriscore",
-    "imagen_url": "sin_imagen",
-}
 _CODIGO_VALIDO = re.compile(r"\d{8,14}")
 _URL = TypeAdapter(HttpUrl)
 _HASH_PROVISORIO = "0" * 64
@@ -100,25 +92,27 @@ def mapear_producto(
         or _url(payload.get("image_url")),
     }
     lista = analizar_ingredientes(campos["ingredientes_texto"])
+    ingredientes = [i.texto for i in lista.ingredientes]
     deteccion = detectar_alergenos(lista)
     # Unión de OFF y del texto: ante la duda, el alérgeno se marca.
     alergenos = _sin_repetidos([*alergenos_off, *deteccion.alergenos])
     trazas = _sin_repetidos([*trazas_off, *deteccion.trazas])
 
-    problemas = [p for c, p in _PROBLEMA_SI_FALTA.items() if campos[c] is None]
+    informativos = []
     if desconocidos or desconocidas:
-        problemas.append("alergenos_no_reconocidos")
+        informativos.append("alergenos_no_reconocidos")
     # Trazabilidad de lo que OFF no declaraba en sus etiquetas.
-    problemas += [f"alergeno_detectado_en_texto:{a.value}"
-                  for a in deteccion.alergenos if a not in alergenos_off]
-    problemas += [f"traza_detectada_en_texto:{t.value}"
-                  for t in deteccion.trazas if t not in trazas_off]
-    presentes = sum(valor is not None for valor in campos.values())
+    informativos += [f"alergeno_detectado_en_texto:{a.value}"
+                     for a in deteccion.alergenos if a not in alergenos_off]
+    informativos += [f"traza_detectada_en_texto:{t.value}"
+                     for t in deteccion.trazas if t not in trazas_off]
+    informativos += [f"alergeno_posible:{a.value}"
+                     for a in deteccion.posibles if a not in alergenos]
 
     producto = Producto(
         codigo_barras=codigo,
         **{**campos, "nombre": campos["nombre"] or f"Producto {codigo}"},
-        ingredientes=[i.texto for i in lista.ingredientes],
+        ingredientes=ingredientes,
         alergenos=alergenos,
         trazas=trazas,
         etiquetas_dieta=etiquetas,
@@ -129,11 +123,11 @@ def mapear_producto(
             run_id=run_id,
             hash_contenido=_HASH_PROVISORIO,
         ),
-        calidad=Calidad(
-            es_valido=campos["nombre"] is not None
-            and campos["ingredientes_texto"] is not None,
-            problemas=problemas,
-            completitud=round(presentes / len(campos), 2),
+        calidad=evaluar_calidad(
+            codigo_barras=codigo,
+            ingredientes=ingredientes,
+            otros_problemas=informativos,
+            **campos,
         ),
     )
     procedencia = producto.procedencia.model_copy(

@@ -96,7 +96,7 @@ def test_limite_alcanzado_responde_503_de_inmediato(client, repositorio):
         )
         assert client.get(f"/products/{CODIGO}").status_code == 200
         inicio = time.monotonic()
-        response = client.get("/products/7802215000040",
+        response = client.get("/products/7802215000041",
                               headers={"X-Request-ID": "lim-1"})
         assert time.monotonic() - inicio < 2
     assert response.status_code == 503
