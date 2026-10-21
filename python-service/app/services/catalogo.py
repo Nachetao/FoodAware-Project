@@ -2,7 +2,6 @@
 import asyncio
 import logging
 import time
-import unicodedata
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Callable, List, Optional, Sequence, Tuple
@@ -13,6 +12,7 @@ from app.core.errores import (
     FuenteTimeout,
     NoEncontrado,
 )
+from app.procesamiento.texto import tokenizar
 from app.repositories.cache import (
     ProductoCacheado,
     RepositorioCache,
@@ -126,13 +126,6 @@ class ServicioCatalogo:
         )
 
 
-def tokens(texto: str) -> List[str]:
-    """Minúsculas, sin tildes y separado por caracteres no alfanuméricos."""
-    sin_tildes = unicodedata.normalize("NFKD", texto.lower())
-    sin_tildes = "".join(c for c in sin_tildes if not unicodedata.combining(c))
-    return "".join(c if c.isalnum() else " " for c in sin_tildes).split()
-
-
 def rankear(
     productos: Sequence[Producto], consulta: str, limit: int, offset: int
 ) -> Tuple[int, List[ResultadoBusqueda]]:
@@ -140,13 +133,13 @@ def rankear(
 
     Se reemplazará por BM25 en el Bloque 4.
     """
-    terminos = set(tokens(consulta))
+    terminos = set(tokenizar(consulta))
     puntuados = []
     for producto in productos:
         texto = " ".join(
             [producto.nombre, producto.marca or "", *producto.ingredientes]
         )
-        score = float(len(terminos & set(tokens(texto))))
+        score = float(len(terminos & set(tokenizar(texto))))
         if score > 0:
             puntuados.append((score, producto))
     puntuados.sort(key=lambda par: (-par[0], par[1].nombre))

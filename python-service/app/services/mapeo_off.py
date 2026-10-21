@@ -1,7 +1,7 @@
-"""Mapeo básico de un producto de Open Food Facts al esquema Producto.
+"""Mapeo de un producto de Open Food Facts al esquema Producto.
 
-La limpieza profunda de ingredientes queda para el Bloque 3; aquí solo se
-traducen etiquetas, se elige el idioma y se evalúa la calidad mínima.
+Traduce etiquetas, elige el idioma y evalúa la calidad mínima; la limpieza
+de ingredientes vive en app.procesamiento.
 """
 import hashlib
 import json
@@ -12,6 +12,7 @@ from uuid import UUID
 
 from pydantic import HttpUrl, TypeAdapter, ValidationError
 
+from app.procesamiento.ingredientes import separar_ingredientes
 from app.schemas.enums import AllergenCode, DietLabel
 from app.schemas.producto import Calidad, Procedencia, Producto
 
@@ -133,29 +134,6 @@ def hash_contenido(producto: Producto) -> str:
         datos, ensure_ascii=False, sort_keys=True, separators=(",", ":")
     )
     return hashlib.sha256(canonico.encode("utf-8")).hexdigest()
-
-
-def separar_ingredientes(texto: Optional[str]) -> List[str]:
-    """Separa por comas o punto y coma de primer nivel (respeta paréntesis).
-
-    OFF marca los alérgenos con guiones bajos (_leche_); se quitan.
-    """
-    if not texto:
-        return []
-    partes, actual, profundidad = [], [], 0
-    for caracter in texto.replace("_", ""):
-        if caracter in "([":
-            profundidad += 1
-        elif caracter in ")]":
-            profundidad = max(0, profundidad - 1)
-        if caracter in ",;" and profundidad == 0:
-            partes.append("".join(actual))
-            actual = []
-        else:
-            actual.append(caracter)
-    partes.append("".join(actual))
-    limpias = (" ".join(p.split()).strip(" .").lower() for p in partes)
-    return _sin_repetidos(p for p in limpias if p)
 
 
 def _traducir(

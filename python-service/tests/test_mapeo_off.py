@@ -9,7 +9,6 @@ from app.services.mapeo_off import (
     ALERGENOS_OFF,
     ProductoInvalido,
     mapear_producto,
-    separar_ingredientes,
 )
 from tests.payloads_off import GALLETAS, INCOMPLETO, LECHE
 
@@ -147,16 +146,11 @@ def test_normaliza_campos(cambios, campo, esperado):
         assert producto.procedencia.modificado_en_fuente is None
 
 
-@pytest.mark.parametrize(
-    "texto, esperado",
-    [
-        (None, []),
-        ("", []),
-        ("Agua, sal.", ["agua", "sal"]),
-        ("Chocolate (azúcar, cacao), leche; sal",
-         ["chocolate (azúcar, cacao)", "leche", "sal"]),
-        ("_Leche_ entera,  _LECHE_ entera , sal", ["leche entera", "sal"]),
-    ],
-)
-def test_separar_ingredientes(texto, esperado):
-    assert separar_ingredientes(texto) == esperado
+def test_lista_de_ingredientes_limpia():
+    producto = mapear(GALLETAS)
+    assert producto.ingredientes_texto == GALLETAS["ingredients_text"]
+    assert producto.ingredientes == [
+        "harina de trigo enriquecida (harina de trigo, hierro, tiamina)",
+        "azúcar", "aceite vegetal", "suero de leche en polvo", "huevo",
+        "emulsionante (lecitina de soya)", "sal",
+    ]
