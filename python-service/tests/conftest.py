@@ -15,11 +15,14 @@ class ClienteOFFFalso:
 
     `productos` mapea código -> payload o excepción; `paginas` es la lista
     de respuestas (o excepciones) de /api/v2/search, desde la página 1.
+    `paginas_por_categoria` hace lo mismo para una categoría específica;
+    las categorías que no están ahí usan `paginas`.
     """
 
     def __init__(self):
         self.productos = {}
         self.paginas = []
+        self.paginas_por_categoria = {}
         self.llamadas = []
         self.esperas_maximas = []
 
@@ -40,9 +43,12 @@ class ClienteOFFFalso:
         self.llamadas.append(
             ("busqueda", pais, tuple(categorias), pagina, tamano_pagina)
         )
-        if pagina > len(self.paginas):
+        paginas = self.paginas
+        if len(categorias) == 1:
+            paginas = self.paginas_por_categoria.get(categorias[0], paginas)
+        if pagina > len(paginas):
             return {"products": []}
-        efecto = self.paginas[pagina - 1]
+        efecto = paginas[pagina - 1]
         if isinstance(efecto, Exception):
             raise efecto
         return efecto
@@ -64,9 +70,13 @@ def client(tmp_path, monkeypatch, off_falso):
     monkeypatch.setattr(config.settings, "off_user_agent", None)
     with TestClient(app) as cliente_http:
         repositorio = app.state.repositorio
-        app.state.catalogo, _ = construir_servicios(repositorio, off_falso)
-        app.state.ingesta = ServicioIngesta(repositorio, off_falso,
-                                            BASE_OFF, tamano_pagina=2)
+        servicios = construir_servicios(repositorio, off_falso)
+        app.state.catalogo = servicios.catalogo
+        app.state.busqueda = servicios.busqueda
+        app.state.ingesta = ServicioIngesta(
+            repositorio, off_falso, BASE_OFF, tamano_pagina=2,
+            al_terminar=servicios.busqueda.reconstruir,
+        )
         yield cliente_http
 
 
@@ -76,10 +86,17 @@ def repositorio(client):
 
 
 @pytest.fixture
-def catalogo_sembrado(repositorio):
+def busqueda(client):
+    return app.state.busqueda
+
+
+@pytest.fixture
+def catalogo_sembrado(repositorio, busqueda):
     productos = productos_de_ejemplo()
     for producto in productos:
         repositorio.guardar_producto(
             producto, {"code": producto.codigo_barras}
         )
+    # El índice se arma al iniciar; aquí se siembra después.
+    busqueda.reconstruir_ahora()
     return productos

@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 from uuid import UUID
 
 from app.procesamiento import VERSION_PROCESAMIENTO
@@ -257,6 +257,15 @@ class RepositorioCache:
             Producto.model_validate_json(fila["producto_json"])
             for fila in filas
         ])
+
+    def listar_productos_con_payload(
+        self,
+    ) -> List[Tuple[Producto, Dict[str, Any]]]:
+        """Productos (con duplicados marcados) y su payload crudo, para el
+        índice de búsqueda, que toma las categorías del payload."""
+        registros = self.listar_para_reprocesar()
+        productos = marcar_duplicados([r.producto for r in registros])
+        return [(p, r.payload_off) for p, r in zip(productos, registros)]
 
     def listar_para_reprocesar(
         self, version_menor_a: Optional[int] = None

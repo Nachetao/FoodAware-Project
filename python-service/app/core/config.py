@@ -1,7 +1,10 @@
-from typing import Optional
+from typing import List, Optional
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Mismo límite que SolicitudIngesta.categorias en el contrato.
+MAX_CATEGORIAS = 20
 
 
 class Settings(BaseSettings):
@@ -42,6 +45,43 @@ class Settings(BaseSettings):
     ingesta_intervalo_horas: float = Field(
         24.0, gt=0, validation_alias="INGESTA_INTERVALO_HORAS"
     )
+    # Categorías de OFF (taxonomía en:) de las ingestas automáticas,
+    # separadas por comas. Se eligieron por ser relevantes para alergias:
+    # galletas, lácteos, panes, chocolates, cereales, snacks salados y
+    # bebidas vegetales. Vacío = sin filtrar por categoría.
+    ingesta_categorias_texto: str = Field(
+        "en:biscuits,en:dairies,en:breads,en:chocolates,"
+        "en:breakfast-cereals,en:salty-snacks,"
+        "en:plant-based-milk-alternatives",
+        validation_alias="INGESTA_CATEGORIAS",
+    )
+    # Tope de productos por ingesta automática (500 es el máximo del
+    # contrato de SolicitudIngesta); se reparte entre las categorías.
+    ingesta_max_productos: int = Field(
+        500, ge=1, le=500, validation_alias="INGESTA_MAX_PRODUCTOS"
+    )
+
+    @field_validator("ingesta_categorias_texto")
+    @classmethod
+    def _categorias_validas(cls, valor: str) -> str:
+        categorias = _separar_por_comas(valor)
+        if len(categorias) > MAX_CATEGORIAS:
+            raise ValueError(
+                f"INGESTA_CATEGORIAS admite hasta {MAX_CATEGORIAS} categorías"
+            )
+        if any(len(c) < 2 or len(c) > 100 for c in categorias):
+            raise ValueError("cada categoría debe tener entre 2 y 100 "
+                             "caracteres")
+        return valor
+
+    @property
+    def ingesta_categorias(self) -> List[str]:
+        return _separar_por_comas(self.ingesta_categorias_texto)
+
+
+def _separar_por_comas(valor: str) -> List[str]:
+    return list(dict.fromkeys(c.strip() for c in valor.split(",")
+                              if c.strip()))
 
 
 settings = Settings()

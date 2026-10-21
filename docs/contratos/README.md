@@ -5,10 +5,9 @@ La fuente de verdad es el código (modelos Pydantic en `python-service/app/schem
 [`fastapi-openapi.json`](fastapi-openapi.json) se genera desde ahí.
 
 > **Productos, búsqueda e ingesta ya son reales** (Open Food Facts + caché local
-> SQLite), con limpieza de ingredientes, detección de alérgenos y validación de
-> calidad. **Las métricas siguen siendo stubs** hasta el Bloque 5: devuelven datos
-> de ejemplo y responden con el header `X-Stub: true`. El ranking BM25 (Bloque 4)
-> llegará detrás de este mismo contrato.
+> SQLite), con limpieza de ingredientes, detección de alérgenos, validación de
+> calidad y ranking BM25. **Las métricas siguen siendo stubs** hasta el Bloque 5:
+> devuelven datos de ejemplo y responden con el header `X-Stub: true`.
 
 ### Cómo se obtienen los datos
 
@@ -19,8 +18,9 @@ La fuente de verdad es el código (modelos Pydantic en `python-service/app/schem
   búsquedas por minuto por IP): como máximo 12 lecturas y 8 búsquedas por minuto.
   Reintenta hasta 3 veces con backoff exponencial y jitter solo ante errores de
   red, timeouts, 429 y 5xx.
-- **`/search` nunca consulta Open Food Facts en vivo:** busca sobre la caché
-  local, que se llena con `POST /ingest/runs`. Solo se buscan productos válidos.
+- **`/search` nunca consulta Open Food Facts en vivo:** busca en un índice en
+  memoria construido desde la caché local, que se llena con `POST /ingest/runs`.
+  Solo se indexan productos válidos (ver [Búsqueda](#búsqueda-score-bm25)).
 - **`/products/{codigo_barras}`** lee primero la caché; si no está, lo trae de
   Open Food Facts y lo guarda. Si la fuente falla y no está en la caché,
   responde 503 o 504. Una petición nunca espera al limitador de tasa más de
@@ -37,10 +37,19 @@ La fuente de verdad es el código (modelos Pydantic en `python-service/app/schem
 | `INGESTA_AL_INICIAR` | `true` | Si la caché está vacía al arrancar, lanza una ingesta inicial. |
 | `INGESTA_INTERVALO_HORAS` | `24` | Refresco periódico; la próxima se calcula desde el inicio de la última ejecución, así un reinicio no la pospone. |
 | `CACHE_TTL_HORAS` | `72` | Un producto verificado hace más de este tiempo se refresca al pedirlo si la fuente responde; si no, se devuelve el de la caché. |
+| `INGESTA_CATEGORIAS` | ver abajo | Categorías de Open Food Facts de las ingestas automáticas, separadas por comas (máximo 20; vacío = sin filtrar). |
+| `INGESTA_MAX_PRODUCTOS` | `500` | Tope de productos de cada ingesta automática (1 a 500). |
 
-Las ingestas automáticas usan `SolicitudIngesta` por defecto (Chile, 100
-productos) y no se lanzan si ya hay una en curso. Para probar contra la API real
-(fuera del pipeline): `python scripts/probar_off.py` desde `python-service/`.
+Las ingestas automáticas buscan productos de Chile en las categorías de
+`INGESTA_CATEGORIAS`, elegidas por ser relevantes para alergias: galletas
+(`en:biscuits`), lácteos (`en:dairies`), panes (`en:breads`), chocolates
+(`en:chocolates`), cereales (`en:breakfast-cereals`), snacks salados
+(`en:salty-snacks`; `en:snacks` ya incluye galletas y chocolates) y bebidas
+vegetales (`en:plant-based-milk-alternatives`). No se lanzan si ya hay una en
+curso. Para probar contra la API real (fuera del pipeline):
+`python scripts/probar_off.py` desde `python-service/`. Para ver cómo quedó el
+corpus: `python scripts/estadisticas_corpus.py` (productos válidos, productos por
+categoría, términos distintos del índice y largo promedio).
 
 ## Levantar el servicio
 
@@ -73,9 +82,51 @@ consulta la fuente. `estado_fuente` vale `"online"` si la última ingesta
 terminada fue `completado` o `completado_con_errores`, y `"cache"` si fue
 `fallido` o si todavía no hay ninguna.
 
+### Búsqueda (score BM25)
+
+- **Tokenización** (la misma para productos y consultas): minúsculas, sin
+  tildes, singular básico y sin stopwords. "Galletas de AVENA" y "galleta avena"
+  dan los mismos términos; una consulta solo con stopwords ("de la") no
+  devuelve resultados.
+- **Índice:** un índice invertido por campo (término → productos y cuántas
+  veces aparece, más el largo de cada producto y el largo promedio). Se arma en
+  memoria al iniciar el servicio y se reconstruye al terminar cada ingesta; las
+  búsquedas en curso usan el índice anterior hasta que el nuevo está listo. Un
+  producto traído con `GET /products` aparece en la búsqueda desde la siguiente
+  reconstrucción.
+- **Score:** suma ponderada de Okapi BM25 por campo (`k1 = 1.5`, `b = 0.75`):
+
+  ```text
+  score = 3·BM25(nombre) + 2·BM25(marca) + 1·BM25(ingredientes) + 1.5·BM25(categorías)
+
+  BM25(campo) = Σ_t  idf(t) · tf·(k1+1) / (tf + k1·(1 − b + b·largo/largo_promedio))
+  idf(t)      = ln(1 + (N − df + 0.5) / (df + 0.5))
+  ```
+
+  Un término raro pesa más que uno común (idf), repetirlo suma cada vez menos
+  (k1) y una mención en un texto largo vale menos que en uno corto (b). Las
+  categorías salen del payload crudo de Open Food Facts (no son parte de
+  `Producto`).
+- **Resultados:** solo con `score > 0`, redondeado a 4 decimales. Orden por
+  `score` descendente; en empate, `calidad.completitud` descendente y luego
+  `codigo_barras`. `total` cuenta todas las coincidencias antes de paginar,
+  `posicion` es global (con `offset=10`, el primero es el 11) y `tiempo_ms` es
+  lo que tardó la búsqueda en el servicio. Con el índice vacío responde 200 con
+  `total: 0` y `resultados: []`.
+
 **Ingesta:** `POST /ingest/runs` responde 202 con la ejecución `en_curso` y la
 procesa en segundo plano; el resultado se consulta en `GET /ingest/runs/latest`.
-Si ya hay una en curso, devuelve esa misma en lugar de lanzar otra. Al terminar:
+Si ya hay una en curso, devuelve esa misma en lugar de lanzar otra. Con
+`categorias`, hace una búsqueda por categoría y reparte `max_productos` entre
+ellas: a cada una le toca lo que queda dividido por las categorías restantes
+(500 entre 7 = 72, 72, 72, 71, 71, 71, 71), así lo que no usa una categoría con
+pocos productos pasa a las siguientes. Un producto que aparece en dos
+categorías se procesa y se guarda una sola vez, y su repetición no gasta la
+cuota de la segunda categoría, pero sí se cuenta: suma a `recuperados` y, si es
+válido, a `validos` y `duplicados` (si es inválido, a `invalidos`). Por eso
+`recuperados` puede superar a `max_productos`, que limita los productos
+distintos. Si una categoría falla, se registra el error y sigue con las demás. Todas las búsquedas respetan el límite de 8 por
+minuto. Al terminar:
 `recuperados` (descargados), `validos`, `invalidos` (no cumplen las reglas de
 validez de `calidad`; no se guardan), `duplicados` (válidos que ya estaban con el mismo
 contenido), `errores` (peticiones a la fuente que fallaron) y `estado`. Una

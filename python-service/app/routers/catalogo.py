@@ -2,11 +2,12 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Path, Query
 
-from app.core.dependencias import obtener_catalogo
+from app.core.dependencias import obtener_busqueda, obtener_catalogo
 from app.core.errores import respuestas_error
 from app.core.simulacion import simular_error
 from app.schemas.busqueda import RespuestaBusqueda
 from app.schemas.producto import Producto
+from app.services.busqueda import ServicioBusqueda
 from app.services.catalogo import ServicioCatalogo
 
 router = APIRouter(dependencies=[Depends(simular_error)])
@@ -43,8 +44,8 @@ async def buscar(
         str,
         Query(min_length=2, max_length=100, description="Texto a buscar."),
     ],
-    catalogo: Catalogo,
+    busqueda: Annotated[ServicioBusqueda, Depends(obtener_busqueda)],
     limit: Annotated[int, Query(ge=1, le=50)] = 10,
     offset: Annotated[int, Query(ge=0)] = 0,
 ):
-    return await catalogo.buscar(q, limit, offset)
+    return await busqueda.buscar(q, limit, offset)

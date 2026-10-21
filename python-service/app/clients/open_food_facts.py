@@ -42,6 +42,9 @@ CAMPOS = (
     "allergens_tags",
     "traces_tags",
     "labels_tags",
+    # Categorías: el buscador las indexa (no van en el contrato).
+    "categories",
+    "categories_tags",
     "nutriscore_grade",
     "image_front_url",
     "image_url",
