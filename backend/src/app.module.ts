@@ -9,9 +9,12 @@ import { IaModule } from "./ia/ia.module";
 import { FoodsModule } from "./foods/foods.module";
 import { AuthModule } from "./auth/auth.module";
 import { ProductsModule } from "./products/products.module";
+import { LoggerModule } from "nestjs-pino";
+import { configuracionLogger } from "./observabilidad/logger.config";
 
 @Module({
   imports: [
+    LoggerModule.forRoot(configuracionLogger),
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: "../.env", // Hacerlo disponible en todos los módulos sin importarlo nuevamente

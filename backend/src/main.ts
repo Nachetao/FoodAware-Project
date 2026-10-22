@@ -4,9 +4,16 @@ import { AppModule } from "./app.module";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { HEADER_REQUEST_ID } from "./products/contrato/request-id";
 import { HEADER_FUENTE_DATOS } from "./products/fuente-datos";
+import { Logger } from "nestjs-pino";
+import { requestIdMiddleware } from "./observabilidad/request-id";
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // bufferLogs: los logs del arranque esperan al logger de pino.
+  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  // Todos los Logger de NestJS escriben en JSON con el formato acordado.
+  app.useLogger(app.get(Logger));
+  // Primero que todo: el request id queda disponible para el resto de la petición.
+  app.use(requestIdMiddleware);
   // Todas las rutas estarán bajo el prefijo /api
   app.setGlobalPrefix("api");
   // Se habilitan los CORS por defecto para el MVP. Los headers expuestos son

@@ -17,7 +17,7 @@ import { HEADER_REQUEST_ID } from "./contrato/request-id";
 import { ContratoExceptionFilter } from "./contrato-exception.filter";
 import { BuscarProductosQueryDto } from "./dto/buscar-productos.query.dto";
 import { ProductsService } from "./products.service";
-import { resolverRequestId } from "./resolver-request-id";
+import { requestIdDe } from "../observabilidad/request-id";
 import { HEADER_FUENTE_DATOS } from "./fuente-datos";
 
 const HEADER_RESPUESTA = {
@@ -84,7 +84,7 @@ export class ProductsController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<RespuestaBusqueda> {
-    const requestId = resolverRequestId(req);
+    const requestId = requestIdDe(req);
     res.setHeader(HEADER_REQUEST_ID, requestId);
     const { respuesta, fuente } = await this.productsService.buscar(
       query,

@@ -10,7 +10,7 @@ import { Request, Response } from "express";
 import { CodigoError } from "./contrato/enums";
 import { HEADER_REQUEST_ID } from "./contrato/request-id";
 import { ContratoHttpException } from "./contrato-http.exception";
-import { resolverRequestId } from "./resolver-request-id";
+import { requestIdDe } from "../observabilidad/request-id";
 
 /**
  * Responde los errores de ProductsController con el formato del contrato.
@@ -20,7 +20,7 @@ import { resolverRequestId } from "./resolver-request-id";
 export class ContratoExceptionFilter implements ExceptionFilter {
   catch(exception: HttpException, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
-    const requestId = resolverRequestId(ctx.getRequest<Request>());
+    const requestId = requestIdDe(ctx.getRequest<Request>());
     const error =
       exception instanceof ContratoHttpException
         ? exception
