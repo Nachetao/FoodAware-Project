@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { APP_INTERCEPTOR } from "@nestjs/core";
 import { HttpModule } from "@nestjs/axios";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { ConfigModule, ConfigService } from "@nestjs/config";
@@ -9,9 +10,14 @@ import { IaModule } from "./ia/ia.module";
 import { FoodsModule } from "./foods/foods.module";
 import { AuthModule } from "./auth/auth.module";
 import { ProductsModule } from "./products/products.module";
+import { SaludModule } from "./salud/salud.module";
+import { LoggerModule } from "nestjs-pino";
+import { configuracionLogger } from "./observabilidad/logger.config";
+import { TiempoRespuestaInterceptor } from "./observabilidad/tiempo-respuesta.interceptor";
 
 @Module({
   imports: [
+    LoggerModule.forRoot(configuracionLogger),
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: "../.env", // Hacerlo disponible en todos los módulos sin importarlo nuevamente
@@ -38,8 +44,13 @@ import { ProductsModule } from "./products/products.module";
     FoodsModule,
     AuthModule,
     ProductsModule,
+    SaludModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    // Header X-Response-Time-ms y log de acceso en todas las rutas.
+    { provide: APP_INTERCEPTOR, useClass: TiempoRespuestaInterceptor },
+  ],
 })
 export class AppModule {}
