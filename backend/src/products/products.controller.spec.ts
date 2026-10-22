@@ -42,7 +42,10 @@ describe("ProductsController (GET /api/products/search)", () => {
 
   beforeEach(() => {
     productsService.buscar.mockReset();
-    productsService.buscar.mockResolvedValue(respuestaBusqueda);
+    productsService.buscar.mockResolvedValue({
+      respuesta: respuestaBusqueda,
+      fuente: "fastapi",
+    });
   });
 
   function buscar(query: string, headers: Record<string, string> = {}) {
@@ -143,4 +146,18 @@ describe("ProductsController (GET /api/products/search)", () => {
     expect(res.headers.get("x-request-id")).toBe("prueba-503");
     expect(await res.json()).toEqual(error.getResponse());
   });
+
+  it.each(["fastapi", "respaldo"])(
+    "indica la fuente de los datos en X-Fuente-Datos (%s)",
+    async (fuente) => {
+      const respuesta = { ...respuestaBusqueda, estado_fuente: "cache" };
+      productsService.buscar.mockResolvedValue({ respuesta, fuente });
+
+      const res = await buscar("q=leche");
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get("x-fuente-datos")).toBe(fuente);
+      expect(await res.json()).toEqual(respuesta);
+    },
+  );
 });

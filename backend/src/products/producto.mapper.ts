@@ -31,3 +31,40 @@ export function aFilaProducto(producto: Producto): FilaProducto {
     completitud: calidad.completitud,
   };
 }
+
+/** Convierte una fila de la tabla products en un Producto del contrato. */
+export function aProducto(fila: FilaProducto): Producto {
+  return {
+    codigo_barras: fila.codigo_barras,
+    nombre: fila.nombre,
+    marca: fila.marca,
+    cantidad: fila.cantidad,
+    ingredientes_texto: fila.ingredientes_texto,
+    ingredientes: fila.ingredientes,
+    alergenos: fila.alergenos,
+    trazas: fila.trazas,
+    etiquetas_dieta: fila.etiquetas_dieta,
+    nutriscore: fila.nutriscore,
+    imagen_url: fila.imagen_url,
+    procedencia: {
+      fuente: fila.fuente as Producto["procedencia"]["fuente"],
+      url_fuente: fila.url_fuente,
+      recuperado_en: aIsoUtc(fila.recuperado_en),
+      modificado_en_fuente: fila.modificado_en_fuente
+        ? aIsoUtc(fila.modificado_en_fuente)
+        : null,
+      run_id: fila.run_id,
+      hash_contenido: fila.hash_contenido,
+    },
+    calidad: {
+      es_valido: fila.es_valido,
+      problemas: fila.problemas,
+      completitud: fila.completitud,
+    },
+  };
+}
+
+// Formato del contrato: ISO 8601 en UTC con Z y sin milisegundos.
+function aIsoUtc(fecha: Date): string {
+  return fecha.toISOString().replace(/\.\d{3}Z$/, "Z");
+}
