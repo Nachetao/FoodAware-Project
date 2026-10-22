@@ -49,7 +49,8 @@
                 </div>
               }
             </ion-thumbnail>
-            <ion-label class="ion-text-wrap">
+            <!-- div en vez de ion-label: evita el polyfill de slots de Stencil. -->
+            <div class="texto">
               <h2>{{ producto.nombre }}</h2>
               @if (producto.marca) {
                 <p class="marca">{{ producto.marca }}</p>
@@ -59,12 +60,12 @@
                   @for (codigo of producto.alergenos; track codigo) {
                     <ion-chip class="chip-alergeno">
                       <ion-icon name="warning-outline" aria-hidden="true"></ion-icon>
-                      <ion-label>{{ etiquetaAlergeno(codigo) }}</ion-label>
+                      <span>{{ etiquetaAlergeno(codigo) }}</span>
                     </ion-chip>
                   }
                 </div>
               }
-            </ion-label>
+            </div>
           </ion-item>
         }
       </ion-list>
