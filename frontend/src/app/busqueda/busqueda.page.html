@@ -22,6 +22,16 @@
         <ion-spinner name="crescent" aria-label="Buscando productos"></ion-spinner>
       </div>
     } @else if (buscado() && total() > 0) {
+      @if (desdeRespaldo()) {
+        <div class="aviso-respaldo" role="status">
+          <ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon>
+          <span>
+            El servicio de búsqueda no está disponible; mostrando productos guardados
+            anteriormente.
+          </span>
+        </div>
+      }
+
       <p class="total">
         {{ total() }} {{ total() === 1 ? 'resultado' : 'resultados' }} para «{{ consulta() }}»
       </p>

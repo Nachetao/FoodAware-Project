@@ -27,6 +27,8 @@ export class BusquedaPage {
   readonly cargandoMas = signal(false);
   readonly buscado = signal(false);
   readonly error = signal<string | null>(null);
+  // Se activa si alguna página de la búsqueda actual vino del respaldo.
+  readonly desdeRespaldo = signal(false);
   readonly hayMas = computed(() => this.resultados().length < this.total());
 
   readonly minCaracteres = MIN_CARACTERES;
@@ -45,9 +47,10 @@ export class BusquedaPage {
           q.length < MIN_CARACTERES
             ? EMPTY
             : this.productsService.buscar(q, TAMANO_PAGINA, 0).pipe(
-                tap((respuesta) => {
+                tap(({ respuesta, desdeRespaldo }) => {
                   this.resultados.set(respuesta.resultados);
                   this.total.set(respuesta.total);
+                  this.desdeRespaldo.set(desdeRespaldo);
                   this.buscado.set(true);
                   this.cargando.set(false);
                 }),
@@ -76,13 +79,16 @@ export class BusquedaPage {
       .buscar(q, TAMANO_PAGINA, this.resultados().length)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: (respuesta) => {
+        next: ({ respuesta, desdeRespaldo }) => {
           // Si el usuario ya cambió la consulta, esta página no le corresponde.
           if (this.consulta() !== q) {
             return;
           }
           this.resultados.update((actuales) => [...actuales, ...respuesta.resultados]);
           this.total.set(respuesta.total);
+          if (desdeRespaldo) {
+            this.desdeRespaldo.set(true);
+          }
           this.cargandoMas.set(false);
         },
         error: (error: ErrorApi) => {
@@ -100,6 +106,7 @@ export class BusquedaPage {
     this.total.set(0);
     this.buscado.set(false);
     this.error.set(null);
+    this.desdeRespaldo.set(false);
     this.cargandoMas.set(false);
     this.cargando.set(q.length >= MIN_CARACTERES);
   }

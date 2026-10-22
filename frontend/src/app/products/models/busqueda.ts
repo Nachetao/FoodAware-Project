@@ -9,6 +9,16 @@ export interface ResultadoBusqueda {
   posicion: number;
 }
 
+/** Respuesta de la búsqueda más el origen de los datos. */
+export interface BusquedaProductos {
+  respuesta: RespuestaBusqueda;
+  /**
+   * true si FastAPI no respondió y el backend usó los productos guardados
+   * (header X-Fuente-Datos: respaldo).
+   */
+  desdeRespaldo: boolean;
+}
+
 export interface RespuestaBusqueda {
   consulta: string;
   /** Total de coincidencias antes de paginar. */

@@ -97,10 +97,32 @@ describe('ProductsService', () => {
     it('devuelve la respuesta del backend sin modificarla', async () => {
       const resultado = firstValueFrom(service.buscar('leche'));
 
-      esperarBusqueda().flush(respuestaBusqueda);
+      esperarBusqueda().flush(respuestaBusqueda, {
+        headers: { 'X-Fuente-Datos': 'fastapi' },
+      });
 
-      await expect(resultado).resolves.toEqual(respuestaBusqueda);
+      await expect(resultado).resolves.toEqual({
+        respuesta: respuestaBusqueda,
+        desdeRespaldo: false,
+      });
     });
+
+    it.each([
+      ['respaldo', true],
+      ['fastapi', false],
+      [null, false],
+    ])(
+      'con X-Fuente-Datos %s marca desdeRespaldo como %s',
+      async (fuente, desdeRespaldo) => {
+        const resultado = firstValueFrom(service.buscar('leche'));
+
+        esperarBusqueda().flush(respuestaBusqueda, {
+          headers: fuente ? { 'X-Fuente-Datos': fuente } : {},
+        });
+
+        expect((await resultado).desdeRespaldo).toBe(desdeRespaldo);
+      },
+    );
 
     it.each([
       [422, 'VALIDATION_ERROR', 'Solicitud inválida: q debe tener entre 2 y 100 caracteres'],

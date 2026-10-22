@@ -16,14 +16,14 @@
 
     <!-- Nombre del producto -->
     <ion-item>
-      <ion-label position="floating">Nombre del Producto</ion-label>
-      <ion-input [(ngModel)]="productoNombre" type="text" placeholder="Ej. Barrita energética"></ion-input>
+      <ion-input [(ngModel)]="productoNombre" type="text" label="Nombre del Producto"
+        labelPlacement="floating" placeholder="Ej. Barrita energética"></ion-input>
     </ion-item>
 
     <!-- Ingredientes -->
     <ion-item>
-      <ion-label position="floating">Ingredientes (separados por coma)</ion-label>
-      <ion-textarea [(ngModel)]="ingredientesTexto" placeholder="Ej. avena, maní, azúcar, miel" rows="3"></ion-textarea>
+      <ion-textarea [(ngModel)]="ingredientesTexto" label="Ingredientes (separados por coma)"
+        labelPlacement="floating" placeholder="Ej. avena, maní, azúcar, miel" rows="3"></ion-textarea>
     </ion-item>
 
     <!-- Botón analizar -->

@@ -11,6 +11,25 @@
   color: var(--ion-color-medium);
 }
 
+// Aviso discreto: superficie salvia, no un color de alerta.
+.aviso-respaldo {
+  display: flex;
+  gap: var(--app-espacio-2);
+  align-items: flex-start;
+  margin-bottom: var(--app-espacio-3);
+  padding: var(--app-espacio-2) var(--app-espacio-3);
+  border-radius: var(--app-espacio-3);
+  background: var(--ion-color-tertiary);
+  color: var(--ion-color-tertiary-contrast);
+  font-size: 14px;
+
+  ion-icon {
+    flex-shrink: 0;
+    font-size: 20px;
+    color: var(--ion-color-primary);
+  }
+}
+
 .total {
   margin: 0 0 var(--app-espacio-2);
   font-size: 14px;

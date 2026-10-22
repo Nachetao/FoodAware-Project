@@ -4,10 +4,13 @@ import {
   HttpErrorResponse,
   HttpParams,
 } from '@angular/common/http';
-import { Observable, catchError, throwError } from 'rxjs';
+import { Observable, catchError, map, throwError } from 'rxjs';
 import { environment } from '../../environments/environment';
-import { RespuestaBusqueda } from './models/busqueda';
+import { BusquedaProductos, RespuestaBusqueda } from './models/busqueda';
 import { ErrorApi, esErrorContrato } from './models/error';
+
+/** Header del backend que indica si los datos vienen de FastAPI o del respaldo. */
+const HEADER_FUENTE_DATOS = 'X-Fuente-Datos';
 
 @Injectable({ providedIn: 'root' })
 export class ProductsService {
@@ -18,15 +21,20 @@ export class ProductsService {
    * Busca productos por texto, ordenados por relevancia.
    * Si falla, el Observable emite un ErrorApi en vez de un HttpErrorResponse.
    */
-  buscar(q: string, limit = 10, offset = 0): Observable<RespuestaBusqueda> {
+  buscar(q: string, limit = 10, offset = 0): Observable<BusquedaProductos> {
     const params = new HttpParams()
       .set('q', q)
       .set('limit', limit)
       .set('offset', offset);
 
     return this.http
-      .get<RespuestaBusqueda>(this.searchUrl, { params })
+      .get<RespuestaBusqueda>(this.searchUrl, { params, observe: 'response' })
       .pipe(
+        map((respuesta) => ({
+          respuesta: respuesta.body as RespuestaBusqueda,
+          desdeRespaldo:
+            respuesta.headers.get(HEADER_FUENTE_DATOS) === 'respaldo',
+        })),
         catchError((error: HttpErrorResponse) =>
           throwError(() => aErrorApi(error)),
         ),
