@@ -22,6 +22,16 @@
         <ion-spinner name="crescent" aria-label="Buscando productos"></ion-spinner>
       </div>
     } @else if (buscado() && total() > 0) {
+      @if (desdeRespaldo()) {
+        <div class="aviso-respaldo" role="status">
+          <ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon>
+          <span>
+            El servicio de búsqueda no está disponible; mostrando productos guardados
+            anteriormente.
+          </span>
+        </div>
+      }
+
       <p class="total">
         {{ total() }} {{ total() === 1 ? 'resultado' : 'resultados' }} para «{{ consulta() }}»
       </p>
@@ -39,7 +49,8 @@
                 </div>
               }
             </ion-thumbnail>
-            <ion-label class="ion-text-wrap">
+            <!-- div en vez de ion-label: evita el polyfill de slots de Stencil. -->
+            <div class="texto">
               <h2>{{ producto.nombre }}</h2>
               @if (producto.marca) {
                 <p class="marca">{{ producto.marca }}</p>
@@ -49,12 +60,12 @@
                   @for (codigo of producto.alergenos; track codigo) {
                     <ion-chip class="chip-alergeno">
                       <ion-icon name="warning-outline" aria-hidden="true"></ion-icon>
-                      <ion-label>{{ etiquetaAlergeno(codigo) }}</ion-label>
+                      <span>{{ etiquetaAlergeno(codigo) }}</span>
                     </ion-chip>
                   }
                 </div>
               }
-            </ion-label>
+            </div>
           </ion-item>
         }
       </ion-list>

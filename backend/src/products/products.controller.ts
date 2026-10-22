@@ -18,13 +18,23 @@ import { ContratoExceptionFilter } from "./contrato-exception.filter";
 import { BuscarProductosQueryDto } from "./dto/buscar-productos.query.dto";
 import { ProductsService } from "./products.service";
 import { resolverRequestId } from "./resolver-request-id";
+import { HEADER_FUENTE_DATOS } from "./fuente-datos";
 
 const HEADER_RESPUESTA = {
   [HEADER_REQUEST_ID]: {
     description: "ID de la petición, el mismo que recibe FastAPI.",
     schema: { type: "string" },
   },
+  [HEADER_FUENTE_DATOS]: {
+    description:
+      '"fastapi" en una búsqueda normal; "respaldo" si FastAPI falló y los datos vienen de los productos guardados (estado_fuente es "cache").',
+    schema: { type: "string", enum: ["fastapi", "respaldo"] },
+  },
 };
+
+// Con respaldo: los 500, 502, 503 y 504 solo llegan si la base tampoco tiene resultados.
+const SIN_RESPALDO =
+  " Solo si los productos guardados tampoco tienen resultados.";
 
 @ApiTags("products")
 @Controller("products")
@@ -35,6 +45,8 @@ export class ProductsController {
   @Get("search")
   @ApiOperation({
     summary: "Busca productos por texto con ranking de relevancia",
+    description:
+      'Si FastAPI falla (500, 502, 503 o 504, tras los reintentos), responde desde los productos guardados con estado_fuente "cache" y el header X-Fuente-Datos: respaldo.',
   })
   @ApiHeader({
     name: HEADER_REQUEST_ID,
@@ -49,20 +61,23 @@ export class ProductsController {
   })
   @ApiInternalServerErrorResponse({
     type: ErrorContrato,
-    description: "Error interno (INTERNAL_ERROR).",
+    description: "Error interno (INTERNAL_ERROR)." + SIN_RESPALDO,
   })
   @ApiBadGatewayResponse({
     type: ErrorContrato,
-    description: "FastAPI respondió fuera del contrato (INTERNAL_ERROR).",
+    description:
+      "FastAPI respondió fuera del contrato (INTERNAL_ERROR)." + SIN_RESPALDO,
   })
   @ApiServiceUnavailableResponse({
     type: ErrorContrato,
-    description: "Servicio de búsqueda no disponible (SOURCE_UNAVAILABLE).",
+    description:
+      "Servicio de búsqueda no disponible (SOURCE_UNAVAILABLE)." + SIN_RESPALDO,
   })
   @ApiGatewayTimeoutResponse({
     type: ErrorContrato,
     description:
-      "Servicio de búsqueda sin respuesta a tiempo (SOURCE_TIMEOUT).",
+      "Servicio de búsqueda sin respuesta a tiempo (SOURCE_TIMEOUT)." +
+      SIN_RESPALDO,
   })
   async buscar(
     @Query() query: BuscarProductosQueryDto,
@@ -71,6 +86,11 @@ export class ProductsController {
   ): Promise<RespuestaBusqueda> {
     const requestId = resolverRequestId(req);
     res.setHeader(HEADER_REQUEST_ID, requestId);
-    return this.productsService.buscar(query, requestId);
+    const { respuesta, fuente } = await this.productsService.buscar(
+      query,
+      requestId,
+    );
+    res.setHeader(HEADER_FUENTE_DATOS, fuente);
+    return respuesta;
   }
 }

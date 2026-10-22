@@ -6,7 +6,7 @@ import type { Mock } from 'vitest';
 
 import { BusquedaPage } from './busqueda.page';
 import { ProductsService } from '../products/products.service';
-import { RespuestaBusqueda, ResultadoBusqueda } from '../products/models/busqueda';
+import { BusquedaProductos, ResultadoBusqueda } from '../products/models/busqueda';
 import { ErrorApi } from '../products/models/error';
 import { Producto } from '../products/models/producto';
 
@@ -48,8 +48,18 @@ function respuesta(
   resultados: ResultadoBusqueda[],
   total = resultados.length,
   consulta = 'leche',
-): RespuestaBusqueda {
-  return { consulta, total, tiempo_ms: 1, resultados, estado_fuente: 'online' };
+  desdeRespaldo = false,
+): BusquedaProductos {
+  return {
+    respuesta: {
+      consulta,
+      total,
+      tiempo_ms: 1,
+      resultados,
+      estado_fuente: desdeRespaldo ? 'cache' : 'online',
+    },
+    desdeRespaldo,
+  };
 }
 
 function errorApi(mensaje: string): ErrorApi {
@@ -110,7 +120,7 @@ describe('BusquedaPage', () => {
   });
 
   it('muestra un spinner mientras espera la respuesta', () => {
-    buscar.mockReturnValue(new Subject<RespuestaBusqueda>());
+    buscar.mockReturnValue(new Subject<BusquedaProductos>());
 
     page.buscar('leche');
 
@@ -201,8 +211,8 @@ describe('BusquedaPage', () => {
   });
 
   it('descarta la respuesta tardía de una búsqueda anterior', () => {
-    const leche = new Subject<RespuestaBusqueda>();
-    const pan = new Subject<RespuestaBusqueda>();
+    const leche = new Subject<BusquedaProductos>();
+    const pan = new Subject<BusquedaProductos>();
     buscar.mockReturnValueOnce(leche).mockReturnValueOnce(pan);
 
     page.buscar('leche');
@@ -214,7 +224,7 @@ describe('BusquedaPage', () => {
   });
 
   it('ignora "Cargar más" de una consulta que el usuario ya cambió', () => {
-    const masLeche = new Subject<RespuestaBusqueda>();
+    const masLeche = new Subject<BusquedaProductos>();
     buscar
       .mockReturnValueOnce(of(respuesta(rango(1, 20), 25)))
       .mockReturnValueOnce(masLeche)
@@ -226,5 +236,59 @@ describe('BusquedaPage', () => {
     masLeche.next(respuesta(rango(21, 25), 25));
 
     expect(textos('ion-item h2')).toEqual(['Pan integral']);
+  });
+
+  describe('aviso de respaldo', () => {
+    const AVISO =
+      'El servicio de búsqueda no está disponible; mostrando productos guardados anteriormente.';
+
+    function aviso(): string[] {
+      return textos('.aviso-respaldo[role="status"]').map((t) => t.replace(/\s+/g, ' '));
+    }
+
+    it('lo muestra si los resultados vienen del respaldo', () => {
+      buscar.mockReturnValue(of(respuesta(rango(1, 3), 3, 'leche', true)));
+
+      page.buscar('leche');
+
+      expect(aviso()).toEqual([AVISO]);
+      expect(elemento().querySelectorAll('ion-item')).toHaveLength(3);
+    });
+
+    it('no lo muestra si los resultados vienen de FastAPI', () => {
+      buscar.mockReturnValue(of(respuesta(rango(1, 3))));
+
+      page.buscar('leche');
+
+      expect(aviso()).toEqual([]);
+    });
+
+    it('lo muestra si "Cargar más" vino del respaldo y lo mantiene', () => {
+      buscar
+        .mockReturnValueOnce(of(respuesta(rango(1, 20), 45)))
+        .mockReturnValueOnce(of(respuesta(rango(21, 40), 45, 'leche', true)))
+        .mockReturnValueOnce(of(respuesta(rango(41, 45), 45)));
+
+      page.buscar('leche');
+      expect(aviso()).toEqual([]);
+
+      page.cargarMas();
+      expect(aviso()).toEqual([AVISO]);
+
+      page.cargarMas();
+      expect(aviso()).toEqual([AVISO]);
+    });
+
+    it('lo quita con una búsqueda nueva que viene de FastAPI', () => {
+      buscar
+        .mockReturnValueOnce(of(respuesta(rango(1, 3), 3, 'leche', true)))
+        .mockReturnValueOnce(of(respuesta(rango(1, 2), 2, 'pan')));
+
+      page.buscar('leche');
+      expect(aviso()).toEqual([AVISO]);
+
+      page.buscar('pan');
+      expect(aviso()).toEqual([]);
+    });
   });
 });

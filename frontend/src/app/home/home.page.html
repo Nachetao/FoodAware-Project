@@ -16,14 +16,14 @@
 
     <!-- Nombre del producto -->
     <ion-item>
-      <ion-label position="floating">Nombre del Producto</ion-label>
-      <ion-input [(ngModel)]="productoNombre" type="text" placeholder="Ej. Barrita energética"></ion-input>
+      <ion-input [(ngModel)]="productoNombre" type="text" label="Nombre del Producto"
+        labelPlacement="floating" placeholder="Ej. Barrita energética"></ion-input>
     </ion-item>
 
     <!-- Ingredientes -->
     <ion-item>
-      <ion-label position="floating">Ingredientes (separados por coma)</ion-label>
-      <ion-textarea [(ngModel)]="ingredientesTexto" placeholder="Ej. avena, maní, azúcar, miel" rows="3"></ion-textarea>
+      <ion-textarea [(ngModel)]="ingredientesTexto" label="Ingredientes (separados por coma)"
+        labelPlacement="floating" placeholder="Ej. avena, maní, azúcar, miel" rows="3"></ion-textarea>
     </ion-item>
 
     <!-- Botón analizar -->
@@ -57,34 +57,34 @@
             <ion-item>
               <ion-icon [name]="resultado.aptoParaConsumo ? 'checkmark-circle' : 'close-circle'" slot="start"
               [color]="resultado.aptoParaConsumo ? 'success' : 'danger'"></ion-icon>
-              <ion-label>
+              <div class="texto-resultado">
                 <strong>Apto para consumo:</strong> {{ resultado.aptoParaConsumo ? 'Sí' : 'No' }}
-              </ion-label>
+              </div>
             </ion-item>
             <ion-item>
               <ion-icon [name]="resultado.esNutricionalmenteSaludable ? 'heart-circle' : 'heart-dislike'"
                 slot="start"
               [color]="resultado.esNutricionalmenteSaludable ? 'success' : 'warning'"></ion-icon>
-              <ion-label>
+              <div class="texto-resultado">
                 <strong>Saludable:</strong> {{ resultado.esNutricionalmenteSaludable ? 'Sí' : 'No' }}
-              </ion-label>
+              </div>
             </ion-item>
             @if (resultado.alergenosPresentes?.length > 0) {
               <ion-item>
                 <ion-icon name="warning" slot="start" color="warning"></ion-icon>
-                <ion-label class="ion-text-wrap">
+                <div class="texto-resultado">
                   <strong>Alérgenos detectados:</strong><br>
                   {{ resultado.alergenosPresentes.join(', ') }}
-                </ion-label>
+                </div>
               </ion-item>
             }
             @if (resultado.ingredientes?.length > 0) {
               <ion-item>
                 <ion-icon name="list" slot="start" color="medium"></ion-icon>
-                <ion-label class="ion-text-wrap">
+                <div class="texto-resultado">
                   <strong>Ingredientes:</strong><br>
                   {{ resultado.ingredientes.join(', ') }}
-                </ion-label>
+                </div>
               </ion-item>
             }
           </ion-list>

@@ -37,7 +37,11 @@ function crearProducto(
 describe("ProductsRepository", () => {
   let repository: ProductsRepository;
   let qb: Record<string, jest.Mock | string | ((n: string) => string)>;
-  let typeormRepository: { createQueryBuilder: jest.Mock; metadata: object };
+  let typeormRepository: {
+    createQueryBuilder: jest.Mock;
+    query: jest.Mock;
+    metadata: object;
+  };
 
   beforeEach(async () => {
     qb = { alias: "Product", escape: (nombre: string) => `"${nombre}"` };
@@ -48,6 +52,7 @@ describe("ProductsRepository", () => {
 
     typeormRepository = {
       createQueryBuilder: jest.fn().mockReturnValue(qb),
+      query: jest.fn(),
       metadata: {
         columns: [
           { databaseName: "codigo_barras", isPrimary: true },
@@ -145,5 +150,130 @@ describe("ProductsRepository", () => {
     await expect(
       repository.guardar([crearProducto("7801234000018")]),
     ).rejects.toThrow("conexión perdida");
+  });
+
+  describe("buscarRespaldo", () => {
+    // Fila tal como la devuelve pg: fechas como Date y score de la consulta.
+    function filaGuardada(codigo_barras: string, score: number) {
+      return {
+        codigo_barras,
+        nombre: "Leche semidescremada",
+        marca: "Colun",
+        cantidad: "1 L",
+        ingredientes_texto: "Leche, vitaminas A, D3.",
+        ingredientes: ["leche", "vitaminas A, D3"],
+        alergenos: ["lacteos"],
+        trazas: [],
+        etiquetas_dieta: [],
+        nutriscore: null,
+        imagen_url: null,
+        fuente: "openfoodfacts",
+        url_fuente: `https://world.openfoodfacts.org/product/${codigo_barras}`,
+        recuperado_en: new Date("2026-10-20T14:30:00.000Z"),
+        modificado_en_fuente: null,
+        run_id: "3f2b8c1e-9d4a-4e7b-8a6f-1c2d3e4f5a6b",
+        hash_contenido: "a".repeat(64),
+        es_valido: true,
+        problemas: [],
+        completitud: 0.8,
+        creado_en: new Date(),
+        actualizado_en: new Date(),
+        score,
+      };
+    }
+
+    it("cuenta y pagina con los tokens normalizados de la consulta", async () => {
+      typeormRepository.query
+        .mockResolvedValueOnce([{ total: 37 }])
+        .mockResolvedValueOnce([filaGuardada("7801234000018", 6)]);
+
+      await repository.buscarRespaldo({
+        q: "Galletas de AVENA",
+        limit: 20,
+        offset: 40,
+      });
+
+      const [[sqlTotal, paramsTotal], [sqlPagina, paramsPagina]] =
+        typeormRepository.query.mock.calls;
+      expect(sqlTotal).toContain("count(*)");
+      expect(paramsTotal).toEqual([["galleta", "avena"]]);
+      expect(sqlPagina).toContain("LIMIT $2 OFFSET $3");
+      expect(paramsPagina).toEqual([["galleta", "avena"], 20, 40]);
+    });
+
+    it("devuelve los productos con la forma del contrato, el score y la posición global", async () => {
+      typeormRepository.query
+        .mockResolvedValueOnce([{ total: 37 }])
+        .mockResolvedValueOnce([
+          filaGuardada("7801234000018", 6),
+          filaGuardada("7805678000023", 3),
+        ]);
+
+      const { total, resultados } = await repository.buscarRespaldo({
+        q: "leche",
+        limit: 20,
+        offset: 20,
+      });
+
+      expect(total).toBe(37);
+      expect(resultados.map((r) => [r.posicion, r.score])).toEqual([
+        [21, 6],
+        [22, 3],
+      ]);
+      expect(resultados[0].producto).toEqual({
+        codigo_barras: "7801234000018",
+        nombre: "Leche semidescremada",
+        marca: "Colun",
+        cantidad: "1 L",
+        ingredientes_texto: "Leche, vitaminas A, D3.",
+        ingredientes: ["leche", "vitaminas A, D3"],
+        alergenos: ["lacteos"],
+        trazas: [],
+        etiquetas_dieta: [],
+        nutriscore: null,
+        imagen_url: null,
+        procedencia: {
+          fuente: "openfoodfacts",
+          url_fuente: "https://world.openfoodfacts.org/product/7801234000018",
+          recuperado_en: "2026-10-20T14:30:00Z",
+          modificado_en_fuente: null,
+          run_id: "3f2b8c1e-9d4a-4e7b-8a6f-1c2d3e4f5a6b",
+          hash_contenido: "a".repeat(64),
+        },
+        calidad: { es_valido: true, problemas: [], completitud: 0.8 },
+      });
+    });
+
+    it("no pide la página si no hay coincidencias", async () => {
+      typeormRepository.query.mockResolvedValueOnce([{ total: 0 }]);
+
+      const resultado = await repository.buscarRespaldo({
+        q: "zzzz",
+        limit: 20,
+        offset: 0,
+      });
+
+      expect(resultado).toEqual({ total: 0, resultados: [] });
+      expect(typeormRepository.query).toHaveBeenCalledTimes(1);
+    });
+
+    it("no consulta la base si la consulta no tiene tokens útiles", async () => {
+      const resultado = await repository.buscarRespaldo({
+        q: "de la",
+        limit: 20,
+        offset: 0,
+      });
+
+      expect(resultado).toEqual({ total: 0, resultados: [] });
+      expect(typeormRepository.query).not.toHaveBeenCalled();
+    });
+
+    it("propaga el error si falla la consulta", async () => {
+      typeormRepository.query.mockRejectedValue(new Error("conexión perdida"));
+
+      await expect(
+        repository.buscarRespaldo({ q: "leche", limit: 20, offset: 0 }),
+      ).rejects.toThrow("conexión perdida");
+    });
   });
 });

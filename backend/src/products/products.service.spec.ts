@@ -4,7 +4,7 @@ import { ProductsService } from "./products.service";
 import { FastApiClientService } from "./fastapi-client.service";
 import { ProductsRepository } from "./products.repository";
 import { ContratoHttpException } from "./contrato-http.exception";
-import { RespuestaBusqueda } from "./contrato/busqueda";
+import { RespuestaBusqueda, ResultadoBusqueda } from "./contrato/busqueda";
 import { CodigoError } from "./contrato/enums";
 import { Producto } from "./contrato/producto";
 
@@ -25,17 +25,37 @@ const respuestaBusqueda: RespuestaBusqueda = {
   ],
 };
 
+const resultadosRespaldo: ResultadoBusqueda[] = [
+  { producto: leche, score: 3, posicion: 1 },
+];
+
+function errorFastApi(status: number, codigo: CodigoError) {
+  return ContratoHttpException.crear(
+    status,
+    codigo,
+    "Error de FastAPI",
+    REQUEST_ID,
+  );
+}
+
 describe("ProductsService", () => {
   let service: ProductsService;
   let fastApiClient: { buscar: jest.Mock };
-  let productsRepository: { guardar: jest.Mock };
+  let productsRepository: { guardar: jest.Mock; buscarRespaldo: jest.Mock };
+  let logWarn: jest.SpyInstance;
   let logError: jest.SpyInstance;
 
   beforeEach(async () => {
     fastApiClient = {
       buscar: jest.fn().mockResolvedValue(respuestaBusqueda),
     };
-    productsRepository = { guardar: jest.fn().mockResolvedValue(undefined) };
+    productsRepository = {
+      guardar: jest.fn().mockResolvedValue(undefined),
+      buscarRespaldo: jest
+        .fn()
+        .mockResolvedValue({ total: 7, resultados: resultadosRespaldo }),
+    };
+    logWarn = jest.spyOn(Logger.prototype, "warn").mockImplementation();
     logError = jest.spyOn(Logger.prototype, "error").mockImplementation();
 
     const module = await Test.createTestingModule({
@@ -51,35 +71,120 @@ describe("ProductsService", () => {
 
   afterEach(() => jest.restoreAllMocks());
 
-  it("busca en FastAPI y guarda los productos de los resultados", async () => {
-    const respuesta = await service.buscar(PARAMETROS, REQUEST_ID);
+  describe("con FastAPI disponible", () => {
+    it("busca en FastAPI y guarda los productos de los resultados", async () => {
+      const resultado = await service.buscar(PARAMETROS, REQUEST_ID);
 
-    expect(fastApiClient.buscar).toHaveBeenCalledWith(PARAMETROS, REQUEST_ID);
-    expect(productsRepository.guardar).toHaveBeenCalledWith([leche, pan]);
-    expect(respuesta).toBe(respuestaBusqueda);
+      expect(fastApiClient.buscar).toHaveBeenCalledWith(PARAMETROS, REQUEST_ID);
+      expect(productsRepository.guardar).toHaveBeenCalledWith([leche, pan]);
+      expect(resultado).toEqual({
+        respuesta: respuestaBusqueda,
+        fuente: "fastapi",
+      });
+      expect(productsRepository.buscarRespaldo).not.toHaveBeenCalled();
+    });
+
+    it("devuelve igual los resultados y registra el error si el guardado falla", async () => {
+      productsRepository.guardar.mockRejectedValue(
+        new Error("conexión perdida"),
+      );
+
+      const resultado = await service.buscar(PARAMETROS, REQUEST_ID);
+
+      expect(resultado.respuesta).toBe(respuestaBusqueda);
+      expect(logError).toHaveBeenCalledWith(
+        "[prueba-123] No se pudieron guardar 2 productos: conexión perdida",
+      );
+    });
   });
 
-  it("devuelve igual los resultados y registra el error si el guardado falla", async () => {
-    productsRepository.guardar.mockRejectedValue(new Error("conexión perdida"));
+  describe("respaldo desde la base", () => {
+    it.each([
+      [500, CodigoError.INTERNAL_ERROR],
+      [502, CodigoError.INTERNAL_ERROR],
+      [503, CodigoError.SOURCE_UNAVAILABLE],
+      [504, CodigoError.SOURCE_TIMEOUT],
+    ])(
+      "responde desde la base si FastAPI falla con %i",
+      async (status, codigo) => {
+        fastApiClient.buscar.mockRejectedValue(errorFastApi(status, codigo));
 
-    const respuesta = await service.buscar(PARAMETROS, REQUEST_ID);
+        const { respuesta, fuente } = await service.buscar(
+          PARAMETROS,
+          REQUEST_ID,
+        );
 
-    expect(respuesta).toBe(respuestaBusqueda);
-    expect(logError).toHaveBeenCalledWith(
-      "[prueba-123] No se pudieron guardar 2 productos: conexión perdida",
+        expect(fuente).toBe("respaldo");
+        expect(productsRepository.buscarRespaldo).toHaveBeenCalledWith(
+          PARAMETROS,
+        );
+        expect(respuesta).toEqual({
+          consulta: "leche",
+          total: 7,
+          tiempo_ms: expect.any(Number),
+          resultados: resultadosRespaldo,
+          estado_fuente: "cache",
+        });
+        expect(logWarn).toHaveBeenCalledWith(
+          `[prueba-123] FastAPI falló con ${status} ${codigo}; respondiendo desde la base: 1 de 7 productos`,
+        );
+      },
     );
-  });
 
-  it("no guarda nada y propaga el error si FastAPI falla", async () => {
-    const error = ContratoHttpException.crear(
-      503,
-      CodigoError.SOURCE_UNAVAILABLE,
-      "El servicio de búsqueda no está disponible",
-      REQUEST_ID,
-    );
-    fastApiClient.buscar.mockRejectedValue(error);
+    it("no vuelve a guardar los productos que vienen de la base", async () => {
+      fastApiClient.buscar.mockRejectedValue(
+        errorFastApi(503, CodigoError.SOURCE_UNAVAILABLE),
+      );
 
-    await expect(service.buscar(PARAMETROS, REQUEST_ID)).rejects.toBe(error);
-    expect(productsRepository.guardar).not.toHaveBeenCalled();
+      await service.buscar(PARAMETROS, REQUEST_ID);
+
+      expect(productsRepository.guardar).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      [422, CodigoError.VALIDATION_ERROR],
+      [404, CodigoError.NOT_FOUND],
+    ])("no usa el respaldo ante un %i", async (status, codigo) => {
+      const error = errorFastApi(status, codigo);
+      fastApiClient.buscar.mockRejectedValue(error);
+
+      await expect(service.buscar(PARAMETROS, REQUEST_ID)).rejects.toBe(error);
+      expect(productsRepository.buscarRespaldo).not.toHaveBeenCalled();
+    });
+
+    it("no usa el respaldo ante un error que no es del contrato", async () => {
+      const error = new Error("inesperado");
+      fastApiClient.buscar.mockRejectedValue(error);
+
+      await expect(service.buscar(PARAMETROS, REQUEST_ID)).rejects.toBe(error);
+      expect(productsRepository.buscarRespaldo).not.toHaveBeenCalled();
+    });
+
+    it("mantiene el error original si la base no tiene resultados", async () => {
+      const error = errorFastApi(504, CodigoError.SOURCE_TIMEOUT);
+      fastApiClient.buscar.mockRejectedValue(error);
+      productsRepository.buscarRespaldo.mockResolvedValue({
+        total: 0,
+        resultados: [],
+      });
+
+      await expect(service.buscar(PARAMETROS, REQUEST_ID)).rejects.toBe(error);
+      expect(logWarn).toHaveBeenCalledWith(
+        "[prueba-123] FastAPI falló con 504 SOURCE_TIMEOUT y el respaldo no tiene resultados; se mantiene el error",
+      );
+    });
+
+    it("mantiene el error original si la base también falla", async () => {
+      const error = errorFastApi(503, CodigoError.SOURCE_UNAVAILABLE);
+      fastApiClient.buscar.mockRejectedValue(error);
+      productsRepository.buscarRespaldo.mockRejectedValue(
+        new Error("conexión perdida"),
+      );
+
+      await expect(service.buscar(PARAMETROS, REQUEST_ID)).rejects.toBe(error);
+      expect(logError).toHaveBeenCalledWith(
+        "[prueba-123] FastAPI falló con 503 SOURCE_UNAVAILABLE y el respaldo también falló: conexión perdida",
+      );
+    });
   });
 });

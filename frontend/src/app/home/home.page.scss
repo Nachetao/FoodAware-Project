@@ -13,4 +13,10 @@
     --background: transparent;
     --padding-start: 0;
   }
+
+  // Reemplaza a ion-label (evita el polyfill de slots de Stencil).
+  .texto-resultado {
+    flex: 1;
+    margin: 12px 0;
+  }
 }
