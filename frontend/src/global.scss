@@ -11,4 +11,56 @@
 @import "@ionic/angular/css/text-transformation.css";
 @import "@ionic/angular/css/flex-utils.css";
 
-@import "@ionic/angular/css/palettes/dark.system.css";
+// Sin palettes/dark.system.css: el tema es solo claro (ver theme/variables.scss).
+
+// Inter variable empaquetada con la app: funciona sin conexión.
+@import "@fontsource-variable/inter/index.css";
+
+// Escala tipográfica para pantallas chicas.
+body {
+  font-size: 16px;
+  line-height: 1.25;
+}
+
+h1 {
+  font-size: 24px;
+  line-height: 1.2;
+}
+
+h2 {
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+h3 {
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+ion-title {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+// Botones tipo píldora, sin mayúsculas forzadas.
+ion-button {
+  --border-radius: var(--app-radio-pildora);
+  text-transform: none;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+// Tarjetas planas, sin sombras.
+ion-card {
+  border-radius: var(--app-radio-tarjeta);
+  box-shadow: none;
+}
+
+// Imágenes con bordes redondeados.
+ion-thumbnail {
+  --border-radius: var(--app-radio-imagen);
+
+  img {
+    object-fit: cover;
+  }
+}
