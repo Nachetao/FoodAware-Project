@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { APP_INTERCEPTOR } from "@nestjs/core";
 import { HttpModule } from "@nestjs/axios";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { ConfigModule, ConfigService } from "@nestjs/config";
@@ -12,6 +13,7 @@ import { ProductsModule } from "./products/products.module";
 import { SaludModule } from "./salud/salud.module";
 import { LoggerModule } from "nestjs-pino";
 import { configuracionLogger } from "./observabilidad/logger.config";
+import { TiempoRespuestaInterceptor } from "./observabilidad/tiempo-respuesta.interceptor";
 
 @Module({
   imports: [
@@ -45,6 +47,10 @@ import { configuracionLogger } from "./observabilidad/logger.config";
     SaludModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    // Header X-Response-Time-ms y log de acceso en todas las rutas.
+    { provide: APP_INTERCEPTOR, useClass: TiempoRespuestaInterceptor },
+  ],
 })
 export class AppModule {}
