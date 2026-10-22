@@ -24,4 +24,46 @@ describe('HomePage', () => {
   it('should create', () => {
     expect(component).toBeTruthy();
   });
+
+  describe('botón "Analizar"', () => {
+    // Simula lo que hace Ionic al escribir: actualiza value y emite ionInput.
+    function escribir(selector: string, texto: string) {
+      const el = fixture.nativeElement.querySelector(selector) as HTMLElement & { value: string };
+      el.value = texto;
+      el.dispatchEvent(new CustomEvent('ionInput', { detail: { value: texto } }));
+    }
+
+    function botonAnalizar(): HTMLElement & { disabled: boolean } {
+      return fixture.nativeElement.querySelector('ion-button.ion-margin-top');
+    }
+
+    it('empieza deshabilitado', async () => {
+      await fixture.whenStable();
+      expect(botonAnalizar().disabled).toBe(true);
+    });
+
+    it('se habilita al escribir en ambos campos, sin detectChanges manual', async () => {
+      escribir('ion-input', 'Barrita energética');
+      await fixture.whenStable();
+      expect(component.productoNombre).toBe('Barrita energética');
+      expect(botonAnalizar().disabled).toBe(true);
+
+      escribir('ion-textarea', 'avena, maní');
+      await fixture.whenStable();
+
+      expect(component.ingredientesTexto).toBe('avena, maní');
+      expect(botonAnalizar().disabled).toBe(false);
+    });
+
+    it('vuelve a deshabilitarse si un campo queda solo con espacios', async () => {
+      escribir('ion-input', 'Barrita');
+      escribir('ion-textarea', 'avena');
+      await fixture.whenStable();
+
+      escribir('ion-textarea', '   ');
+      await fixture.whenStable();
+
+      expect(botonAnalizar().disabled).toBe(true);
+    });
+  });
 });
