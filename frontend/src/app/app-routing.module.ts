@@ -7,6 +7,10 @@ const routes: Routes = [
     loadChildren: () => import('./home/home.module').then( m => m.HomePageModule)
   },
   {
+    path: 'busqueda',
+    loadChildren: () => import('./busqueda/busqueda.module').then( m => m.BusquedaPageModule)
+  },
+  {
     path: '',
     redirectTo: 'home',
     pathMatch: 'full'
