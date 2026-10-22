@@ -1,2 +1,99 @@
-// For information on how to create your own theme, please refer to:
-// https://ionicframework.com/docs/theming/
+// Tema de FoodAware sobre las variables de Ionic.
+// Documentación: https://ionicframework.com/docs/theming/
+// Los shade/tint siguen la fórmula del generador de colores de Ionic
+// (shade: 12 % hacia negro; tint: 10 % hacia blanco).
+
+:root {
+  // Principal: verde bosque. Botones por defecto, enlaces y foco.
+  --ion-color-primary: #00473c;
+  --ion-color-primary-rgb: 0, 71, 60;
+  --ion-color-primary-contrast: #ffffff;
+  --ion-color-primary-contrast-rgb: 255, 255, 255;
+  --ion-color-primary-shade: #003e35;
+  --ion-color-primary-tint: #1a5950;
+
+  // Lima: SOLO para el relleno del botón principal (color="secondary",
+  // fill="solid"), siempre con texto oscuro. Nunca como color de texto
+  // sobre fondo claro: no tiene contraste suficiente.
+  --ion-color-secondary: #e6ff55;
+  --ion-color-secondary-rgb: 230, 255, 85;
+  --ion-color-secondary-contrast: #0e150e;
+  --ion-color-secondary-contrast-rgb: 14, 21, 14;
+  --ion-color-secondary-shade: #cae04b;
+  --ion-color-secondary-tint: #e9ff66;
+
+  // Salvia: superficie alternativa.
+  --ion-color-tertiary: #d8e5d6;
+  --ion-color-tertiary-rgb: 216, 229, 214;
+  --ion-color-tertiary-contrast: #0e150e;
+  --ion-color-tertiary-contrast-rgb: 14, 21, 14;
+  --ion-color-tertiary-shade: #becabc;
+  --ion-color-tertiary-tint: #dce8da;
+
+  --ion-color-success: #1e7a46;
+  --ion-color-success-rgb: 30, 122, 70;
+  --ion-color-success-contrast: #ffffff;
+  --ion-color-success-contrast-rgb: 255, 255, 255;
+  --ion-color-success-shade: #1a6b3e;
+  --ion-color-success-tint: #358759;
+
+  // Ámbar: advertencias de salud (alérgenos). 4.6:1 como texto sobre el fondo.
+  --ion-color-warning: #b45309;
+  --ion-color-warning-rgb: 180, 83, 9;
+  --ion-color-warning-contrast: #ffffff;
+  --ion-color-warning-contrast-rgb: 255, 255, 255;
+  --ion-color-warning-shade: #9e4908;
+  --ion-color-warning-tint: #bc6422;
+
+  --ion-color-danger: #b3261e;
+  --ion-color-danger-rgb: 179, 38, 30;
+  --ion-color-danger-contrast: #ffffff;
+  --ion-color-danger-contrast-rgb: 255, 255, 255;
+  --ion-color-danger-shade: #9e211a;
+  --ion-color-danger-tint: #bb3c35;
+
+  // Texto secundario: 6.7:1 sobre el fondo crema.
+  --ion-color-medium: #555555;
+  --ion-color-medium-rgb: 85, 85, 85;
+  --ion-color-medium-contrast: #ffffff;
+  --ion-color-medium-contrast-rgb: 255, 255, 255;
+  --ion-color-medium-shade: #4b4b4b;
+  --ion-color-medium-tint: #666666;
+
+  --ion-color-dark: #0e150e;
+  --ion-color-dark-rgb: 14, 21, 14;
+  --ion-color-dark-contrast: #ffffff;
+  --ion-color-dark-contrast-rgb: 255, 255, 255;
+  --ion-color-dark-shade: #0c120c;
+  --ion-color-dark-tint: #262c26;
+
+  // Base de la aplicación.
+  --ion-background-color: #f4f3e7;
+  --ion-background-color-rgb: 244, 243, 231;
+  --ion-text-color: #0e150e;
+  --ion-text-color-rgb: 14, 21, 14;
+  --ion-toolbar-background: #f4f3e7;
+  --ion-toolbar-color: #00473c;
+  --ion-item-background: #f4f3e7;
+  --ion-card-background: #d8e5d6;
+  --ion-border-color: rgba(14, 21, 14, 0.12);
+  --ion-font-family: "Inter Variable", "Inter", system-ui, -apple-system,
+    "Segoe UI", Roboto, sans-serif;
+
+  // Tokens propios. Espaciado en múltiplos de 4 px.
+  --app-espacio-1: 4px;
+  --app-espacio-2: 8px;
+  --app-espacio-3: 12px;
+  --app-espacio-4: 16px;
+  --app-espacio-5: 20px;
+  --app-espacio-6: 24px;
+
+  --app-radio-imagen: 20px;
+  --app-radio-tarjeta: 24px;
+  --app-radio-pildora: 9999px;
+
+  // Alertas de salud (chips de alérgenos): 7.8:1 de contraste.
+  --app-alerta-fondo: #fde7c7;
+  --app-alerta-texto: #7c2d12;
+  --app-alerta-borde: #b45309;
+}

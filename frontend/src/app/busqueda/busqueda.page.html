@@ -1,0 +1,94 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-buttons slot="start">
+      <ion-back-button defaultHref="/home" text=""></ion-back-button>
+    </ion-buttons>
+    <ion-title>Buscar productos</ion-title>
+  </ion-toolbar>
+  <ion-toolbar>
+    <ion-searchbar
+      placeholder="Ej. leche, galletas de avena"
+      inputmode="search"
+      [debounce]="400"
+      (ionInput)="buscar($event.detail.value ?? '')"
+    ></ion-searchbar>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="ion-padding">
+  <div class="contenedor">
+    @if (cargando()) {
+      <div class="estado">
+        <ion-spinner name="crescent" aria-label="Buscando productos"></ion-spinner>
+      </div>
+    } @else if (buscado() && total() > 0) {
+      <p class="total">
+        {{ total() }} {{ total() === 1 ? 'resultado' : 'resultados' }} para «{{ consulta() }}»
+      </p>
+
+      <ion-list lines="full">
+        @for (resultado of resultados(); track resultado.producto.codigo_barras) {
+          @let producto = resultado.producto;
+          <ion-item>
+            <ion-thumbnail slot="start">
+              @if (producto.imagen_url) {
+                <img [src]="producto.imagen_url" alt="" loading="lazy" />
+              } @else {
+                <div class="sin-imagen">
+                  <ion-icon name="image-outline" aria-hidden="true"></ion-icon>
+                </div>
+              }
+            </ion-thumbnail>
+            <ion-label class="ion-text-wrap">
+              <h2>{{ producto.nombre }}</h2>
+              @if (producto.marca) {
+                <p class="marca">{{ producto.marca }}</p>
+              }
+              @if (producto.alergenos.length > 0) {
+                <div class="alergenos" aria-label="Alérgenos">
+                  @for (codigo of producto.alergenos; track codigo) {
+                    <ion-chip class="chip-alergeno">
+                      <ion-icon name="warning-outline" aria-hidden="true"></ion-icon>
+                      <ion-label>{{ etiquetaAlergeno(codigo) }}</ion-label>
+                    </ion-chip>
+                  }
+                </div>
+              }
+            </ion-label>
+          </ion-item>
+        }
+      </ion-list>
+
+      <!-- Si falla "Cargar más", se conservan los resultados y el botón sirve para reintentar. -->
+      @if (error(); as mensaje) {
+        <ion-text color="danger">
+          <p class="error" role="alert">{{ mensaje }}</p>
+        </ion-text>
+      }
+
+      @if (hayMas()) {
+        <ion-button
+          class="cargar-mas"
+          color="secondary"
+          expand="block"
+          [disabled]="cargandoMas()"
+          (click)="cargarMas()"
+        >
+          @if (cargandoMas()) {
+            <ion-spinner name="crescent" aria-label="Cargando más productos"></ion-spinner>
+          } @else {
+            Cargar más ({{ resultados().length }} de {{ total() }})
+          }
+        </ion-button>
+      }
+    } @else if (buscado()) {
+      <p class="estado">No se encontraron productos para «{{ consulta() }}».</p>
+    } @else if (error(); as mensaje) {
+      <ion-text color="danger">
+        <p class="error" role="alert">{{ mensaje }}</p>
+      </ion-text>
+    } @else {
+      <p class="estado">Escribe al menos {{ minCaracteres }} caracteres para buscar.</p>
+    }
+  </div>
+</ion-content>
