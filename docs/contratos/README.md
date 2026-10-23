@@ -231,11 +231,21 @@ Etiquetas de dieta (`DietLabel`): `vegano`, `vegetariano`, `sin_gluten`, `sin_la
 
 `alergenos` y `trazas` son la unión de las etiquetas de Open Food Facts y de lo
 detectado en el texto de ingredientes (sinónimos en español e inglés, con
-excepciones como "leche de coco" o "manteca de cacao" y negaciones como "sin
-gluten"). Lo que sigue a "puede contener", "trazas de" o "elaborado en una línea
-que procesa" va a `trazas`. Ante la duda se marca el alérgeno. Lo detectado
+excepciones como "leche de coco" o "manteca de cacao", nombres de sabor como
+"sabor leche" y negaciones como "sin gluten"). El nombre y la marca del producto
+no se revisan. Lo que sigue a "puede contener", "trazas de" o "elaborado en una
+línea que procesa" va a `trazas`. Ante la duda se marca el alérgeno. Lo detectado
 solo en el texto queda en `calidad.problemas` como
 `alergeno_detectado_en_texto:<código>` o `traza_detectada_en_texto:<código>`.
+
+**Limitación conocida: la negación no pasa de la primera coma.** Cada
+ingrediente se revisa por separado, así que en "El producto es libre de leche,
+lactosa, caseína, gluten y transgénicos" solo se descarta "leche"; "lactosa",
+"caseína" y "gluten" se marcan como alérgenos (falso positivo, visto en el
+producto 10248188). No se corrige a propósito: extender la negación a toda la
+enumeración crearía falsos negativos en textos como "cacao sin azúcar, leche",
+donde la leche sí es un ingrediente. Un falso negativo puede exponer a una
+persona alérgica; un falso positivo solo oculta un producto apto.
 
 ## Calidad (`calidad`)
 

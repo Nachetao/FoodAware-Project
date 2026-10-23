@@ -2,8 +2,12 @@
 
 Se busca por palabras completas y frases sobre el texto normalizado. Ante
 la duda se marca: un falso negativo es mucho más grave que un falso
-positivo, así que solo se descartan los casos claros (EXCEPCIONES y
-negaciones como "sin gluten" o "libre de lactosa").
+positivo, así que solo se descartan los casos claros (EXCEPCIONES, nombres
+de sabores como "sabor leche" y negaciones como "sin gluten", "libre de
+lactosa" o la marca "Not Milk").
+
+Solo se revisa el texto de ingredientes: el nombre y la marca del producto
+nunca se pasan a estas funciones.
 """
 import re
 from dataclasses import dataclass
@@ -14,6 +18,7 @@ from app.procesamiento.sinonimos_alergenos import (
     EXCEPCIONES,
     FRASES_TRAZAS,
     POSIBLES,
+    SABORES,
     SINONIMOS,
 )
 from app.procesamiento.texto import normalizar
@@ -33,16 +38,36 @@ def _patron(frases: Iterable[str]) -> Optional[Pattern[str]]:
     return re.compile(rf"(?=((?<![a-z0-9])(?:{alternativas})(?![a-z0-9])))")
 
 
+def _patron_sabor(terminos: Iterable[str]) -> Optional[Pattern[str]]:
+    """Regex del nombre de un sabor, con varios términos coordinados:
+    "sabor a leche y crema", "milk and cream flavour"."""
+    normalizados = sorted({normalizar(t) for t in terminos} - {""},
+                          key=len, reverse=True)
+    if not normalizados:
+        return None
+    termino = "(?:" + "|".join(re.escape(t) for t in normalizados) + ")"
+    varios = rf"{termino}(?: (?:y|e|and) {termino})*"
+    # "sabores" y "flavors" ya quedaron en singular; "flavour" no.
+    return re.compile(
+        rf"(?=((?<![a-z0-9])(?:sabor(?: a)? {varios}|{varios} "
+        rf"flavou?rs?)(?![a-z0-9])))"
+    )
+
+
 _TERMINOS = {codigo: _patron(SINONIMOS[codigo]) for codigo in AllergenCode}
 _EXCEPCIONES = {
     codigo: _patron(EXCEPCIONES.get(codigo, ())) for codigo in AllergenCode
 }
+_SABORES = {
+    codigo: _patron_sabor(SABORES.get(codigo, ())) for codigo in AllergenCode
+}
 _POSIBLES = {codigo: _patron(frases) for codigo, frases in POSIBLES.items()}
 _TRAZAS = _patron(FRASES_TRAZAS)
-# Sobre texto normalizado: "libres" ya quedó como "libre".
+# Sobre texto normalizado: "libres" ya quedó como "libre". "not" cubre
+# marcas como "Not Milk" cuando aparecen en el texto de ingredientes.
 _NEGACION_PREVIA = re.compile(
     r"(?:^|\s)(?:sin|ni|libre de|exento de|exenta de|no contiene|"
-    r"no contienen|free from|free of)(?: traza de)?\s$"
+    r"no contienen|free from|free of|not)(?: traza de)?\s$"
 )
 _NEGACION_POSTERIOR = re.compile(r"^\sfree\b")
 
@@ -97,7 +122,7 @@ def alergenos_en_etiqueta(etiqueta: str) -> List[AllergenCode]:
 
 def _coincidencias(plano: str) -> List[Tuple[AllergenCode, int]]:
     """(código, posición) de cada sinónimo que no está negado ni dentro de
-    una excepción."""
+    una excepción o del nombre de un sabor."""
     encontradas: List[Tuple[AllergenCode, int]] = []
     for codigo in AllergenCode:
         tramos = _tramos(_TERMINOS[codigo], plano)
@@ -107,6 +132,7 @@ def _coincidencias(plano: str) -> List[Tuple[AllergenCode, int]]:
         # de trigo" se descarta "trigo", no solo "harina de trigo".
         descartados = [t for t in tramos if _negado(plano, t)]
         descartados += _tramos(_EXCEPCIONES[codigo], plano)
+        descartados += _tramos(_SABORES[codigo], plano)
         encontradas.extend(
             (codigo, inicio) for inicio, fin in tramos
             if not any(a <= inicio and fin <= b for a, b in descartados)

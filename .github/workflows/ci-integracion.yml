@@ -1,0 +1,244 @@
+name: CI Integración (NestJS ↔ FastAPI)
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+# Una ejecución nueva cancela la anterior de la misma rama o PR; en main
+# cada commit termina la suya.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  integracion:
+    name: Aplicación completa con docker compose
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    defaults:
+      run:
+        # Con shell explícito GitHub agrega -o pipefail.
+        shell: bash
+
+    env:
+      BACKEND_URL: http://localhost:3000
+      PYTHON_URL: http://localhost:8000
+      # Las tres galletas de scripts/cargar_fixtures.py.
+      CONSULTA: galletas
+      GALLETAS_ESPERADAS: 7809990000013 7809990000020 7809990000037
+
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v7
+
+      # Lo sensible viene de secrets.* y lo demás de vars.*. Mientras los
+      # secrets no existan se generan valores aleatorios para esta ejecución
+      # (la base de CI es nueva en cada corrida).
+      - name: Generar el .env de CI
+        env:
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          DB_USER: ${{ vars.DB_USER || 'foodaware' }}
+          DB_NAME: ${{ vars.DB_NAME || 'foodaware_db' }}
+          LOG_LEVEL: ${{ vars.LOG_LEVEL || 'INFO' }}
+          OFF_USER_AGENT: ${{ vars.OFF_USER_AGENT || 'FoodAware-CI/1.0 (ci@example.com)' }}
+          PYTHON_API_TIMEOUT_MS: ${{ vars.PYTHON_API_TIMEOUT_MS || '2000' }}
+          PYTHON_API_REINTENTOS: ${{ vars.PYTHON_API_REINTENTOS || '2' }}
+        run: |
+          if [ -z "$DB_PASSWORD" ]; then DB_PASSWORD=$(openssl rand -hex 24); fi
+          if [ -z "$JWT_SECRET" ]; then JWT_SECRET=$(openssl rand -hex 32); fi
+          echo "::add-mask::$DB_PASSWORD"
+          echo "::add-mask::$JWT_SECRET"
+          umask 077
+          # OFF_BASE_URL e INGESTA_AL_INICIAR son fijos: las pruebas nunca
+          # deben llamar a Open Food Facts (.invalid nunca resuelve).
+          cat > .env <<EOF
+          DB_HOST=db
+          DB_PORT=5432
+          DB_USER=$DB_USER
+          DB_PASSWORD=$DB_PASSWORD
+          DB_NAME=$DB_NAME
+          PORT=3000
+          PYTHON_API_URL=http://python-service:8000
+          PYTHON_API_TIMEOUT_MS=$PYTHON_API_TIMEOUT_MS
+          PYTHON_API_REINTENTOS=$PYTHON_API_REINTENTOS
+          LOG_LEVEL=$LOG_LEVEL
+          SIMULAR_ERRORES_HABILITADO=false
+          OFF_BASE_URL=http://off.invalid
+          OFF_USER_AGENT=$OFF_USER_AGENT
+          OFF_TIMEOUT_SEGUNDOS=5
+          LIMITADOR_ESPERA_MAX_SEGUNDOS=3
+          CACHE_DB_PATH=/data/foodaware-cache.sqlite3
+          INGESTA_AL_INICIAR=false
+          INGESTA_INTERVALO_HORAS=24
+          CACHE_TTL_HORAS=72
+          JWT_SECRET=$JWT_SECRET
+          EOF
+          cut -d= -f1 .env | tr '\n' ' '
+
+      - name: Construir imágenes (docker compose build)
+        run: docker compose build
+
+      # Antes de levantar python-service: el índice de búsqueda se arma al
+      # iniciar con lo que haya en la caché.
+      - name: Cargar productos de prueba en la caché
+        run: >-
+          docker compose run --rm -T python-service
+          python scripts/cargar_fixtures.py | tee fixtures.tsv
+
+      - name: Levantar la aplicación y esperar a que esté sana
+        run: |
+          docker compose up --detach --wait --wait-timeout 180
+          docker compose ps
+
+      # Respaldo del healthcheck: las pruebas solo parten cuando el backend
+      # responde.
+      - name: Esperar a que el backend responda /api/health
+        run: |
+          for intento in $(seq 1 60); do
+            if curl -sS --fail --max-time 5 -o /dev/null "$BACKEND_URL/api/health"; then
+              echo "Backend listo (intento $intento)"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::El backend no respondió /api/health en 60 intentos (~2 min)"
+          exit 1
+
+      - name: "Prueba 1: /health de python-service responde ok o degradado"
+        run: |
+          respuesta=$(curl -sS --fail-with-body --max-time 10 "$PYTHON_URL/health")
+          jq . <<<"$respuesta"
+          estado=$(jq -r .estado <<<"$respuesta")
+          if [[ "$estado" != ok && "$estado" != degradado ]]; then
+            echo "::error::python-service respondió estado '$estado'"
+            exit 1
+          fi
+
+      - name: "Prueba 2: /api/health del backend reporta PostgreSQL y FastAPI"
+        run: |
+          respuesta=$(curl -sS --fail-with-body --max-time 10 "$BACKEND_URL/api/health")
+          jq . <<<"$respuesta"
+          if ! jq -e '.dependencias.postgresql == "ok"
+                and (.dependencias.fastapi == "ok"
+                     or .dependencias.fastapi == "degradado")' \
+              <<<"$respuesta" >/dev/null; then
+            echo "::error::El backend no reporta PostgreSQL ok y FastAPI ok o degradado"
+            exit 1
+          fi
+
+      - name: "Prueba 3: búsqueda por NestJS devuelve los productos de prueba de FastAPI"
+        run: |
+          request_id="ci-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}-$RANDOM"
+          echo "REQUEST_ID=$request_id" >> "$GITHUB_ENV"
+          curl -sS --fail-with-body --max-time 30 -D cabeceras.txt \
+            -H "X-Request-ID: $request_id" -o busqueda-nest.json \
+            "$BACKEND_URL/api/products/search?q=$CONSULTA&limit=10"
+          jq '{consulta, total, productos: [.resultados[].producto | {codigo_barras, nombre}]}' busqueda-nest.json
+
+          cabecera() { grep -i "^$1:" cabeceras.txt | cut -d: -f2- | tr -d ' \r'; }
+          if [[ "$(cabecera x-fuente-datos)" != fastapi ]]; then
+            echo "::error::X-Fuente-Datos es '$(cabecera x-fuente-datos)', se esperaba 'fastapi'"
+            exit 1
+          fi
+          if [[ "$(cabecera x-request-id)" != "$request_id" ]]; then
+            echo "::error::NestJS no devolvió el X-Request-ID enviado"
+            exit 1
+          fi
+
+          codigos_nest=$(jq -r '.resultados[].producto.codigo_barras' busqueda-nest.json)
+          for codigo in $GALLETAS_ESPERADAS; do
+            if ! grep -qx "$codigo" <<<"$codigos_nest"; then
+              echo "::error::Falta el producto de prueba $codigo en la respuesta"
+              exit 1
+            fi
+          done
+          # Primero a una variable: con pipefail, "cut | grep -q" puede fallar
+          # por SIGPIPE cuando grep termina antes.
+          codigos_fixtures=$(cut -f1 fixtures.tsv)
+          for codigo in $codigos_nest; do
+            if ! grep -qx "$codigo" <<<"$codigos_fixtures"; then
+              echo "::error::$codigo no es un producto de prueba"
+              exit 1
+            fi
+          done
+
+          # Mismo resultado y orden que el /search de FastAPI.
+          codigos_fastapi=$(curl -sS --fail-with-body --max-time 10 \
+            "$PYTHON_URL/search?q=$CONSULTA&limit=10" \
+            | jq -r '.resultados[].producto.codigo_barras')
+          if [[ "$codigos_nest" != "$codigos_fastapi" ]]; then
+            echo "::error::NestJS y FastAPI devolvieron productos distintos"
+            exit 1
+          fi
+
+      - name: "Prueba 4: el X-Request-ID enviado a NestJS llega a FastAPI"
+        run: |
+          docker compose logs --no-color --no-log-prefix python-service > python-service.log
+          coincidencias=$(jq -Rc --arg rid "$REQUEST_ID" \
+            'fromjson? | select(.request_id == $rid)' python-service.log)
+          if [[ -z "$coincidencias" ]]; then
+            echo "::error::No hay logs de python-service con request_id $REQUEST_ID"
+            exit 1
+          fi
+          echo "Logs de python-service con request_id $REQUEST_ID:"
+          echo "$coincidencias"
+
+      - name: "Prueba 5: sin python-service, NestJS responde con respaldo o error controlado"
+        run: |
+          docker compose stop python-service
+          codigo=$(curl -sS --max-time 60 -D cabeceras-respaldo.txt \
+            -H "X-Request-ID: $REQUEST_ID-respaldo" -o respaldo.json \
+            -w '%{http_code}' "$BACKEND_URL/api/products/search?q=$CONSULTA")
+          fuente=$(grep -i '^x-fuente-datos:' cabeceras-respaldo.txt | cut -d: -f2- | tr -d ' \r')
+          echo "HTTP $codigo, X-Fuente-Datos: ${fuente:-(sin header)}"
+          jq '{total, productos: [.resultados[]?.producto.codigo_barras], error}' respaldo.json
+
+          if [[ "$codigo" == 200 ]]; then
+            if [[ "$fuente" != respaldo ]]; then
+              echo "::error::Respondió 200 sin X-Fuente-Datos: respaldo"
+              exit 1
+            fi
+            echo "NestJS respondió desde la base con $(jq '.resultados | length' respaldo.json) productos."
+          elif [[ "$codigo" =~ ^(500|502|503|504)$ ]]; then
+            if ! jq -e '.error.codigo and .error.mensaje' respaldo.json >/dev/null; then
+              echo "::error::El error $codigo no tiene el formato del contrato"
+              exit 1
+            fi
+            echo "NestJS respondió con un error controlado: $(jq -r .error.codigo respaldo.json)."
+          else
+            echo "::error::Respuesta inesperada: HTTP $codigo"
+            exit 1
+          fi
+
+          # El backend sigue arriba y reporta la caída de FastAPI.
+          corriendo=$(docker compose ps --status running --services)
+          if ! grep -qx backend <<<"$corriendo"; then
+            echo "::error::El contenedor del backend se cayó"
+            exit 1
+          fi
+          salud=$(curl -sS --fail-with-body --max-time 10 "$BACKEND_URL/api/health")
+          jq . <<<"$salud"
+          if ! jq -e '.dependencias.postgresql == "ok" and .dependencias.fastapi == "error"' \
+              <<<"$salud" >/dev/null; then
+            echo "::error::El backend no reporta la caída de FastAPI"
+            exit 1
+          fi
+
+      - name: Logs de todos los contenedores
+        if: failure()
+        run: |
+          docker compose ps --all
+          docker compose logs --no-color --timestamps
+
+      - name: Bajar la aplicación
+        if: always()
+        run: docker compose down --volumes --remove-orphans

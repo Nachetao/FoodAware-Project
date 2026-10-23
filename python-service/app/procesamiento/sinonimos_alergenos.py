@@ -160,6 +160,19 @@ EXCEPCIONES: Dict[A, Tuple[str, ...]] = {
     ),
 }
 
+# Términos que, como nombre de un sabor, no indican el alérgeno: en "sabor
+# leche y crema (saborizantes naturales)" o "milk flavour" se describe el
+# sabor, no se agrega leche. Solo se descartan justo después de "sabor" /
+# "sabor a" o justo antes de "flavor"; "leche sabor frutilla" se sigue
+# marcando. "Queso" y "yogurt" quedan fuera a propósito: sus sabores suelen
+# hacerse con queso o yogurt en polvo.
+SABORES: Dict[A, Tuple[str, ...]] = {
+    A.lacteos: (
+        "leche", "crema", "mantequilla", "manjar",
+        "milk", "cream", "butter",
+    ),
+}
+
 # Indicios que no bastan para marcar el alérgeno, pero se registran como
 # "alergeno_posible:<código>". La lecitina E322 suele ser de soya, pero
 # también de girasol: solo cuenta si el ingrediente no dice su origen (las

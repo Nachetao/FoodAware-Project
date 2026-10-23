@@ -3,13 +3,27 @@ name: CI Backend (NestJS)
 on:
   push:
     branches:
-      - main
+      - '**'
   pull_request:
     branches:
       - main
 
+permissions:
+  contents: read
+
+# Una ejecución nueva cancela la anterior de la misma rama o PR; en main
+# cada commit termina la suya.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  # Misma versión que backend/Dockerfile.
+  NODE_VERSION: ${{ vars.NODE_VERSION_BACKEND || '20' }}
+
 jobs:
   build:
+    name: Lint, pruebas y auditoría
     runs-on: ubuntu-latest
 
     defaults:
@@ -18,12 +32,14 @@ jobs:
 
     steps:
       - name: Descargar repositorio
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
-      - name: Configurar Node.js
-        uses: actions/setup-node@v4
+      - name: Configurar Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
 
       - name: Instalar dependencias
         run: npm ci

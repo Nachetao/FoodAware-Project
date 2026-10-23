@@ -12,6 +12,8 @@ from app.schemas.ingesta import ResumenIngesta, SolicitudIngesta
 from app.services.ingesta import ServicioIngesta
 from tests.payloads_off import GALLETAS, INCOMPLETO, LECHE
 
+pytestmark = pytest.mark.recuperacion
+
 
 def pagina(*productos):
     return {"count": 99, "products": list(productos)}

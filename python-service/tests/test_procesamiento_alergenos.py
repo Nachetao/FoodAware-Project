@@ -10,6 +10,8 @@ from app.procesamiento.sinonimos_alergenos import SINONIMOS
 from app.procesamiento.texto import normalizar
 from app.schemas.enums import AllergenCode
 
+pytestmark = pytest.mark.recuperacion
+
 
 def alergenos(texto):
     return [a.value for a in detectar_en_texto(texto).alergenos]
@@ -225,6 +227,64 @@ def test_notas_al_pie_se_revisan(texto, esperados):
     assert [a.value for a in detectar_alergenos(lista).alergenos] == (
         esperados
     )
+
+
+@pytest.mark.parametrize(
+    "texto, esperado",
+    [
+        # El nombre de un sabor describe el sabor, no agrega leche.
+        ("sabor leche (saborizante natural)", []),
+        ("sabor a leche", []),
+        ("Sabor leche y crema (saborizantes naturales)", []),
+        ("sabor a mantequilla", []),
+        ("sabor manjar", []),
+        ("natural milk flavour", []),
+        ("milk and cream flavors", []),
+        # Lo que no es solo el nombre del sabor se sigue marcando.
+        ("leche sabor frutilla", ["lacteos"]),
+        ("leche con sabor a vainilla", ["lacteos"]),
+        ("sabor vainilla y leche", ["lacteos"]),
+        ("sabor leche, leche en polvo", ["lacteos"]),
+        ("sabor queso", ["lacteos"]),
+        ("sabor yogurt", ["lacteos"]),
+        ("saborizante de leche", ["lacteos"]),
+        ("sabor a maní", ["mani"]),
+    ],
+)
+def test_nombres_de_sabor(texto, esperado):
+    assert alergenos(texto) == esperado
+
+
+@pytest.mark.parametrize(
+    "texto, esperado",
+    [
+        # Marcas con "milk" o "leche" dentro del texto de ingredientes.
+        ("Not Milk", []),
+        ("bebida vegetal Not Milk (agua, proteína de arveja)", []),
+        ("NotMilk", []),
+        ("Lechera", []),
+        ("Milkaut", []),
+        # La marca no tapa la leche declarada en el mismo texto.
+        ("bebida Not Milk, leche descremada", ["lacteos"]),
+        ("milk chocolate", ["lacteos"]),
+    ],
+)
+def test_marcas_en_el_texto(texto, esperado):
+    assert alergenos(texto) == esperado
+
+
+def test_not_milk_real_de_la_cache_sin_lacteos():
+    # 7804659650363: OFF no declara leche; el texto solo la nombra como
+    # sabor.
+    lista = analizar_ingredientes(
+        "Agua, manteca de coco, proteína de arveja, fibra de achicoria, "
+        "azúcar, jugo concentrado de piña, aceite de girasol, fosfato "
+        "dipotásico (regulador de acidez), carbonato de calcio (regulador "
+        "de acidez), sabor leche (saborizante natural), goma de acacia "
+        "(espesante), goma gelán (espesante), sal, jugo concentrado de "
+        "repollo, vitamina Dy vitamina B12 (nutrientes)."
+    )
+    assert detectar_alergenos(lista).alergenos == ()
 
 
 def test_texto_real_en_mayusculas_y_mezclado_con_ingles():

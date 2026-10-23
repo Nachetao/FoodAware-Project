@@ -15,6 +15,8 @@ from app.services.busqueda import ServicioBusqueda
 from app.services.mapeo_off import mapear_producto
 from tests.payloads_off import payload
 
+pytestmark = pytest.mark.recuperacion
+
 BASE = "https://world.openfoodfacts.org"
 AHORA = datetime(2026, 10, 21, 12, 0, tzinfo=timezone.utc)
 

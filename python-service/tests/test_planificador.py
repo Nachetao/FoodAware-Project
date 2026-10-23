@@ -18,7 +18,7 @@ from app.services.planificador import (
 )
 from tests.payloads_off import GALLETAS, LECHE
 
-pytestmark = pytest.mark.anyio
+pytestmark = [pytest.mark.anyio, pytest.mark.recuperacion]
 
 AHORA = datetime(2026, 10, 21, 12, tzinfo=timezone.utc)
 INTERVALO = timedelta(hours=24)

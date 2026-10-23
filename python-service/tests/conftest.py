@@ -10,6 +10,16 @@ from tests.payloads_off import productos_de_ejemplo
 BASE_OFF = "https://world.openfoodfacts.org"
 
 
+def pytest_configure(config):
+    # CI corre por separado `pytest -m "not recuperacion"` (unitarias) y
+    # `pytest -m recuperacion`.
+    config.addinivalue_line(
+        "markers",
+        "recuperacion: proceso de recuperación de información (ingesta, "
+        "preparación, búsqueda y evaluación)",
+    )
+
+
 class ClienteOFFFalso:
     """Reemplaza a ClienteOpenFoodFacts: nunca sale a la red.
 

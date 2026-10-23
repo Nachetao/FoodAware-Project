@@ -14,7 +14,12 @@ ENV CACHE_DB_PATH=/data/foodaware-cache.sqlite3
 WORKDIR /app
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# pip, setuptools y wheel solo sirven para instalar: se quitan de la imagen
+# final. La base trae versiones con vulnerabilidades (pip 24.0, setuptools
+# 79) y pip incluye sus propias copias de certifi, urllib3 y msgpack, que
+# Trivy también reporta aunque se actualice pip.
+RUN pip install --no-cache-dir -r requirements.txt \
+    && pip uninstall --yes setuptools wheel pip
 
 # El código queda de root y solo lectura para el usuario del servicio.
 COPY . .

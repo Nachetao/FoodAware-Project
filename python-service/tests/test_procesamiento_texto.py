@@ -10,6 +10,8 @@ from app.procesamiento.texto import (
     tokenizar,
 )
 
+pytestmark = pytest.mark.recuperacion
+
 
 @pytest.mark.parametrize(
     "texto, esperado",

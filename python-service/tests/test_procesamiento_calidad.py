@@ -14,6 +14,8 @@ from app.procesamiento.calidad import (
 from app.services.mapeo_off import mapear_producto
 from tests.payloads_off import LECHE
 
+pytestmark = pytest.mark.recuperacion
+
 AHORA = datetime(2026, 10, 21, 12, 0, tzinfo=timezone.utc)
 
 

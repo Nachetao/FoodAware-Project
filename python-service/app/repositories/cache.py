@@ -410,9 +410,12 @@ class RepositorioCache:
         actualizacion = ", ".join(
             f"{c} = excluded.{c}" for c in _COLUMNAS_EJECUCION[1:]
         )
+        # Las f-strings solo insertan nombres de columna de las constantes
+        # _COLUMNAS_EJECUCION y _COLUMNAS_DETALLE (nunca datos de entrada);
+        # los valores van siempre como parámetros "?".
         with self._conexion() as con:
             con.execute(
-                f"INSERT INTO ejecuciones_ingesta ({columnas}) "
+                f"INSERT INTO ejecuciones_ingesta ({columnas}) "  # nosec B608
                 f"VALUES ({marcas}) "
                 f"ON CONFLICT (run_id) DO UPDATE SET {actualizacion}",
                 [datos[c] for c in _COLUMNAS_EJECUCION],
@@ -425,7 +428,7 @@ class RepositorioCache:
                 asignaciones = ", ".join(f"{c} = ?" for c in _COLUMNAS_DETALLE)
                 con.execute(
                     f"UPDATE ejecuciones_ingesta SET {asignaciones} "
-                    "WHERE run_id = ?",
+                    "WHERE run_id = ?",  # nosec B608
                     [*(valores[c] for c in _COLUMNAS_DETALLE),
                      str(resumen.run_id)],
                 )

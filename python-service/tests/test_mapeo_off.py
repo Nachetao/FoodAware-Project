@@ -10,7 +10,9 @@ from app.services.mapeo_off import (
     ProductoInvalido,
     mapear_producto,
 )
-from tests.payloads_off import GALLETAS, INCOMPLETO, LECHE
+from tests.payloads_off import GALLETAS, INCOMPLETO, LECHE, payload
+
+pytestmark = pytest.mark.recuperacion
 
 RUN_ID = uuid.UUID("3f2b8c1e-9d4a-4e7b-8a6f-1c2d3e4f5a6b")
 AHORA = datetime(2026, 10, 21, 12, 0, tzinfo=timezone.utc)
@@ -240,3 +242,33 @@ def test_lista_de_ingredientes_limpia():
         "azúcar", "aceite vegetal", "suero de leche en polvo", "huevo",
         "emulsionante (lecitina de soya)", "sal",
     ]
+
+
+BEBIDA_VEGETAL = (
+    "Agua, proteína de arveja, fibra de achicoria, manteca de coco, "
+    "aceite de girasol, carbonato de calcio, sal, vitamina D2"
+)
+
+
+@pytest.mark.parametrize(
+    "nombre, marca",
+    [
+        ("Notmilk original", "NotCo Spa"),
+        ("Not Milk Chocolate", "NotCo"),
+        ("Bebida de avena", "Leche Gloria"),
+        ("Leche de almendras sin azúcar", "Milkaut"),
+        ("Milk shake vegano", "La Lechera"),
+    ],
+)
+def test_nombre_y_marca_no_disparan_alergenos(nombre, marca):
+    producto = mapear(payload(1, nombre, BEBIDA_VEGETAL, marca=marca))
+    assert producto.alergenos == []
+    assert not any(p.startswith("alergeno_detectado_en_texto")
+                   for p in producto.calidad.problemas)
+
+
+def test_el_nombre_no_tapa_la_leche_de_los_ingredientes():
+    producto = mapear(payload(
+        1, "Not Milk", "Agua, leche en polvo, azúcar", marca="NotCo"
+    ))
+    assert [a.value for a in producto.alergenos] == ["lacteos"]

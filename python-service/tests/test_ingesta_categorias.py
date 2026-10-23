@@ -20,6 +20,8 @@ from app.services.ingesta import ServicioIngesta, cuota_por_categoria
 from app.services.mapeo_off import mapear_producto
 from tests.payloads_off import payload
 
+pytestmark = pytest.mark.recuperacion
+
 GALLETAS, LACTEOS, PANES = "en:biscuits", "en:dairies", "en:breads"
 CATEGORIAS_POR_DEFECTO = [
     "en:biscuits", "en:dairies", "en:breads", "en:chocolates",

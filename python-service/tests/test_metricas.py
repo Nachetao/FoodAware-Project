@@ -16,6 +16,8 @@ from app.services.mapeo_off import mapear_producto
 from app.services.metricas import ServicioMetricas
 from tests.payloads_off import payload
 
+pytestmark = pytest.mark.recuperacion
+
 AHORA = datetime(2026, 10, 21, 12, 0, tzinfo=timezone.utc)
 
 # Corpus y conjunto fijos (los mismos de tests/test_evaluacion.py):

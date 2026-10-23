@@ -23,6 +23,8 @@ from app.schemas.ingesta import ResumenIngesta
 from app.services.mapeo_off import mapear_producto
 from tests.payloads_off import payload
 
+pytestmark = pytest.mark.recuperacion
+
 AHORA = datetime(2026, 10, 21, 12, 0, tzinfo=timezone.utc)
 GALLETAS, LACTEOS = "en:biscuits", "en:dairies"
 
