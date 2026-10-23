@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     cache_ttl_horas: float = Field(
         72.0, gt=0, validation_alias="CACHE_TTL_HORAS"
     )
+    # Si la caché está vacía al iniciar, carga semilla/corpus-off.json.gz
+    # antes de cualquier ingesta (en Render el disco se pierde al reiniciar).
+    cargar_semilla_si_vacia: bool = Field(
+        True, validation_alias="CARGAR_SEMILLA_SI_VACIA"
+    )
     ingesta_al_iniciar: bool = Field(
         True, validation_alias="INGESTA_AL_INICIAR"
     )

@@ -76,6 +76,12 @@ class ClienteOFFFalso:
         pass
 
 
+@pytest.fixture(autouse=True)
+def sin_semilla(monkeypatch):
+    # Los tests parten con la caché vacía; los de la semilla la activan.
+    monkeypatch.setattr(config.settings, "cargar_semilla_si_vacia", False)
+
+
 @pytest.fixture
 def off_falso():
     return ClienteOFFFalso()
