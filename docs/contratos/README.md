@@ -392,13 +392,17 @@ promedios por tipo y globales.
 resultado de la versión 1 del conjunto sobre el corpus real (347 productos), con
 BM25 **sin sinónimos**. El reporte compara cada evaluación con ella, consulta
 por consulta y por grupo, si usa el mismo K y la misma versión del conjunto
-(`--guardar-linea-base` guarda una nueva). Con los sinónimos:
+(`--guardar-linea-base` guarda una nueva). Con los sinónimos, sobre la caché
+actual (383 productos, `VERSION_PROCESAMIENTO` 2, medido el 2026-10-23):
 
 | Grupo | P@5 antes | P@5 ahora | R@5 antes | R@5 ahora |
 |---|---:|---:|---:|---:|
-| Producto | 0.62 | 0.72 | 0.59 | 0.66 |
-| Restricción | 0.25 | 0.20 | 0.23 | 0.22 |
-| Global | 0.47 | 0.51 | 0.44 | 0.48 |
+| Producto | 0.62 | 0.75 | 0.59 | 0.66 |
+| Restricción | 0.25 | 0.20 | 0.23 | 0.21 |
+| Global | 0.47 | 0.53 | 0.44 | 0.48 |
+
+La interpretación completa, con ejemplos de resultados reales, está en
+[recuperacion-y-evaluacion.md](../recuperacion-y-evaluacion.md#7-métricas).
 
 Mejoran las consultas cuyo vocabulario no coincidía con el de los productos
 ("bebida de soya" frente a "Soja …": P@5 de 0.20 a 1.00; "yogurt natural",
@@ -436,7 +440,7 @@ consulta y por tipo, y la comparación con la línea base, están en
 `scripts/evaluar_busqueda.py`. Con el índice vacío responde 200 con
 `consultas_evaluadas: 0` y el resto en 0.
 
-**Cómo interpretar el endpoint:** `precision_at_k` 0.51 significa que, en
+**Cómo interpretar el endpoint:** `precision_at_k` 0.53 significa que, en
 promedio, la mitad de los 5 primeros resultados le sirve al usuario. Como el
 máximo posible depende de cuántos relevantes tenga cada consulta en el corpus,
 el número sirve sobre todo para **comparar** el mismo conjunto entre versiones
