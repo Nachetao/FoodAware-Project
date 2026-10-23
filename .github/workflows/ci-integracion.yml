@@ -77,6 +77,7 @@ jobs:
           OFF_TIMEOUT_SEGUNDOS=5
           LIMITADOR_ESPERA_MAX_SEGUNDOS=3
           CACHE_DB_PATH=/data/foodaware-cache.sqlite3
+          CARGAR_SEMILLA_SI_VACIA=false
           INGESTA_AL_INICIAR=false
           INGESTA_INTERVALO_HORAS=24
           CACHE_TTL_HORAS=72

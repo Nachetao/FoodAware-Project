@@ -286,16 +286,37 @@
           "ingesta"
         ],
         "summary": "Inicia una ejecución de ingesta desde Open Food Facts",
+        "description": "Requiere el header X-Clave-Ingesta con la clave interna; sin ella responde 403 antes de validar el cuerpo.",
         "operationId": "iniciar_ingesta_ingest_runs_post",
+        "parameters": [
+          {
+            "name": "X-Clave-Ingesta",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Clave interna (variable INGESTA_CLAVE del servicio).",
+              "title": "X-Clave-Ingesta"
+            },
+            "description": "Clave interna (variable INGESTA_CLAVE del servicio)."
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/SolicitudIngesta"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "202": {
@@ -304,6 +325,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ResumenIngesta"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Falta la clave interna o no es válida (FORBIDDEN).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaError"
                 }
               }
             }
@@ -545,6 +576,7 @@
         "type": "string",
         "enum": [
           "VALIDATION_ERROR",
+          "FORBIDDEN",
           "NOT_FOUND",
           "SOURCE_UNAVAILABLE",
           "SOURCE_TIMEOUT",

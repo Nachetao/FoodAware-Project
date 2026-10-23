@@ -111,6 +111,8 @@ class RegistroCrudo:
     producto: Producto
     payload_off: Dict[str, Any]
     version_procesamiento: int
+    # Última confirmación contra OFF; la semilla del corpus la conserva.
+    verificado_en: Optional[datetime] = None
 
 
 @dataclass(frozen=True)
@@ -319,8 +321,8 @@ class RepositorioCache:
     ) -> List[RegistroCrudo]:
         """Productos procesados con una versión anterior (todos si es
         None), junto con el payload crudo de OFF."""
-        consulta = ("SELECT producto_json, payload_off, version_procesamiento "
-                    "FROM productos")
+        consulta = ("SELECT producto_json, payload_off, "
+                    "version_procesamiento, verificado_en FROM productos")
         parametros: List[Any] = []
         if version_menor_a is not None:
             consulta += " WHERE version_procesamiento < ?"
@@ -334,6 +336,7 @@ class RepositorioCache:
                 producto=Producto.model_validate_json(f["producto_json"]),
                 payload_off=json.loads(f["payload_off"]),
                 version_procesamiento=f["version_procesamiento"],
+                verificado_en=_desde_iso(f["verificado_en"]),
             )
             for f in filas
         ]

@@ -1,0 +1,153 @@
+# Staging de FoodAware en Render, plan gratuito (sin tarjeta).
+# Instrucciones y limitaciones: docs/despliegue-staging.md.
+#
+# - Los deploys los dispara GitHub Actions cuando pasa el CI de main
+#   (autoDeployTrigger "off": un push no despliega por sí solo).
+# - Los cambios de este archivo se aplican con "Manual Sync" en el Blueprint
+#   (Auto Sync desactivado), para no saltarse el CI.
+# - Secretos: Render genera JWT_SECRET e INGESTA_CLAVE (generateValue) y la
+#   contraseña de la base; OFF_USER_AGENT se pide al crear el Blueprint
+#   (sync: false). Ninguno queda en el repositorio.
+# - Los web services gratuitos no reciben tráfico por red privada: el backend
+#   llama a python-service por su URL pública. Si Render agrega un sufijo a
+#   algún nombre (porque ya existe), actualiza las URL *.onrender.com de abajo.
+
+databases:
+  - name: foodaware-staging-db
+    plan: free
+    region: virginia
+    databaseName: foodaware_db
+    user: foodaware
+    # Misma versión que docker-compose.yml (postgres:15).
+    postgresMajorVersion: "15"
+    # Lista vacía: sin conexiones externas, solo desde los servicios de Render.
+    ipAllowList: []
+
+services:
+  - type: web
+    name: foodaware-staging-python
+    runtime: docker
+    plan: free
+    region: virginia
+    dockerfilePath: ./python-service/Dockerfile
+    dockerContext: ./python-service
+    autoDeployTrigger: "off"
+    healthCheckPath: /health
+    envVars:
+      # El Dockerfile levanta uvicorn en el 8000.
+      - key: PORT
+        value: "8000"
+      - key: LOG_LEVEL
+        value: INFO
+      - key: SIMULAR_ERRORES_HABILITADO
+        value: "false"
+      - key: OFF_BASE_URL
+        value: https://world.openfoodfacts.org
+      # Formato AppName/Version (correo de contacto del equipo).
+      - key: OFF_USER_AGENT
+        sync: false
+      - key: OFF_TIMEOUT_SEGUNDOS
+        value: "10"
+      - key: LIMITADOR_ESPERA_MAX_SEGUNDOS
+        value: "3"
+      # El disco es efímero: cada arranque parte con la caché vacía y carga
+      # la semilla del corpus, sin llamar a Open Food Facts.
+      - key: CARGAR_SEMILLA_SI_VACIA
+        value: "true"
+      # Si la semilla fallara, no lanzar una ingesta completa en cada
+      # arranque en frío (Render reinicia el servicio seguido).
+      - key: INGESTA_AL_INICIAR
+        value: "false"
+      - key: INGESTA_INTERVALO_HORAS
+        value: "24"
+      - key: CACHE_TTL_HORAS
+        value: "72"
+      # Clave de POST /ingest/runs (ingestas manuales).
+      - key: INGESTA_CLAVE
+        generateValue: true
+
+  - type: web
+    name: foodaware-staging-backend
+    runtime: docker
+    plan: free
+    region: virginia
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    autoDeployTrigger: "off"
+    # Responde 503 solo si PostgreSQL está caído.
+    healthCheckPath: /api/health
+    envVars:
+      # El backend escucha en el 3000.
+      - key: PORT
+        value: "3000"
+      # Host interno de la base: un web service gratuito puede enviar
+      # tráfico a una base de la misma región.
+      - key: DB_HOST
+        fromDatabase:
+          name: foodaware-staging-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: foodaware-staging-db
+          property: port
+      - key: DB_USER
+        fromDatabase:
+          name: foodaware-staging-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: foodaware-staging-db
+          property: password
+      - key: DB_NAME
+        fromDatabase:
+          name: foodaware-staging-db
+          property: database
+      - key: JWT_SECRET
+        generateValue: true
+      # URL pública de python-service (no hay red privada en el plan free).
+      - key: PYTHON_API_URL
+        value: https://foodaware-staging-python.onrender.com
+      # app.service.ts todavía lee este nombre; se quita cuando el backend
+      # use solo PYTHON_API_URL.
+      - key: PYTHON_SERVICE_URL
+        value: https://foodaware-staging-python.onrender.com
+      # Más holgura que en local: python-service tiene 0.1 CPU en el plan
+      # gratuito. Si falla, el backend responde desde la base.
+      - key: PYTHON_API_TIMEOUT_MS
+        value: "5000"
+      - key: PYTHON_API_REINTENTOS
+        value: "2"
+      # Orígenes permitidos por CORS (pedido al backend).
+      - key: CORS_ORIGINS
+        value: https://foodaware-staging-frontend.onrender.com
+
+  - type: web
+    name: foodaware-staging-frontend
+    runtime: static
+    # staticPublishPath es relativo a la raíz del repositorio.
+    buildCommand: cd frontend && npm ci && npm run build
+    staticPublishPath: ./frontend/www
+    autoDeployTrigger: "off"
+    envVars:
+      # Misma versión que frontend/Dockerfile.
+      - key: NODE_VERSION
+        value: "22"
+      # URL del backend que la compilación escribe en environment.prod.ts
+      # (pedido al frontend).
+      - key: API_URL
+        value: https://foodaware-staging-backend.onrender.com
+    routes:
+      # SPA: las rutas de Angular las resuelve index.html.
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin

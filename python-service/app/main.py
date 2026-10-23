@@ -22,6 +22,7 @@ from app.services.ingesta import ServicioIngesta
 from app.services.metricas import ServicioMetricas
 from app.services.planificador import PlanificadorIngesta
 from app.services.reprocesamiento import reprocesar_cache
+from app.services.semilla import cargar_semilla_si_vacia
 
 # Al importar la app, después de que uvicorn configuró sus loggers.
 configurar_logs(settings.log_level)
@@ -75,6 +76,13 @@ async def ciclo_de_vida(app: FastAPI):
     if interrumpidas:
         logger.warning("%d ingesta(s) interrumpida(s) marcadas como fallidas",
                        interrumpidas)
+    # Con la caché vacía (disco efímero en Render), la semilla del corpus
+    # va antes del índice y de cualquier ingesta: el servicio arranca con
+    # datos sin llamar a Open Food Facts.
+    if settings.cargar_semilla_si_vacia:
+        await asyncio.to_thread(
+            cargar_semilla_si_vacia, repositorio, settings.off_base_url
+        )
     # Antes de atender peticiones: los productos procesados con reglas
     # anteriores se rehacen desde el payload guardado, sin llamar a OFF.
     reprocesado = await asyncio.to_thread(

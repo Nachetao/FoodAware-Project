@@ -160,5 +160,5 @@ def test_ingesta_interrumpida_se_marca_fallida_al_reiniciar(
 def test_openapi_documenta_ingesta(client):
     rutas = client.get("/openapi.json").json()["paths"]
     respuestas = rutas["/ingest/runs"]["post"]["responses"]
-    assert set(respuestas) == {"202", "422", "500", "503"}
+    assert set(respuestas) == {"202", "403", "422", "500", "503"}
     assert "404" in rutas["/ingest/runs/latest"]["get"]["responses"]

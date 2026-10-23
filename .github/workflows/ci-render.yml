@@ -1,0 +1,83 @@
+name: CI Render Blueprint
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+# Una ejecución nueva cancela la anterior de la misma rama o PR; en main
+# cada commit termina la suya.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  PYTHON_VERSION: ${{ vars.PYTHON_VERSION || '3.11' }}
+
+jobs:
+  esquema:
+    name: render.yaml contra el JSON Schema oficial
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v7
+
+      - name: Configurar Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Validar render.yaml
+        run: |
+          pip install check-jsonschema==0.38.2
+          check-jsonschema --schemafile https://render.com/schema/render.yaml.json render.yaml
+
+  api:
+    name: render.yaml con la API de Render (sin crear recursos)
+    runs-on: ubuntu-latest
+    # Sin el ID del workspace no se puede validar; los PR desde forks no
+    # reciben el secret.
+    if: ${{ vars.RENDER_OWNER_ID != '' }}
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v7
+
+      # POST /v1/blueprints/validate revisa el archivo como lo haría un sync,
+      # "sin crear ni modificar recursos".
+      - name: Validar con la API de Render
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_OWNER_ID: ${{ vars.RENDER_OWNER_ID }}
+        run: |
+          if [[ -z "$RENDER_API_KEY" ]]; then
+            echo "::notice::Sin RENDER_API_KEY: se omite la validación con la API"
+            exit 0
+          fi
+          codigo=$(curl -sS --max-time 60 -o respuesta.json -w '%{http_code}' \
+            -X POST https://api.render.com/v1/blueprints/validate \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -F "ownerId=$RENDER_OWNER_ID" \
+            -F "file=@render.yaml")
+          if [[ "$codigo" != 200 ]]; then
+            echo "::error::La API de Render respondió HTTP $codigo"
+            jq . respuesta.json || cat respuesta.json
+            exit 1
+          fi
+          if [[ "$(jq -r .valid respuesta.json)" != true ]]; then
+            jq -r '.errors[] | "::error line=\(.line // 1),file=render.yaml::\(.path // "render.yaml"): \(.error)"' respuesta.json
+            exit 1
+          fi
+          echo "render.yaml es válido. Lo que crearía un sync:"
+          jq '.plan' respuesta.json

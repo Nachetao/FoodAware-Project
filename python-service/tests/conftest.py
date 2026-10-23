@@ -1,13 +1,16 @@
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import SecretStr
 
 from app.core import config
+from app.core.clave_ingesta import HEADER_CLAVE_INGESTA
 from app.core.errores import NoEncontrado
 from app.main import app, construir_servicios
 from app.services.ingesta import ServicioIngesta
 from tests.payloads_off import productos_de_ejemplo
 
 BASE_OFF = "https://world.openfoodfacts.org"
+CLAVE_INGESTA = "clave-de-prueba"
 
 
 def pytest_configure(config):
@@ -76,6 +79,20 @@ class ClienteOFFFalso:
         pass
 
 
+@pytest.fixture(autouse=True)
+def sin_semilla(monkeypatch):
+    # Los tests parten con la caché vacía; los de la semilla la activan.
+    monkeypatch.setattr(config.settings, "cargar_semilla_si_vacia", False)
+
+
+@pytest.fixture(autouse=True)
+def clave_ingesta(monkeypatch):
+    # El cliente de `client` la envía siempre; test_clave_ingesta prueba
+    # los rechazos.
+    monkeypatch.setattr(config.settings, "ingesta_clave",
+                        SecretStr(CLAVE_INGESTA))
+
+
 @pytest.fixture
 def off_falso():
     return ClienteOFFFalso()
@@ -87,7 +104,8 @@ def client(tmp_path, monkeypatch, off_falso):
                         str(tmp_path / "cache.sqlite3"))
     # Sin User-Agent el arranque no crea un cliente real de OFF.
     monkeypatch.setattr(config.settings, "off_user_agent", None)
-    with TestClient(app) as cliente_http:
+    with TestClient(app, headers={HEADER_CLAVE_INGESTA: CLAVE_INGESTA}) \
+            as cliente_http:
         repositorio = app.state.repositorio
         servicios = construir_servicios(repositorio, off_falso)
         app.state.catalogo = servicios.catalogo
