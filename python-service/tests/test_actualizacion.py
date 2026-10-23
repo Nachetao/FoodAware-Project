@@ -15,6 +15,8 @@ from app.services.catalogo import ServicioCatalogo
 from app.services.mapeo_off import mapear_producto
 from tests.payloads_off import LECHE
 
+pytestmark = pytest.mark.recuperacion
+
 BASE_OFF = "https://world.openfoodfacts.org"
 CODIGO = LECHE["code"]
 

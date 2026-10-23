@@ -12,6 +12,8 @@ from app.services.mapeo_off import (
 )
 from tests.payloads_off import GALLETAS, INCOMPLETO, LECHE, payload
 
+pytestmark = pytest.mark.recuperacion
+
 RUN_ID = uuid.UUID("3f2b8c1e-9d4a-4e7b-8a6f-1c2d3e4f5a6b")
 AHORA = datetime(2026, 10, 21, 12, 0, tzinfo=timezone.utc)
 BASE = "https://world.openfoodfacts.org"

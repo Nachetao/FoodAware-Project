@@ -3,10 +3,22 @@ name: Terraform CI
 on:
   push:
     branches:
-      - main
+      - '**'
   pull_request:
     branches:
       - main
+
+permissions:
+  contents: read
+
+# Una ejecución nueva cancela la anterior de la misma rama o PR; en main
+# cada commit termina la suya.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  TERRAFORM_VERSION: ${{ vars.TERRAFORM_VERSION || '1.16.5' }}
 
 jobs:
   terraform:
@@ -19,19 +31,21 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+      - name: Setup Terraform ${{ env.TERRAFORM_VERSION }}
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
 
       - name: Terraform Init
-        run: terraform init
+        run: terraform init -input=false
 
       - name: Terraform Format Check
-        run: terraform fmt -check
+        run: terraform fmt -check -recursive
 
       - name: Terraform Validate
         run: terraform validate
 
       - name: Terraform Plan
-        run: terraform plan
+        run: terraform plan -input=false -lock=false

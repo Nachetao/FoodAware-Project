@@ -7,6 +7,8 @@ from app.procesamiento.ingredientes import (
     separar_ingredientes,
 )
 
+pytestmark = pytest.mark.recuperacion
+
 
 @pytest.mark.parametrize(
     "texto, esperado",

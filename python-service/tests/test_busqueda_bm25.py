@@ -12,6 +12,8 @@ from app.busqueda.indice import PESOS_POR_DEFECTO, Documento, IndiceBusqueda
 from app.schemas.producto import Calidad
 from tests.payloads_off import productos_de_ejemplo
 
+pytestmark = pytest.mark.recuperacion
+
 # --- BM25 de un campo -------------------------------------------------------
 
 # Corpus del ejemplo numérico del docstring de bm25.py.

@@ -10,6 +10,8 @@ from app.procesamiento.sinonimos_alergenos import SINONIMOS
 from app.procesamiento.texto import normalizar
 from app.schemas.enums import AllergenCode
 
+pytestmark = pytest.mark.recuperacion
+
 
 def alergenos(texto):
     return [a.value for a in detectar_en_texto(texto).alergenos]

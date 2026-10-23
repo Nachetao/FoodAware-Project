@@ -3,13 +3,27 @@ name: CI Python (FastAPI)
 on:
   push:
     branches:
-      - main
+      - '**'
   pull_request:
     branches:
       - main
 
+permissions:
+  contents: read
+
+# Una ejecución nueva cancela la anterior de la misma rama o PR; en main
+# cada commit termina la suya.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  # Misma versión que python-service/Dockerfile.
+  PYTHON_VERSION: ${{ vars.PYTHON_VERSION || '3.11' }}
+
 jobs:
-  build:
+  pruebas:
+    name: Lint, pruebas y contrato
     runs-on: ubuntu-latest
 
     defaults:
@@ -18,30 +32,52 @@ jobs:
 
     steps:
       - name: Descargar el repositorio
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
-      - name: Configurar Python v3.10
-        uses: actions/setup-python@v5
+      - name: Configurar Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v7
         with:
-          python-version: '3.10'
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: python-service/requirements*.txt
 
       - name: Instalar las dependencias
         run: pip install -r requirements-dev.txt
 
-      - name: Auditar dependencias vulnerables
-        run: |
-          pip install pip-audit
-          pip-audit --ignore-vuln PYSEC-2026-3447
+      - name: Lint (flake8)
+        run: flake8 .
 
-      - name: Ejecutar analisis de calidad
-        run: |
-          pip install flake8
-          flake8 .
+      - name: Pruebas unitarias
+        run: pytest -m "not recuperacion"
 
-      - name: Ejecutar pruebas unitarias
-        run: |
-          pip install pytest
-          pytest
+      - name: Pruebas del proceso de recuperación (ingesta, preparación, búsqueda y evaluación)
+        run: pytest -m recuperacion
 
       - name: Verificar que el contrato OpenAPI esté actualizado
         run: python scripts/export_openapi.py --check
+
+  dependencias:
+    name: Dependencias vulnerables (pip-audit)
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: ./python-service
+
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v7
+
+      - name: Configurar Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      # Audita las dependencias declaradas (requirements-dev.txt incluye
+      # requirements.txt), resueltas en un entorno aparte. No audita las
+      # herramientas que trae el runner (pip, setuptools), que no son parte
+      # del servicio.
+      - name: Auditar dependencias vulnerables
+        run: |
+          pip install pip-audit==2.10.1
+          pip-audit -r requirements-dev.txt
