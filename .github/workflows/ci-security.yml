@@ -1,4 +1,4 @@
-name: CI Seguridad (GitLeaks)
+name: CI Seguridad
 
 on:
   push:
@@ -17,10 +17,18 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
+env:
+  PYTHON_VERSION: ${{ vars.PYTHON_VERSION || '3.11' }}
+  TRIVY_VERSION: ${{ vars.TRIVY_VERSION || 'v0.75.0' }}
+
 jobs:
   gitleaks:
-    name: Detección de secretos
+    name: Detección de secretos (Gitleaks)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # En un PR, gitleaks lee la lista de commits del PR.
+      pull-requests: read
 
     steps:
       - name: Descargar el repositorio completo
@@ -33,3 +41,130 @@ jobs:
         uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  bandit:
+    name: SAST Python (bandit)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v7
+
+      - name: Configurar Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Instalar bandit
+        run: pip install "bandit[sarif]==1.9.4"
+
+      # Desde la raíz, para que las rutas del SARIF coincidan con el
+      # repositorio. Los tests quedan fuera: usan assert a propósito.
+      - name: Reporte de todos los hallazgos (SARIF)
+        run: >-
+          bandit -r python-service/app python-service/scripts
+          -f sarif -o bandit.sarif --exit-zero
+
+      - name: Subir resultados a la pestaña Security
+        if: ${{ !cancelled() && hashFiles('bandit.sarif') != '' }}
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: bandit.sarif
+          category: bandit
+
+      # Las excepciones se documentan en el código con "# nosec <id>" y su
+      # justificación.
+      - name: Fallar con hallazgos de severidad alta
+        run: >-
+          bandit -r python-service/app python-service/scripts
+          --severity-level high
+
+  codeql:
+    name: SAST CodeQL (${{ matrix.lenguaje }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        lenguaje:
+          - python
+          - javascript-typescript
+
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v7
+
+      - name: Inicializar CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.lenguaje }}
+          build-mode: none
+
+      # Sube los resultados a la pestaña Security.
+      - name: Analizar
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:${{ matrix.lenguaje }}
+
+  trivy:
+    name: Imagen Docker (Trivy, ${{ matrix.servicio }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        servicio:
+          - python-service
+          - backend
+          - frontend
+
+    env:
+      SERVICIO: ${{ matrix.servicio }}
+      IMAGEN: foodaware/${{ matrix.servicio }}:ci
+
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v7
+
+      - name: Construir la imagen
+        run: docker build --pull --tag "$IMAGEN" "./$SERVICIO"
+
+      # Fijada por commit y no por tag: en marzo de 2026 se reescribieron
+      # tags de las acciones de Trivy con código malicioso.
+      - name: Instalar Trivy ${{ env.TRIVY_VERSION }}
+        uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          cache: true
+
+      - name: Reporte de vulnerabilidades HIGH y CRITICAL (SARIF)
+        run: >-
+          trivy image --scanners vuln --severity HIGH,CRITICAL
+          --format sarif --output "trivy-$SERVICIO.sarif" "$IMAGEN"
+
+      - name: Mostrar vulnerabilidades HIGH y CRITICAL
+        run: >-
+          trivy image --scanners vuln --severity HIGH,CRITICAL
+          --format table "$IMAGEN"
+
+      - name: Subir resultados a la pestaña Security
+        if: ${{ !cancelled() && hashFiles(format('trivy-{0}.sarif', matrix.servicio)) != '' }}
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-${{ matrix.servicio }}.sarif
+          category: trivy-${{ matrix.servicio }}
+
+      # Las HIGH solo se reportan; falla con CRITICAL que tengan arreglo.
+      - name: Fallar con vulnerabilidades CRITICAL con arreglo disponible
+        run: >-
+          trivy image --scanners vuln --severity CRITICAL --ignore-unfixed
+          --exit-code 1 --format table "$IMAGEN"
