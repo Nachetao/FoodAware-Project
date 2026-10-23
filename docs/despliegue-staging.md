@@ -16,10 +16,30 @@ en el Blueprint [`render.yaml`](../render.yaml), en la raíz del repositorio.
 Todo está en la región `virginia`. El backend se conecta a la base por su host
 interno y llama a python-service por su URL **pública**, porque los web
 services gratuitos no reciben tráfico por la red privada de Render. El
-frontend se compila en Render con la URL del backend (`API_URL`).
+frontend se compila en Render y debería tomar la URL del backend de `API_URL`
+(ver el aviso de abajo).
 
 Si al crear el Blueprint Render agrega un sufijo a algún nombre (porque ya
 existe en otra cuenta), las URL reales cambian: ver el paso 6.
+
+## Pendiente antes de que staging funcione de punta a punta
+
+`render.yaml` ya declara todo, pero hay tres cosas que el código todavía no
+hace. Están anotadas en [limitaciones.md](limitaciones.md#4-staging-en-el-plan-gratuito):
+
+- **El frontend no lee `API_URL`.** `frontend/src/environments/environment.prod.ts`
+  tiene `apiUrl: 'http://localhost:3000'` fijo, así que el frontend compilado
+  en Render llamaría a `localhost` desde el navegador de quien lo abra. Hay
+  que hacer que la compilación tome `API_URL` (frontend).
+- **El backend no lee `CORS_ORIGINS`.** `main.ts` llama a `enableCors` sin
+  lista de orígenes, así que acepta cualquiera. Funciona, pero no restringe
+  nada (backend).
+- **No existe todavía el workflow de despliegue.** Los servicios tienen
+  `autoDeployTrigger: "off"` y, mientras no esté ese workflow, se despliegan
+  a mano (ver "Despliegues siguientes").
+
+Mientras tanto, python-service y backend se pueden probar directamente con sus
+URL (paso 7).
 
 ## Por qué Blueprint y no Terraform
 
