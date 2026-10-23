@@ -33,6 +33,7 @@ class CodigoError(str, Enum):
     """Códigos de error uniformes del contrato."""
 
     VALIDATION_ERROR = "VALIDATION_ERROR"
+    FORBIDDEN = "FORBIDDEN"
     NOT_FOUND = "NOT_FOUND"
     SOURCE_UNAVAILABLE = "SOURCE_UNAVAILABLE"
     SOURCE_TIMEOUT = "SOURCE_TIMEOUT"

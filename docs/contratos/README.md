@@ -84,13 +84,22 @@ docker compose up --build -d python-service
 | POST | `/analizar` | análisis por reglas (sin cambios) | 422 nativo de FastAPI | real |
 | GET | `/products/{codigo_barras}` | `Producto` | 404, 422, 500, 503, 504 | real |
 | GET | `/search?q=&limit=&offset=` | `RespuestaBusqueda` | 422, 500 | real |
-| POST | `/ingest/runs` | `ResumenIngesta` (202, `en_curso`) | 422, 500, 503 | real |
+| POST | `/ingest/runs` | `ResumenIngesta` (202, `en_curso`) | 403, 422, 500, 503 | real; requiere `X-Clave-Ingesta` |
 | GET | `/ingest/runs/latest` | `ResumenIngesta` | 404, 500 | real |
 | GET | `/metrics/quality` | `MetricasCalidad` | 500 | real |
 | GET | `/metrics/evaluation` | `MetricasEvaluacion` | 500 | real |
 
 Parámetros de búsqueda: `q` de 2 a 100 caracteres, `limit` de 1 a 50 (10 por
 defecto), `offset` ≥ 0. Códigos de barras: 8 a 14 dígitos.
+
+**`POST /ingest/runs` está protegido** porque consume el límite de consultas a
+Open Food Facts. Exige el header `X-Clave-Ingesta` con el valor de la variable
+`INGESTA_CLAVE` del servicio, y la compara en tiempo constante. Está cerrado por
+defecto: si `INGESTA_CLAVE` no está definida o está vacía, responde 403 siempre.
+Sin la clave correcta responde 403 `FORBIDDEN` antes de validar el cuerpo, y con
+el mismo mensaje haya o no una clave configurada. `GET /ingest/runs/latest` y los
+demás endpoints siguen públicos. NestJS no llama a este endpoint; las ingestas
+automáticas del servicio no pasan por HTTP y no necesitan la clave.
 
 `/search` declara 503 y 504 en OpenAPI, pero hoy no los produce porque no
 consulta la fuente. `estado_fuente` vale `"online"` si la última ingesta
@@ -219,6 +228,7 @@ Los endpoints del contrato responden siempre con esta forma:
 | Código | HTTP | Cuándo |
 |---|---|---|
 | `VALIDATION_ERROR` | 422 | Parámetros o cuerpo inválidos |
+| `FORBIDDEN` | 403 | `POST /ingest/runs` sin la clave interna correcta |
 | `NOT_FOUND` | 404 | Producto, ejecución o ruta inexistente |
 | `SOURCE_UNAVAILABLE` | 503 | Open Food Facts no responde |
 | `SOURCE_TIMEOUT` | 504 | Open Food Facts excede el timeout |
@@ -233,6 +243,7 @@ porque NestJS ya los consume.
 |---|---|---|
 | `X-Request-ID` | petición y respuesta | Si NestJS lo envía, se devuelve igual (letras, números, `.`, `_`, `-`, máx. 128); si no, se genera un uuid4. También va en `error.request_id`. |
 | `X-Response-Time-ms` | respuesta | Milisegundos que tardó el servicio hasta enviar la respuesta (p. ej. `12.345`). Va en todas las respuestas, también en los errores. |
+| `X-Clave-Ingesta` | petición | Solo en `POST /ingest/runs`: clave interna igual a `INGESTA_CLAVE`. Sin ella, o si no coincide, responde 403 `FORBIDDEN`. |
 | `X-Simular-Error` | petición | Solo con `SIMULAR_ERRORES_HABILITADO=true` en `.env`. Valores: `SOURCE_UNAVAILABLE` (503), `SOURCE_TIMEOUT` (504), `INTERNAL_ERROR` (500). Funciona en los endpoints del contrato (no en `/`, `/health` ni `/analizar`); no aparece en OpenAPI. |
 
 ## Códigos de alérgenos (`AllergenCode`)

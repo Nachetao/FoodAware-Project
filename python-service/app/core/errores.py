@@ -33,6 +33,11 @@ class ErrorAPI(Exception):
         self.mensaje = mensaje
 
 
+class Prohibido(ErrorAPI):
+    status_code = 403
+    codigo = CodigoError.FORBIDDEN
+
+
 class NoEncontrado(ErrorAPI):
     status_code = 404
     codigo = CodigoError.NOT_FOUND
@@ -54,6 +59,7 @@ class FuenteTimeout(ErrorAPI):
 
 
 _DESCRIPCIONES = {
+    403: "Falta la clave interna o no es válida (FORBIDDEN).",
     404: "Recurso no encontrado (NOT_FOUND).",
     422: "Parámetros o cuerpo inválidos (VALIDATION_ERROR).",
     500: "Error interno (INTERNAL_ERROR).",

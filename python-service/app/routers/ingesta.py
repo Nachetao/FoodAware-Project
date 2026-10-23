@@ -3,6 +3,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends
 
+from app.core.clave_ingesta import exigir_clave_ingesta
 from app.core.dependencias import obtener_ingesta, obtener_repositorio
 from app.core.errores import NoEncontrado, respuestas_error
 from app.core.simulacion import simular_error
@@ -19,7 +20,10 @@ router = APIRouter(dependencies=[Depends(simular_error)])
     status_code=202,
     tags=["ingesta"],
     summary="Inicia una ejecución de ingesta desde Open Food Facts",
-    responses=respuestas_error(422, 503),
+    description="Requiere el header X-Clave-Ingesta con la clave interna; "
+                "sin ella responde 403 antes de validar el cuerpo.",
+    responses=respuestas_error(403, 422, 503),
+    dependencies=[Depends(exigir_clave_ingesta)],
 )
 async def iniciar_ingesta(
     solicitud: SolicitudIngesta,
