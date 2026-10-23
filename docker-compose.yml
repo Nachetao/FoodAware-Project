@@ -73,6 +73,17 @@ services:
         condition: service_healthy
       python-service:
         condition: service_healthy
+    healthcheck:
+      # /api/health responde 503 solo si PostgreSQL está caído; con FastAPI
+      # detenido responde 200 (degradado) y el backend sigue healthy. Usa
+      # el fetch de Node porque la imagen no trae curl. start_period da
+      # tiempo a las migraciones del arranque.
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health', { signal: AbortSignal.timeout(4000) }).then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+      start_interval: 2s
     restart: unless-stopped
 
   frontend:
@@ -82,7 +93,8 @@ services:
     ports:
       - "4200:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:

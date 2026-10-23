@@ -99,6 +99,20 @@ jobs:
           docker compose up --detach --wait --wait-timeout 180
           docker compose ps
 
+      # Respaldo del healthcheck: las pruebas solo parten cuando el backend
+      # responde.
+      - name: Esperar a que el backend responda /api/health
+        run: |
+          for intento in $(seq 1 60); do
+            if curl -sS --fail --max-time 5 -o /dev/null "$BACKEND_URL/api/health"; then
+              echo "Backend listo (intento $intento)"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::El backend no respondió /api/health en 60 intentos (~2 min)"
+          exit 1
+
       - name: "Prueba 1: /health de python-service responde ok o degradado"
         run: |
           respuesta=$(curl -sS --fail-with-body --max-time 10 "$PYTHON_URL/health")
