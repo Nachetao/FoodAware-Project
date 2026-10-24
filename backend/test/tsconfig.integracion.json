@@ -1,0 +1,8 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    // @nestjs/jwt 12 es ESM: ts-jest lo transpila a CommonJS en esta suite.
+    "allowJs": true,
+    "esModuleInterop": true
+  }
+}

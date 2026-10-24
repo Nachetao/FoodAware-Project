@@ -1,0 +1,17 @@
+{
+  "rootDir": "..",
+  "moduleFileExtensions": ["js", "json", "ts"],
+  "testRegex": "test/integracion/.*\\.int-spec\\.ts$",
+  "transform": {
+    "^.+\\.(t|j)s$": [
+      "ts-jest",
+      { "tsconfig": "<rootDir>/test/tsconfig.integracion.json" }
+    ]
+  },
+  "transformIgnorePatterns": [
+    "[\\\\/]node_modules[\\\\/](?!@nestjs[\\\\/]jwt[\\\\/])"
+  ],
+  "setupFiles": ["<rootDir>/test/integracion/entorno.ts"],
+  "testEnvironment": "node",
+  "testTimeout": 20000
+}
