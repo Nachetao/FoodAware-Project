@@ -1,0 +1,79 @@
+.contenedor {
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.estado {
+  padding: var(--app-espacio-6) 0;
+  text-align: center;
+}
+
+.cabecera {
+  display: flex;
+  gap: var(--app-espacio-4);
+  align-items: flex-start;
+  margin-bottom: var(--app-espacio-4);
+}
+
+.imagen {
+  flex-shrink: 0;
+  width: 112px;
+  height: 112px;
+  border-radius: var(--app-radio-imagen);
+  object-fit: cover;
+}
+
+.sin-imagen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ion-color-tertiary);
+  color: var(--ion-color-medium);
+  font-size: 32px;
+}
+
+.nombre {
+  margin: 0 0 var(--app-espacio-1);
+}
+
+.marca {
+  margin: 0 0 var(--app-espacio-2);
+  color: var(--ion-color-medium);
+}
+
+// Colores oficiales del Nutri-Score, con texto de buen contraste.
+.nutriscore {
+  display: inline-block;
+  padding: var(--app-espacio-1) var(--app-espacio-3);
+  border-radius: var(--app-radio-pildora);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.nutri-a { background: #038141; color: #fff; }
+.nutri-b { background: #85bb2f; color: #0e150e; }
+.nutri-c { background: #fecb02; color: #0e150e; }
+.nutri-d { background: #ee8100; color: #0e150e; }
+.nutri-e { background: #e63e11; color: #fff; }
+
+section {
+  margin-top: var(--app-espacio-6);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-espacio-2);
+}
+
+.vacio,
+.atribucion,
+.motivos li,
+.calidad li {
+  font-size: 14px;
+  color: var(--ion-color-medium);
+}
+
+.ingredientes {
+  padding-left: var(--app-espacio-5);
+}

@@ -11,24 +11,7 @@
   color: var(--ion-color-medium);
 }
 
-// Aviso discreto: superficie salvia, no un color de alerta.
-.aviso-respaldo {
-  display: flex;
-  gap: var(--app-espacio-2);
-  align-items: flex-start;
-  margin-bottom: var(--app-espacio-3);
-  padding: var(--app-espacio-2) var(--app-espacio-3);
-  border-radius: var(--app-espacio-3);
-  background: var(--ion-color-tertiary);
-  color: var(--ion-color-tertiary-contrast);
-  font-size: 14px;
-
-  ion-icon {
-    flex-shrink: 0;
-    font-size: 20px;
-    color: var(--ion-color-primary);
-  }
-}
+// .aviso-respaldo y .chip-alergeno están en global.scss (compartidos con el detalle).
 
 .total {
   margin: 0 0 var(--app-espacio-2);
@@ -86,18 +69,6 @@ h2 {
   flex-wrap: wrap;
   gap: var(--app-espacio-1);
   margin-top: var(--app-espacio-2);
-}
-
-.chip-alergeno {
-  --background: var(--app-alerta-fondo);
-  --color: var(--app-alerta-texto);
-  margin: 0;
-  border: 1px solid var(--app-alerta-borde);
-  font-weight: 600;
-
-  ion-icon {
-    color: var(--app-alerta-texto);
-  }
 }
 
 .cargar-mas {

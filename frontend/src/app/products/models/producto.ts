@@ -36,3 +36,9 @@ export interface Producto {
   procedencia: Procedencia;
   calidad: Calidad;
 }
+
+/** Detalle de un producto más el origen de los datos (X-Fuente-Datos). */
+export interface DetalleProducto {
+  producto: Producto;
+  desdeRespaldo: boolean;
+}

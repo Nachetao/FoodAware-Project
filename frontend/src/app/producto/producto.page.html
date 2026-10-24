@@ -1,0 +1,157 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-buttons slot="start">
+      <ion-back-button defaultHref="/busqueda" text=""></ion-back-button>
+    </ion-buttons>
+    <ion-title>Producto</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="ion-padding">
+  <div class="contenedor">
+    @if (cargando()) {
+      <div class="estado">
+        <ion-spinner name="crescent" aria-label="Cargando producto"></ion-spinner>
+      </div>
+    } @else if (noEncontrado()) {
+      <div class="estado">
+        <h1>Producto no encontrado</h1>
+        <p>No hay un producto con ese código de barras.</p>
+      </div>
+    } @else if (error(); as e) {
+      <div class="estado">
+        <ion-text color="danger"><p class="error" role="alert">{{ e.mensaje }}</p></ion-text>
+        <ion-button fill="outline" (click)="cargar()">Reintentar</ion-button>
+      </div>
+    } @else if (producto(); as p) {
+      @if (desdeRespaldo()) {
+        <div class="aviso-respaldo" role="status">
+          <ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon>
+          <span>
+            El servicio de búsqueda no está disponible; mostrando productos guardados
+            anteriormente.
+          </span>
+        </div>
+      }
+
+      <div class="cabecera">
+        @if (p.imagen_url) {
+          <img class="imagen" [src]="p.imagen_url" [alt]="p.nombre" />
+        } @else {
+          <div class="imagen sin-imagen">
+            <ion-icon name="image-outline" aria-hidden="true"></ion-icon>
+          </div>
+        }
+        <div>
+          <h1 class="nombre">{{ p.nombre }}</h1>
+          @if (p.marca || p.cantidad) {
+            <p class="marca">
+              {{ p.marca }}@if (p.marca && p.cantidad) {<span> · </span>}{{ p.cantidad }}
+            </p>
+          }
+          @if (p.nutriscore) {
+            <span [class]="'nutriscore nutri-' + p.nutriscore">
+              Nutri-Score {{ p.nutriscore.toUpperCase() }}
+            </span>
+          }
+        </div>
+      </div>
+
+      <section aria-labelledby="titulo-alergenos">
+        <h2 id="titulo-alergenos">Alérgenos</h2>
+        @if (p.alergenos.length > 0) {
+          <div class="chips">
+            @for (codigo of p.alergenos; track codigo) {
+              <ion-chip class="chip-alergeno">
+                <ion-icon name="warning-outline" aria-hidden="true"></ion-icon>
+                <span>{{ etiquetaAlergeno(codigo) }}</span>
+              </ion-chip>
+            }
+          </div>
+        } @else {
+          <p class="vacio">No se detectaron alérgenos.</p>
+        }
+        @if (p.trazas.length > 0) {
+          <h3>Puede contener</h3>
+          <div class="chips trazas">
+            @for (codigo of p.trazas; track codigo) {
+              <ion-chip class="chip-traza">{{ etiquetaAlergeno(codigo) }}</ion-chip>
+            }
+          </div>
+        }
+      </section>
+
+      @if (p.etiquetas_dieta.length > 0) {
+        <section aria-labelledby="titulo-dieta">
+          <h2 id="titulo-dieta">Dieta</h2>
+          <div class="chips dieta">
+            @for (codigo of p.etiquetas_dieta; track codigo) {
+              <ion-chip class="chip-dieta">{{ etiquetaDieta(codigo) }}</ion-chip>
+            }
+          </div>
+        </section>
+      }
+
+      <section aria-labelledby="titulo-ingredientes">
+        <h2 id="titulo-ingredientes">Ingredientes</h2>
+        @if (p.ingredientes_texto) {
+          <p class="ingredientes-texto">{{ p.ingredientes_texto }}</p>
+        } @else {
+          <p class="vacio">La fuente no informa el texto de ingredientes.</p>
+        }
+        @if (p.ingredientes.length > 0) {
+          <ul class="ingredientes">
+            @for (ingrediente of p.ingredientes; track $index) {
+              <li>{{ ingrediente }}</li>
+            }
+          </ul>
+        }
+      </section>
+
+      @if (p.alergenos.length > 0 || p.trazas.length > 0 || motivosAlergenos().length > 0) {
+        <section aria-labelledby="titulo-motivos" class="motivos">
+          <h2 id="titulo-motivos">Por qué se marcaron estos alérgenos</h2>
+          <ul>
+            @for (motivo of motivosAlergenos(); track motivo) {
+              <li>{{ motivo }}</li>
+            }
+            @if (informadosPorFuente().length > 0) {
+              <li>
+                Informados en las etiquetas de Open Food Facts:
+                {{ informadosPorFuente().join(', ') }}.
+              </li>
+            }
+          </ul>
+        </section>
+      }
+
+      @if (otrosProblemas().length > 0) {
+        <section aria-labelledby="titulo-calidad" class="calidad">
+          <h2 id="titulo-calidad">Calidad de los datos</h2>
+          <ul>
+            @for (problema of otrosProblemas(); track problema) {
+              <li>{{ problema }}</li>
+            }
+          </ul>
+        </section>
+      }
+
+      <section aria-labelledby="titulo-procedencia" class="procedencia">
+        <h2 id="titulo-procedencia">Procedencia</h2>
+        <!-- Sin punto tras la fecha: la hora puede terminar en "p. m.". -->
+        <p class="recuperado">Datos recuperados el {{ fecha(p.procedencia.recuperado_en) }}</p>
+        <p>
+          <a [href]="p.procedencia.url_fuente" target="_blank" rel="noopener noreferrer">
+            Ver la ficha original
+          </a>
+        </p>
+        <p class="atribucion">
+          Datos de
+          <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener noreferrer">Open Food Facts (openfoodfacts.org)</a>,
+          disponibles bajo la licencia
+          <a href="https://opendatacommons.org/licenses/odbl/1-0/" target="_blank" rel="noopener noreferrer">Open Database License (ODbL)</a>.
+        </p>
+      </section>
+    }
+  </div>
+</ion-content>
