@@ -224,4 +224,46 @@ describe('ProductsService', () => {
       await expect(resultado).rejects.toMatchObject({ status: 404, codigo: 'NOT_FOUND' });
     });
   });
+
+  describe('compatibles', () => {
+    it('hace GET a /compatibles con q, limit y offset', async () => {
+      const resultado = firstValueFrom(service.compatibles('leche', 20, 40));
+
+      const req = httpMock.expectOne(
+        (r) => r.url === `${environment.apiUrl}/api/products/compatibles`,
+      );
+      expect(req.request.params.get('q')).toBe('leche');
+      expect(req.request.params.get('limit')).toBe('20');
+      expect(req.request.params.get('offset')).toBe('40');
+      req.flush(respuestaBusqueda);
+
+      await expect(resultado).resolves.toEqual({
+        respuesta: respuestaBusqueda,
+        desdeRespaldo: false,
+      });
+    });
+  });
+
+  describe('compatibilidad', () => {
+    const URL = `${environment.apiUrl}/api/products/7801234000018/compatibilidad`;
+
+    it('hace GET a /:codigo/compatibilidad', async () => {
+      const cuerpo = { apto: false, alergenos_en_conflicto: ['lacteos'], trazas_en_conflicto: [] };
+      const resultado = firstValueFrom(service.compatibilidad('7801234000018'));
+
+      httpMock.expectOne(URL).flush(cuerpo);
+
+      await expect(resultado).resolves.toEqual(cuerpo);
+    });
+
+    it('convierte el error en ErrorApi', async () => {
+      const resultado = firstValueFrom(service.compatibilidad('7801234000018'));
+
+      httpMock
+        .expectOne(URL)
+        .flush(errorContrato('NOT_FOUND', 'No existe'), { status: 404, statusText: 'Not Found' });
+
+      await expect(resultado).rejects.toMatchObject({ status: 404, codigo: 'NOT_FOUND' });
+    });
+  });
 });

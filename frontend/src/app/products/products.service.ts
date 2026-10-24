@@ -7,6 +7,7 @@ import {
 import { Observable, catchError, map, throwError } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { BusquedaProductos, RespuestaBusqueda } from './models/busqueda';
+import { Compatibilidad } from './models/compatibilidad';
 import { ErrorApi, esErrorContrato } from './models/error';
 import { DetalleProducto, Producto } from './models/producto';
 
@@ -16,20 +17,50 @@ const HEADER_FUENTE_DATOS = 'X-Fuente-Datos';
 @Injectable({ providedIn: 'root' })
 export class ProductsService {
   private http = inject(HttpClient);
-  private searchUrl = `${environment.apiUrl}/api/products/search`;
+  private productsUrl = `${environment.apiUrl}/api/products`;
 
   /**
    * Busca productos por texto, ordenados por relevancia.
    * Si falla, el Observable emite un ErrorApi en vez de un HttpErrorResponse.
    */
   buscar(q: string, limit = 10, offset = 0): Observable<BusquedaProductos> {
+    return this.buscarEn(`${this.productsUrl}/search`, q, limit, offset);
+  }
+
+  /**
+   * Como buscar, pero solo entre los productos guardados sin alérgenos del
+   * usuario. Requiere sesión (el interceptor agrega el token).
+   */
+  compatibles(q: string, limit = 10, offset = 0): Observable<BusquedaProductos> {
+    return this.buscarEn(`${this.productsUrl}/compatibles`, q, limit, offset);
+  }
+
+  /** Compatibilidad del producto con las alergias del usuario. Requiere sesión. */
+  compatibilidad(codigoBarras: string): Observable<Compatibilidad> {
+    return this.http
+      .get<Compatibilidad>(
+        `${this.productsUrl}/${encodeURIComponent(codigoBarras)}/compatibilidad`,
+      )
+      .pipe(
+        catchError((error: HttpErrorResponse) =>
+          throwError(() => aErrorApi(error)),
+        ),
+      );
+  }
+
+  private buscarEn(
+    url: string,
+    q: string,
+    limit: number,
+    offset: number,
+  ): Observable<BusquedaProductos> {
     const params = new HttpParams()
       .set('q', q)
       .set('limit', limit)
       .set('offset', offset);
 
     return this.http
-      .get<RespuestaBusqueda>(this.searchUrl, { params, observe: 'response' })
+      .get<RespuestaBusqueda>(url, { params, observe: 'response' })
       .pipe(
         map((respuesta) => ({
           respuesta: respuesta.body as RespuestaBusqueda,
@@ -49,7 +80,7 @@ export class ProductsService {
   obtener(codigoBarras: string): Observable<DetalleProducto> {
     return this.http
       .get<Producto>(
-        `${environment.apiUrl}/api/products/${encodeURIComponent(codigoBarras)}`,
+        `${this.productsUrl}/${encodeURIComponent(codigoBarras)}`,
         { observe: 'response' },
       )
       .pipe(

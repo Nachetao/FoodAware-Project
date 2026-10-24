@@ -1,8 +1,10 @@
 import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
+import { AuthService } from '../auth/auth.service';
 import { ProductsService } from '../products/products.service';
 import { etiquetaAlergeno, etiquetaDieta } from '../products/models/alergenos';
+import { Compatibilidad } from '../products/models/compatibilidad';
 import { ErrorApi } from '../products/models/error';
 import { Producto } from '../products/models/producto';
 import { esProblemaDeAlergenos, explicarProblema } from '../products/models/problemas';
@@ -18,12 +20,28 @@ export class ProductoPage implements OnInit {
   private ruta = inject(ActivatedRoute);
   private productsService = inject(ProductsService);
   private destroyRef = inject(DestroyRef);
+  private auth = inject(AuthService);
 
   readonly producto = signal<Producto | null>(null);
   readonly desdeRespaldo = signal(false);
   readonly cargando = signal(true);
   readonly error = signal<ErrorApi | null>(null);
   readonly noEncontrado = computed(() => this.error()?.codigo === 'NOT_FOUND');
+
+  // Franja "Apto para ti" / "No apto": solo con sesión. Si la consulta falla,
+  // el detalle se muestra igual, sin franja.
+  private readonly compatibilidad = signal<Compatibilidad | null>(null);
+  readonly franja = computed(() => {
+    const c = this.auth.autenticado() ? this.compatibilidad() : null;
+    if (!c) {
+      return null;
+    }
+    return {
+      apto: c.apto,
+      conflictos: c.alergenos_en_conflicto.map(etiquetaAlergeno).join(', '),
+      trazas: c.trazas_en_conflicto.map(etiquetaAlergeno).join(', '),
+    };
+  });
 
   // calidad.problemas separados en los que explican los alérgenos y el resto.
   private readonly problemas = computed(() => this.producto()?.calidad.problemas ?? []);
@@ -68,6 +86,7 @@ export class ProductoPage implements OnInit {
   cargar(): void {
     this.cargando.set(true);
     this.error.set(null);
+    this.cargarCompatibilidad();
     this.productsService
       .obtener(this.codigo)
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -82,6 +101,26 @@ export class ProductoPage implements OnInit {
           this.error.set(error);
           this.cargando.set(false);
         },
+      });
+  }
+
+  private cargarCompatibilidad(): void {
+    this.compatibilidad.set(null);
+    if (!this.auth.autenticado()) {
+      return;
+    }
+    const codigo = this.codigo;
+    this.productsService
+      .compatibilidad(codigo)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (compatibilidad) => {
+          // Si la ruta ya cambió de producto, esta respuesta no le corresponde.
+          if (this.codigo === codigo) {
+            this.compatibilidad.set(compatibilidad);
+          }
+        },
+        error: () => undefined,
       });
   }
 }

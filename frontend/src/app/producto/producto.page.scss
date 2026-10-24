@@ -56,6 +56,40 @@
 .nutri-d { background: #ee8100; color: #0e150e; }
 .nutri-e { background: #e63e11; color: #fff; }
 
+// Compatibilidad con las alergias del usuario.
+.franja {
+  display: flex;
+  gap: var(--app-espacio-2);
+  align-items: center;
+  margin-bottom: var(--app-espacio-2);
+  padding: var(--app-espacio-3);
+  border-radius: var(--app-espacio-3);
+  font-weight: 700;
+
+  ion-icon {
+    flex-shrink: 0;
+    font-size: 24px;
+  }
+}
+
+.apto {
+  background: var(--ion-color-success);
+  color: var(--ion-color-success-contrast);
+}
+
+.no-apto {
+  background: var(--ion-color-danger);
+  color: var(--ion-color-danger-contrast);
+}
+
+// Trazas: advertencia, no prohibición; misma familia ámbar que los chips.
+.trazas-en-conflicto {
+  border: 1px dashed var(--app-alerta-borde);
+  background: var(--app-alerta-fondo);
+  color: var(--app-alerta-texto);
+  font-weight: 600;
+}
+
 section {
   margin-top: var(--app-espacio-6);
 }

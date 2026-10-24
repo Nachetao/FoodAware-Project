@@ -1,3 +1,4 @@
+import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { IonicModule } from '@ionic/angular/lazy';
@@ -6,7 +7,9 @@ import type { Mock } from 'vitest';
 
 import { ProductoPage } from './producto.page';
 import { ProductoPageModule } from './producto.module';
+import { AuthService } from '../auth/auth.service';
 import { ProductsService } from '../products/products.service';
+import { Compatibilidad } from '../products/models/compatibilidad';
 import { DetalleProducto, Producto } from '../products/models/producto';
 import { ErrorApi } from '../products/models/error';
 
@@ -42,17 +45,27 @@ const PRODUCTO: Producto = {
   },
 };
 
+const APTO: Compatibilidad = { apto: true, alergenos_en_conflicto: [], trazas_en_conflicto: [] };
+
 describe('ProductoPage', () => {
   let fixture: ComponentFixture<ProductoPage>;
   let obtener: Mock<(codigo: string) => ReturnType<ProductsService['obtener']>>;
+  let compatibilidad: Mock<ProductsService['compatibilidad']>;
+  let autenticado: ReturnType<typeof signal<boolean>>;
 
-  async function crear(respuesta = of<DetalleProducto>({ producto: PRODUCTO, desdeRespaldo: false })) {
+  async function crear(
+    respuesta = of<DetalleProducto>({ producto: PRODUCTO, desdeRespaldo: false }),
+    { conSesion = false, compatible = of<Compatibilidad>(APTO) } = {},
+  ) {
     obtener = vi.fn(() => respuesta);
+    compatibilidad = vi.fn(() => compatible);
+    autenticado = signal(conSesion);
     await TestBed.configureTestingModule({
       imports: [IonicModule.forRoot(), ProductoPageModule],
       providers: [
         provideRouter([]),
-        { provide: ProductsService, useValue: { obtener } },
+        { provide: ProductsService, useValue: { obtener, compatibilidad } },
+        { provide: AuthService, useValue: { autenticado } },
         {
           provide: ActivatedRoute,
           useValue: { paramMap: of(convertToParamMap({ codigo: '7801234000018' })) },
@@ -174,5 +187,66 @@ describe('ProductoPage', () => {
 
     expect(obtener).toHaveBeenCalledTimes(2);
     expect(texto('h1.nombre')).toBe('Galletas de avena');
+  });
+
+  describe('compatibilidad con las alergias del usuario', () => {
+    it('sin sesión no la consulta ni muestra la franja', async () => {
+      await crear();
+
+      expect(compatibilidad).not.toHaveBeenCalled();
+      expect(raiz().querySelector('.franja')).toBeNull();
+      expect(texto('h1.nombre')).toBe('Galletas de avena');
+    });
+
+    it('muestra "Apto para ti" en verde', async () => {
+      await crear(undefined, { conSesion: true });
+
+      expect(compatibilidad).toHaveBeenCalledWith('7801234000018');
+      expect(texto('.franja.apto[role="status"]')).toBe('Apto para ti');
+      expect(raiz().querySelector('.franja.no-apto')).toBeNull();
+    });
+
+    it('muestra "No apto" en rojo con los alérgenos en conflicto y las trazas aparte', async () => {
+      await crear(undefined, {
+        conSesion: true,
+        compatible: of<Compatibilidad>({
+          apto: false,
+          alergenos_en_conflicto: ['lacteos', 'soya'],
+          trazas_en_conflicto: ['mani'],
+        }),
+      });
+
+      expect(texto('.franja.no-apto[role="alert"]')).toBe('No apto: contiene Lácteos, Soya');
+      expect(texto('.franja.trazas-en-conflicto')).toBe('Puede contener Maní');
+      expect(raiz().querySelector('.franja.apto')).toBeNull();
+    });
+
+    it('las trazas en conflicto no quitan el "Apto para ti"', async () => {
+      await crear(undefined, {
+        conSesion: true,
+        compatible: of<Compatibilidad>({ ...APTO, trazas_en_conflicto: ['mani'] }),
+      });
+
+      expect(texto('.franja.apto')).toBe('Apto para ti');
+      expect(texto('.franja.trazas-en-conflicto')).toBe('Puede contener Maní');
+    });
+
+    it('si falla, muestra el detalle sin franja', async () => {
+      const error: ErrorApi = { status: 500, codigo: null, mensaje: 'Error', requestId: null };
+      await crear(undefined, { conSesion: true, compatible: throwError(() => error) });
+
+      expect(raiz().querySelector('.franja')).toBeNull();
+      expect(raiz().querySelector('[role="alert"]')).toBeNull();
+      expect(texto('h1.nombre')).toBe('Galletas de avena');
+    });
+
+    it('quita la franja al cerrar la sesión', async () => {
+      await crear(undefined, { conSesion: true });
+      expect(raiz().querySelector('.franja')).not.toBeNull();
+
+      autenticado.set(false);
+
+      expect(raiz().querySelector('.franja')).toBeNull();
+    });
   });
 });
