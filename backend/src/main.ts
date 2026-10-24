@@ -21,7 +21,15 @@ async function bootstrap() {
   app.enableCors({ exposedHeaders: [HEADER_REQUEST_ID, HEADER_FUENTE_DATOS] });
 
   // Activar validación global para los DTOs
-  app.useGlobalPipes(new ValidationPipe({ transform: true }));
+  // whitelist + forbidNonWhitelisted: un campo que no está en el DTO se
+  // rechaza con 400 (evita asignar id, password u otros campos a escondidas).
+  app.useGlobalPipes(
+    new ValidationPipe({
+      transform: true,
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    }),
+  );
 
   const config = new DocumentBuilder()
     .setTitle("FoodAware Backend")

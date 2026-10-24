@@ -1,10 +1,7 @@
 import { Module } from "@nestjs/common";
 import { APP_INTERCEPTOR } from "@nestjs/core";
-import { HttpModule } from "@nestjs/axios";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { ConfigModule, ConfigService } from "@nestjs/config";
-import { AppController } from "./app.controller";
-import { AppService } from "./app.service";
 import { UsersModule } from "./users/users.module";
 import { IaModule } from "./ia/ia.module";
 import { FoodsModule } from "./foods/foods.module";
@@ -22,7 +19,6 @@ import { TiempoRespuestaInterceptor } from "./observabilidad/tiempo-respuesta.in
       isGlobal: true,
       envFilePath: "../.env", // Hacerlo disponible en todos los módulos sin importarlo nuevamente
     }),
-    HttpModule,
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -46,9 +42,7 @@ import { TiempoRespuestaInterceptor } from "./observabilidad/tiempo-respuesta.in
     ProductsModule,
     SaludModule,
   ],
-  controllers: [AppController],
   providers: [
-    AppService,
     // Header X-Response-Time-ms y log de acceso en todas las rutas.
     { provide: APP_INTERCEPTOR, useClass: TiempoRespuestaInterceptor },
   ],
