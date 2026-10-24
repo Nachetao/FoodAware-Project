@@ -9,8 +9,12 @@
 #   contraseña de la base; OFF_USER_AGENT se pide al crear el Blueprint
 #   (sync: false). Ninguno queda en el repositorio.
 # - Los web services gratuitos no reciben tráfico por red privada: el backend
-#   llama a python-service por su URL pública. Si Render agrega un sufijo a
-#   algún nombre (porque ya existe), actualiza las URL *.onrender.com de abajo.
+#   llama a python-service por su URL pública.
+# - Las URL públicas (PYTHON_API_URL, CORS_ORIGINS y API_URL) también son
+#   sync: false: Render las pide al crear el Blueprint y un sync no las pisa.
+#   Así no quedan URL fijas aquí que no coincidan con las reales si Render
+#   agrega un sufijo a algún nombre. Si cambian, se editan en la pestaña
+#   Environment del servicio.
 
 databases:
   - name: foodaware-staging-db
@@ -104,22 +108,20 @@ services:
           property: database
       - key: JWT_SECRET
         generateValue: true
-      # URL pública de python-service (no hay red privada en el plan free).
+      # URL pública de python-service (no hay red privada en el plan free),
+      # sin "/" al final. Ej.: https://foodaware-staging-python.onrender.com
       - key: PYTHON_API_URL
-        value: https://foodaware-staging-python.onrender.com
-      # app.service.ts todavía lee este nombre; se quita cuando el backend
-      # use solo PYTHON_API_URL.
-      - key: PYTHON_SERVICE_URL
-        value: https://foodaware-staging-python.onrender.com
+        sync: false
       # Más holgura que en local: python-service tiene 0.1 CPU en el plan
       # gratuito. Si falla, el backend responde desde la base.
       - key: PYTHON_API_TIMEOUT_MS
         value: "5000"
       - key: PYTHON_API_REINTENTOS
         value: "2"
-      # Orígenes permitidos por CORS (pedido al backend).
+      # URL pública del frontend, el único origen permitido por CORS (varios
+      # se separan con comas). Ej.: https://foodaware-staging-frontend.onrender.com
       - key: CORS_ORIGINS
-        value: https://foodaware-staging-frontend.onrender.com
+        sync: false
 
   - type: web
     name: foodaware-staging-frontend
@@ -132,10 +134,11 @@ services:
       # Misma versión que frontend/Dockerfile.
       - key: NODE_VERSION
         value: "22"
-      # URL del backend que la compilación escribe en environment.prod.ts
-      # (pedido al frontend).
+      # URL pública del backend, sin "/api" al final. La compilación la
+      # escribe en src/environments/api-url.ts: si cambia, hay que
+      # redesplegar el frontend. Ej.: https://foodaware-staging-backend.onrender.com
       - key: API_URL
-        value: https://foodaware-staging-backend.onrender.com
+        sync: false
     routes:
       # SPA: las rutas de Angular las resuelve index.html.
       - type: rewrite

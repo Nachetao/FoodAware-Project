@@ -30,7 +30,7 @@ flowchart LR
     Evento --> R["CI Render Blueprint"]
     Evento --> T["Terraform CI"]
 
-    B --> B1["audit, lint, jest"]
+    B --> B1["audit, lint, jest unitarias,<br/>jest integración"]
     F --> F1["lint, vitest, audit, build"]
     P --> P1["flake8, pytest unitarias,<br/>pytest recuperación, contrato"]
     P --> P2["pip-audit"]
@@ -49,14 +49,17 @@ flowchart LR
 ### CI Backend (NestJS)
 
 [`ci-backend.yml`](../.github/workflows/ci-backend.yml), un job: instala con
-`npm ci`, corre `npm audit --audit-level=critical`, `npm run lint` y
-`npm run test` (108 pruebas de Jest). Falla si hay una dependencia con una
+`npm ci`, corre `npm audit --audit-level=critical`, `npm run lint`,
+`npm run test` (192 pruebas unitarias de Jest) y `npm run test:integration`
+(36 pruebas de integración). Las de integración levantan la app NestJS
+completa contra un FastAPI simulado y repositorios en memoria, sin Docker ni
+PostgreSQL, y tardan unos 20 segundos. Falla si hay una dependencia con una
 vulnerabilidad crítica, un error de lint o una prueba que no pasa.
 
 ### CI Frontend (Angular)
 
 [`ci-frontend.yml`](../.github/workflows/ci-frontend.yml), un job: `npm ci`,
-`npm run lint`, las 40 pruebas unitarias con Vitest
+`npm run lint`, las 121 pruebas unitarias con Vitest
 (`npm test -- --configuration ci`), `npm audit --audit-level=critical` y
 `npm run build`. Que el build esté en el pipeline importa: un error de
 plantilla de Angular a veces solo aparece al compilar para producción.
@@ -162,7 +165,7 @@ Estos son los nuestros y por qué elegimos cada umbral:
 | Gitleaks | Cero secretos | Un secreto en el historial queda expuesto aunque se borre después |
 | Bandit | Sin severidad alta | Lo medio y bajo se revisa en la pestaña Security |
 | Trivy | Sin CRITICAL con arreglo disponible | Lo que no tiene arreglo no lo podemos corregir nosotros; las HIGH se reportan pero no bloquean |
-| Integración | Las 5 pruebas pasan | Es lo único que prueba los servicios juntos |
+| Integración | Las 5 pruebas de CI Integración y las 36 de integración del backend pasan | Son las que prueban los servicios juntos: con Docker Compose, y el backend completo contra un FastAPI simulado |
 | Render Blueprint | Válido contra el esquema y la API | Un `render.yaml` roto solo se notaría al desplegar |
 
 Las HIGH que dejamos pasar no las ignoramos: están listadas, con su plan, en
@@ -177,7 +180,7 @@ alguien borra una Variable. Ningún valor está en el repositorio.
 
 | Nombre | Tipo | Lo usa | Por defecto si no existe | Para qué |
 |---|---|---|---|---|
-| `NODE_VERSION_BACKEND` | Variable | CI Backend | `20` | Versión de Node, la misma de `backend/Dockerfile` |
+| `NODE_VERSION_BACKEND` | Variable | CI Backend | `22` | Versión de Node, la misma de `backend/Dockerfile` |
 | `NODE_VERSION_FRONTEND` | Variable | CI Frontend | `22` | Versión de Node, la misma de `frontend/Dockerfile` |
 | `PYTHON_VERSION` | Variable | CI Python, CI Seguridad, CI Render | `3.11` | Versión de Python, la misma de `python-service/Dockerfile` |
 | `TRIVY_VERSION` | Variable | CI Seguridad | `v0.75.0` | Versión de Trivy |
@@ -204,13 +207,14 @@ GitHub: los genera Render (ver
 |---|---|---:|---|
 | Python, unitarias | pytest | 293 | Esquemas del contrato, errores, request id, logs, simulación de errores, cliente de Open Food Facts, limitador, clave de ingesta, caché, catálogo, salud, `/analizar` |
 | Python, proceso de recuperación | pytest (`-m recuperacion`) | 535 | Ingesta por categorías y segunda ronda, mapeo, limpieza de ingredientes, alérgenos, calidad, planificador, semilla, reprocesamiento, BM25, endpoint de búsqueda, métricas y evaluación |
-| Backend | Jest | 108 (12 archivos) | Cliente de FastAPI y reintentos, respaldo, mapeo, repositorio, controlador y servicio de productos, salud, observabilidad |
-| Frontend | Vitest | 40 (5 archivos) | Página de búsqueda (incluido el aviso de respaldo), home, servicio de productos y etiquetas de alérgenos |
+| Backend, unitarias | Jest | 192 (18 archivos) | Guard JWT, puerto y CORS, cliente de FastAPI y reintentos, respaldo, mapeo, repositorio, controlador y servicio de productos, métricas, salud, observabilidad, usuarios y alergias |
+| Backend, integración | Jest (`npm run test:integration`) | 36 (4 archivos) | La app NestJS completa contra un FastAPI simulado: búsqueda y salud, detalle de producto, métricas, y perfil, alergias y compatibilidad con JWT |
+| Frontend | Vitest | 121 (12 archivos) | Búsqueda (incluidos los avisos de respaldo y "Despertando el servidor…"), detalle de producto, métricas, login, registro y perfil, sesión, servicios y etiquetas de alérgenos |
 | Integración | bash + curl en CI | 5 | Los servicios juntos, ver arriba |
 
-En total son 976 pruebas automatizadas más las 5 de integración. Las
-cantidades las contamos corriendo cada grupo el 23 de octubre de 2026, y
-todas pasaron.
+En total son 1177 pruebas automatizadas más las 5 de CI Integración. Las de
+Python las contamos el 23 de octubre de 2026 y las del backend y el frontend
+el 24 de octubre de 2026, corriendo cada grupo; todas pasaron.
 
 Las pruebas de Python nunca llaman a Open Food Facts. Usan un cliente falso
 (`ClienteOFFFalso` en [`conftest.py`](../python-service/tests/conftest.py))
@@ -244,6 +248,7 @@ Backend y frontend, con Node instalado:
 cd backend
 npm ci
 npm test
+npm run test:integration
 
 cd ..\frontend
 npm ci
@@ -262,24 +267,19 @@ borrarlo al terminar con `docker compose -p foodaware-ci down -v`.
 
 ## Estado actual
 
-En el último commit de `main` (`ab54ea3`, merge del PR #16), 6 de los 7
-workflows terminaron en verde. CI Seguridad terminó en rojo, y conviene
-explicarlo en vez de esconderlo:
+En el último commit de `main` revisado (`545168e`, merge del PR #24), los 7
+workflows terminaron en verde, incluidos los 7 jobs de CI Seguridad.
 
-- Falla un solo job: Trivy sobre la imagen del backend, en el paso "Fallar
-  con vulnerabilidades CRITICAL con arreglo disponible".
-- La causa es `tar` 6.2.1 (CVE-2026-59873, arreglado en 7.5.19). No es una
-  dependencia nuestra: viene dentro del npm que trae la imagen base
-  `node:20-alpine`, en `/usr/local/lib/node_modules/npm`.
-- Falla en `main` desde el PR #15, que es cuando agregamos Trivy. En los
-  merges anteriores que revisamos (del PR #7 al #14), CI Seguridad estaba en
-  verde.
+No siempre fue así, y conviene contarlo. Desde el PR #15, cuando agregamos
+Trivy, CI Seguridad falló en `main` en un solo job: Trivy sobre la imagen del
+backend, en el paso "Fallar con vulnerabilidades CRITICAL con arreglo
+disponible". La causa era `tar` 6.2.1 (CVE-2026-59873, arreglado en 7.5.19),
+que no era una dependencia nuestra: venía dentro del npm que trae la imagen
+base `node:20-alpine`.
 
-O sea, el gate está haciendo su trabajo: detectó algo real y grave. Lo que
-falta es corregirlo en el `Dockerfile` del backend, por ejemplo quitando npm
-de la imagen final, como ya hicimos con pip en el python-service. Eso le
-corresponde al backend y está anotado en
-[limitaciones.md](limitaciones.md#5-seguridad-y-vulnerabilidades).
+El gate hizo su trabajo: detectó algo real y grave, y obligó a corregirlo. En
+el PR #17 la imagen del backend pasó a `node:22-alpine` y se quitaron npm y
+npx de la imagen final, igual que hicimos con pip en el python-service.
 
 También nos dimos cuenta de que los PR #15 y #16 se pudieron integrar con CI
 Seguridad en rojo. Para que los gates bloqueen de verdad hay que activar una
@@ -313,11 +313,11 @@ nombres:
 |---|---|
 | `ep2-ci-main-workflows.png` | Los 7 workflows del último commit de `main` con su estado |
 | `ep2-ci-python-pruebas.png` | Log de CI Python con "293 passed" y "535 passed" |
-| `ep2-ci-backend-pruebas.png` | Log de CI Backend con "Tests: 108 passed" |
-| `ep2-ci-frontend-pruebas.png` | Log de CI Frontend con "Tests 40 passed" |
+| `ep2-ci-backend-pruebas.png` | Log de CI Backend con "Tests: 192 passed" (unitarias) y "Tests: 36 passed" (integración) |
+| `ep2-ci-frontend-pruebas.png` | Log de CI Frontend con "Tests 121 passed" |
 | `ep2-ci-integracion.png` | Los pasos de CI Integración con las 5 pruebas en verde |
 | `ep2-ci-seguridad-jobs.png` | Los 7 jobs de CI Seguridad |
-| `ep2-trivy-backend-critical.png` | El log de Trivy del backend con el CRITICAL de `tar` |
+| `ep2-trivy-backend-critical.png` | El log de Trivy del backend con el CRITICAL de `tar`, antes del PR #17 |
 | `ep2-security-code-scanning.png` | La pestaña Security, con los reportes de Bandit, CodeQL y Trivy |
 | `ep2-github-variables.png` | La lista de Variables de Actions (con el valor de `OFF_USER_AGENT` tapado, porque lleva un correo) |
 | `ep2-github-secrets.png` | La lista de Secrets de Actions (GitHub solo muestra los nombres) |

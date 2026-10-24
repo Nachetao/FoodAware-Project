@@ -168,6 +168,8 @@ no se sube al repositorio.
 | `JWT_SECRET` | backend | Firma de los tokens de autenticación | se define en `.env` |
 | `PYTHON_API_URL` | backend | URL del python-service (`http://python-service:8000` en Docker) | |
 | `PYTHON_API_TIMEOUT_MS`, `PYTHON_API_REINTENTOS` | backend | Timeout por intento y reintentos al python-service | `2000`, `2` |
+| `CORS_ORIGINS` | backend | Orígenes permitidos por CORS, separados por comas (en staging, la URL del frontend) | `http://localhost:4200`, `http://localhost:8100` |
+| `API_URL` | frontend (al compilar) | URL del backend que queda en el build (en staging, la URL pública del backend) | `http://localhost:3000` |
 | `LOG_LEVEL` | python-service | Nivel de los logs JSON | `INFO` |
 | `SIMULAR_ERRORES_HABILITADO` | python-service | Habilita el header `X-Simular-Error` (solo desarrollo) | `false` |
 | `OFF_BASE_URL`, `OFF_USER_AGENT`, `OFF_TIMEOUT_SEGUNDOS` | python-service | Open Food Facts: URL, identificación obligatoria y timeout | `https://world.openfoodfacts.org`, sin valor, `10` |
@@ -215,10 +217,7 @@ PostgreSQL.
 Los servicios gratuitos se duermen tras 15 minutos sin tráfico, así que la
 primera petición puede tardar cerca de un minuto. Las instrucciones de
 despliegue, los secretos y las limitaciones del plan están en
-[docs/despliegue-staging.md](docs/despliegue-staging.md). Antes de que
-funcione de punta a punta faltan dos cambios en el código (que el frontend
-lea `API_URL` y que el backend lea `CORS_ORIGINS`), descritos en ese mismo
-documento.
+[docs/despliegue-staging.md](docs/despliegue-staging.md).
 
 ## Pipeline DevSecOps
 
@@ -227,18 +226,17 @@ GitHub Actions:
 
 | Workflow | Qué revisa |
 |---|---|
-| CI Backend (NestJS) | `npm audit`, lint y 108 pruebas unitarias |
-| CI Frontend (Angular) | Lint, 40 pruebas unitarias, `npm audit` y compilación |
+| CI Backend (NestJS) | `npm audit`, lint, 192 pruebas unitarias y 36 de integración contra un FastAPI simulado |
+| CI Frontend (Angular) | Lint, 121 pruebas unitarias, `npm audit` y compilación |
 | CI Python (FastAPI) | flake8, 293 pruebas unitarias, 535 pruebas del proceso de recuperación, contrato OpenAPI al día y `pip-audit` |
 | CI Integración | La app completa con Docker Compose y 5 pruebas entre NestJS y FastAPI |
 | CI Seguridad | Gitleaks, Bandit, CodeQL (Python y TypeScript) y Trivy sobre las 3 imágenes |
 | CI Render Blueprint | `render.yaml` contra el esquema oficial y contra la API de Render |
 | Terraform CI | `fmt`, `validate` y `plan` de `terraform/` |
 
-Hoy, en el último commit de `main`, 6 de los 7 workflows están en verde. CI
-Seguridad falla porque Trivy encuentra una vulnerabilidad crítica con arreglo
-en la imagen base del backend. Qué hace fallar a cada uno, cómo correr las
-pruebas y las Variables y Secrets que usan están en
+En el último commit de `main` revisado, los 7 workflows están en verde. Qué
+hace fallar a cada uno, cómo correr las pruebas y las Variables y Secrets que
+usan están en
 [docs/pipeline-devsecops.md](docs/pipeline-devsecops.md).
 
 ## Evidencia

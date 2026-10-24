@@ -462,6 +462,17 @@ Resultados actuales, sobre los 383 productos:
 `tiempo_promedio_ms` 0.227. La tabla por consulta la imprime
 `scripts/evaluar_busqueda.py`.
 
+Estos valores dependen del corpus de la caché donde se mide. Las reglas de
+relevancia se aplican sobre los productos que hay en esa caché, así que otra
+caché (la de otro integrante, una con una ingesta más reciente o con
+productos de prueba) tiene otros relevantes y da otro Precision@5. Por eso en
+otros documentos del equipo puede aparecer un valor distinto, medido sobre
+otra caché. El 0,53 de arriba es el de nuestra caché local de 383 productos,
+medido el 23 de octubre de 2026. El valor de referencia del proyecto será el
+que responda `GET /api/metricas/evaluacion` en staging: el python-service de
+staging arranca siempre desde la semilla del corpus, así que da el mismo valor
+en cada despliegue mientras no se regenere la semilla.
+
 Sobre el tiempo, hay que distinguir dos números. Recorrer el índice BM25
 toma alrededor de 0,2 ms, que es lo que mide la evaluación. El `tiempo_ms`
 que devuelve `/search` fue de 12,5 ms de mediana en 100 búsquedas seguidas
