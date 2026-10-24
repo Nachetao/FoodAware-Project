@@ -17,6 +17,15 @@
 
 <ion-content class="ion-padding">
   <div class="contenedor">
+    @if (auth.autenticado()) {
+      <ion-toggle
+        class="solo-aptos"
+        justify="space-between"
+        [checked]="soloAptos()"
+        (ionChange)="cambiarSoloAptos($event.detail.checked)"
+      >Solo aptos para mí</ion-toggle>
+    }
+
     @if (cargando()) {
       <div class="estado">
         <ion-spinner name="crescent" aria-label="Buscando productos"></ion-spinner>
@@ -36,7 +45,8 @@
       }
 
       <p class="total">
-        {{ total() }} {{ total() === 1 ? 'resultado' : 'resultados' }} para «{{ consulta() }}»
+        {{ total() }} {{ total() === 1 ? 'resultado' : 'resultados' }}
+        {{ buscandoAptos() ? (total() === 1 ? 'apto' : 'aptos') + ' para ti' : '' }} para «{{ consulta() }}»
       </p>
 
       <ion-list lines="full">
@@ -96,7 +106,9 @@
         </ion-button>
       }
     } @else if (buscado()) {
-      <p class="estado">No se encontraron productos para «{{ consulta() }}».</p>
+      <p class="estado">
+        No se encontraron productos {{ buscandoAptos() ? 'aptos para ti' : '' }} para «{{ consulta() }}».
+      </p>
     } @else if (error(); as mensaje) {
       <ion-text color="danger">
         <p class="error" role="alert">{{ mensaje }}</p>

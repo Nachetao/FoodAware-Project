@@ -10,6 +10,7 @@ import {
   switchMap,
   tap,
 } from 'rxjs';
+import { AuthService } from '../auth/auth.service';
 import { ProductsService } from '../products/products.service';
 import { etiquetaAlergeno } from '../products/models/alergenos';
 import { ResultadoBusqueda } from '../products/models/busqueda';
@@ -20,6 +21,12 @@ const MIN_CARACTERES = 2;
 // En Render (plan gratuito) el backend se duerme y la primera respuesta tarda.
 const ESPERA_DESPERTAR_MS = 5000;
 
+interface Consulta {
+  q: string;
+  /** true: /compatibles (solo aptos para el usuario) en vez de /search. */
+  soloAptos: boolean;
+}
+
 @Component({
   selector: 'app-busqueda',
   templateUrl: 'busqueda.page.html',
@@ -29,6 +36,8 @@ const ESPERA_DESPERTAR_MS = 5000;
 export class BusquedaPage {
   private productsService = inject(ProductsService);
   private destroyRef = inject(DestroyRef);
+  // El interruptor "Solo aptos para mí" se muestra solo con sesión.
+  readonly auth = inject(AuthService);
 
   // Signals: sin zone.js, actualizan la vista sin llamar a detectChanges().
   readonly consulta = signal('');
@@ -43,21 +52,28 @@ export class BusquedaPage {
   // La búsqueda lleva más de 5 s: probablemente el servidor está despertando.
   readonly despertando = signal(false);
   readonly hayMas = computed(() => this.resultados().length < this.total());
+  readonly soloAptos = signal(false);
+  // Sin sesión se busca como siempre, aunque el interruptor quedara activado.
+  private readonly soloAptosActivo = computed(
+    () => this.auth.autenticado() && this.soloAptos(),
+  );
+  // Modo de la búsqueda mostrada, para los textos y "Cargar más".
+  readonly buscandoAptos = signal(false);
 
   readonly minCaracteres = MIN_CARACTERES;
   readonly etiquetaAlergeno = etiquetaAlergeno;
 
-  private consultas = new Subject<string>();
+  private consultas = new Subject<Consulta>();
 
   constructor() {
     // switchMap cancela la búsqueda anterior: una respuesta tardía nunca
     // pisa los resultados de una consulta más nueva.
     this.consultas
       .pipe(
-        distinctUntilChanged(),
-        tap((q) => this.reiniciar(q)),
-        switchMap((q) =>
-          q.length < MIN_CARACTERES ? EMPTY : this.buscarPrimeraPagina(q),
+        distinctUntilChanged((a, b) => a.q === b.q && a.soloAptos === b.soloAptos),
+        tap((consulta) => this.reiniciar(consulta)),
+        switchMap((consulta) =>
+          consulta.q.length < MIN_CARACTERES ? EMPTY : this.buscarPrimeraPagina(consulta),
         ),
         takeUntilDestroyed(this.destroyRef),
       )
@@ -65,21 +81,28 @@ export class BusquedaPage {
   }
 
   buscar(texto: string): void {
-    this.consultas.next(texto.trim());
+    this.consultas.next({ q: texto.trim(), soloAptos: this.soloAptosActivo() });
+  }
+
+  /** Cambia el interruptor y repite la consulta actual con el nuevo modo. */
+  cambiarSoloAptos(activo: boolean): void {
+    this.soloAptos.set(activo);
+    this.buscar(this.consulta());
   }
 
   cargarMas(): void {
     const q = this.consulta();
+    const soloAptos = this.buscandoAptos();
+    const vigente = () => this.consulta() === q && this.buscandoAptos() === soloAptos;
     this.cargandoMas.set(true);
     this.error.set(null);
 
-    this.productsService
-      .buscar(q, TAMANO_PAGINA, this.resultados().length)
+    this.pagina({ q, soloAptos }, this.resultados().length)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: ({ respuesta, desdeRespaldo }) => {
           // Si el usuario ya cambió la consulta, esta página no le corresponde.
-          if (this.consulta() !== q) {
+          if (!vigente()) {
             return;
           }
           this.resultados.update((actuales) => [...actuales, ...respuesta.resultados]);
@@ -90,7 +113,7 @@ export class BusquedaPage {
           this.cargandoMas.set(false);
         },
         error: (error: ErrorApi) => {
-          if (this.consulta() === q) {
+          if (vigente()) {
             this.error.set(error.mensaje);
             this.cargandoMas.set(false);
           }
@@ -100,10 +123,10 @@ export class BusquedaPage {
 
   // defer: el temporizador del aviso empieza al suscribirse, y finalize lo
   // limpia al terminar o cuando switchMap cancela la búsqueda.
-  private buscarPrimeraPagina(q: string) {
+  private buscarPrimeraPagina(consulta: Consulta) {
     return defer(() => {
       const aviso = setTimeout(() => this.despertando.set(true), ESPERA_DESPERTAR_MS);
-      return this.productsService.buscar(q, TAMANO_PAGINA, 0).pipe(
+      return this.pagina(consulta, 0).pipe(
         tap(({ respuesta, desdeRespaldo }) => {
           this.resultados.set(respuesta.resultados);
           this.total.set(respuesta.total);
@@ -124,8 +147,15 @@ export class BusquedaPage {
     });
   }
 
-  private reiniciar(q: string): void {
+  private pagina({ q, soloAptos }: Consulta, offset: number) {
+    return soloAptos
+      ? this.productsService.compatibles(q, TAMANO_PAGINA, offset)
+      : this.productsService.buscar(q, TAMANO_PAGINA, offset);
+  }
+
+  private reiniciar({ q, soloAptos }: Consulta): void {
     this.consulta.set(q);
+    this.buscandoAptos.set(soloAptos);
     this.resultados.set([]);
     this.total.set(0);
     this.buscado.set(false);

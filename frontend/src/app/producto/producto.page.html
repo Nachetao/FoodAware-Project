@@ -57,6 +57,26 @@
         </div>
       </div>
 
+      @if (franja(); as f) {
+        @if (f.apto) {
+          <div class="franja apto" role="status">
+            <ion-icon name="checkmark-circle-outline" aria-hidden="true"></ion-icon>
+            <span>Apto para ti</span>
+          </div>
+        } @else {
+          <div class="franja no-apto" role="alert">
+            <ion-icon name="close-circle-outline" aria-hidden="true"></ion-icon>
+            <span>No apto: contiene {{ f.conflictos }}</span>
+          </div>
+        }
+        @if (f.trazas) {
+          <div class="franja trazas-en-conflicto" role="status">
+            <ion-icon name="warning-outline" aria-hidden="true"></ion-icon>
+            <span>Puede contener {{ f.trazas }}</span>
+          </div>
+        }
+      }
+
       <section aria-labelledby="titulo-alergenos">
         <h2 id="titulo-alergenos">Alérgenos</h2>
         @if (p.alergenos.length > 0) {

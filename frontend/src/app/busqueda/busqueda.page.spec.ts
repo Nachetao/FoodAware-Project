@@ -1,3 +1,4 @@
+import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { RouterLink, RouterModule, provideRouter } from '@angular/router';
@@ -6,6 +7,7 @@ import { Subject, of, throwError } from 'rxjs';
 import type { Mock } from 'vitest';
 
 import { BusquedaPage } from './busqueda.page';
+import { AuthService } from '../auth/auth.service';
 import { ProductsService } from '../products/products.service';
 import { BusquedaProductos, ResultadoBusqueda } from '../products/models/busqueda';
 import { ErrorApi } from '../products/models/error';
@@ -71,14 +73,22 @@ describe('BusquedaPage', () => {
   let fixture: ComponentFixture<BusquedaPage>;
   let page: BusquedaPage;
   let buscar: Mock<ProductsService['buscar']>;
+  let compatibles: Mock<ProductsService['compatibles']>;
+  let autenticado: ReturnType<typeof signal<boolean>>;
 
   beforeEach(async () => {
     buscar = vi.fn<ProductsService['buscar']>();
+    compatibles = vi.fn<ProductsService['compatibles']>();
+    autenticado = signal(false);
 
     await TestBed.configureTestingModule({
       declarations: [BusquedaPage],
       imports: [IonicModule.forRoot(), RouterModule],
-      providers: [provideRouter([]), { provide: ProductsService, useValue: { buscar } }],
+      providers: [
+        provideRouter([]),
+        { provide: ProductsService, useValue: { buscar, compatibles } },
+        { provide: AuthService, useValue: { autenticado } },
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(BusquedaPage);
@@ -338,6 +348,75 @@ describe('BusquedaPage', () => {
       expect(despertando()).toBe(false);
       vi.advanceTimersByTime(1000);
       expect(despertando()).toBe(true);
+    });
+  });
+
+  describe('interruptor "Solo aptos para mí"', () => {
+    const interruptor = () => elemento().querySelector('ion-toggle.solo-aptos');
+
+    it('no aparece sin sesión', () => {
+      expect(interruptor()).toBeNull();
+    });
+
+    it('aparece con sesión, apagado, y la búsqueda sigue usando /search', () => {
+      autenticado.set(true);
+      buscar.mockReturnValue(of(respuesta(rango(1, 3))));
+
+      page.buscar('leche');
+
+      expect(interruptor()?.textContent?.trim()).toBe('Solo aptos para mí');
+      expect(buscar).toHaveBeenCalledWith('leche', 20, 0);
+      expect(compatibles).not.toHaveBeenCalled();
+    });
+
+    it('al activarlo repite la consulta con /compatibles y pagina con el mismo endpoint', () => {
+      autenticado.set(true);
+      buscar.mockReturnValue(of(respuesta(rango(1, 3))));
+      page.buscar('leche');
+
+      compatibles.mockReturnValueOnce(of(respuesta(rango(1, 20), 21)));
+      page.cambiarSoloAptos(true);
+      expect(compatibles).toHaveBeenCalledWith('leche', 20, 0);
+      expect(texto()).toContain('21 resultados aptos para ti para «leche»');
+
+      compatibles.mockReturnValueOnce(of(respuesta(rango(21, 21), 21)));
+      page.cargarMas();
+      expect(compatibles).toHaveBeenLastCalledWith('leche', 20, 20);
+      expect(buscar).toHaveBeenCalledTimes(1);
+      expect(elemento().querySelectorAll('ion-item')).toHaveLength(21);
+    });
+
+    it('avisa cuando no hay productos aptos', () => {
+      autenticado.set(true);
+      page.cambiarSoloAptos(true);
+      compatibles.mockReturnValue(of(respuesta([], 0)));
+
+      page.buscar('leche');
+
+      expect(texto()).toContain('No se encontraron productos aptos para ti para «leche».');
+    });
+
+    it('al desactivarlo vuelve a /search', () => {
+      autenticado.set(true);
+      page.cambiarSoloAptos(true);
+      compatibles.mockReturnValue(of(respuesta(rango(1, 2))));
+      page.buscar('leche');
+
+      buscar.mockReturnValue(of(respuesta(rango(1, 5))));
+      page.cambiarSoloAptos(false);
+
+      expect(buscar).toHaveBeenCalledWith('leche', 20, 0);
+      expect(elemento().querySelectorAll('ion-item')).toHaveLength(5);
+    });
+
+    it('sin sesión busca con /search aunque haya quedado activado', () => {
+      page.cambiarSoloAptos(true);
+      buscar.mockReturnValue(of(respuesta(rango(1, 3))));
+
+      page.buscar('leche');
+
+      expect(buscar).toHaveBeenCalledWith('leche', 20, 0);
+      expect(compatibles).not.toHaveBeenCalled();
     });
   });
 
