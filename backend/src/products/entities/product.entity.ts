@@ -3,6 +3,7 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
   PrimaryColumn,
   UpdateDateColumn,
 } from "typeorm";
@@ -12,6 +13,12 @@ import { AllergenCode, DietLabel, Nutriscore } from "../contrato/enums";
 // Las listas son text[]: admiten comas dentro de cada valor, a diferencia de simple-array.
 // Solo tienen largo máximo los campos que el contrato restringe: el upsert es un
 // único INSERT por lote y un valor demasiado largo haría fallar el lote completo.
+// Índices creados a mano en la migración IndicesProductos (GIN y parcial,
+// que TypeORM no sabe generar); synchronize: false para que no los toque.
+@Index("IDX_products_alergenos_gin", { synchronize: false })
+@Index("IDX_products_trazas_gin", { synchronize: false })
+@Index("IDX_products_etiquetas_dieta_gin", { synchronize: false })
+@Index("IDX_products_validos", { synchronize: false })
 @Entity("products")
 @Check("CHK_products_codigo_barras", `"codigo_barras" ~ '^[0-9]{8,14}$'`)
 @Check("CHK_products_nutriscore", `"nutriscore" IN ('a', 'b', 'c', 'd', 'e')`)
