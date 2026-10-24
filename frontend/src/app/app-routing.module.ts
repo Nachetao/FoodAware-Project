@@ -11,6 +11,10 @@ const routes: Routes = [
     loadChildren: () => import('./busqueda/busqueda.module').then( m => m.BusquedaPageModule)
   },
   {
+    path: 'producto/:codigo',
+    loadChildren: () => import('./producto/producto.module').then( m => m.ProductoPageModule)
+  },
+  {
     path: 'metricas',
     loadChildren: () => import('./metricas/metricas.module').then( m => m.MetricasPageModule)
   },

@@ -1,6 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ParametrosBusqueda, RespuestaBusqueda } from "./contrato/busqueda";
 import { ErrorContrato } from "./contrato/error";
+import { Producto } from "./contrato/producto";
 import { ContratoHttpException } from "./contrato-http.exception";
 import { FastApiClientService } from "./fastapi-client.service";
 import { FuenteDatos } from "./fuente-datos";
@@ -13,6 +14,11 @@ const STATUS_CON_RESPALDO = new Set([500, 502, 503, 504]);
 
 export interface BusquedaProductos {
   respuesta: RespuestaBusqueda;
+  fuente: FuenteDatos;
+}
+
+export interface DetalleProducto {
+  respuesta: Producto;
   fuente: FuenteDatos;
 }
 
@@ -43,8 +49,41 @@ export class ProductsService {
       };
     }
 
-    const productos = respuesta.resultados.map((r) => r.producto);
-    // Si el guardado falla, la búsqueda igual responde con los datos de FastAPI.
+    await this.guardarSinRomper(
+      respuesta.resultados.map((r) => r.producto),
+      requestId,
+    );
+    return { respuesta, fuente: "fastapi" };
+  }
+
+  /**
+   * Detalle de un producto desde FastAPI, que también se guarda. Si FastAPI
+   * falla (500/502/503/504) responde con el producto guardado; un 404 se
+   * propaga y, si tampoco está en la base, se mantiene el error original.
+   */
+  async obtener(
+    codigoBarras: string,
+    requestId: string,
+  ): Promise<DetalleProducto> {
+    let producto: Producto;
+    try {
+      producto = await this.fastApiClient.obtenerProducto(
+        codigoBarras,
+        requestId,
+      );
+    } catch (error) {
+      return {
+        respuesta: await this.obtenerDeRespaldo(codigoBarras, requestId, error),
+        fuente: "respaldo",
+      };
+    }
+
+    await this.guardarSinRomper([producto], requestId);
+    return { respuesta: producto, fuente: "fastapi" };
+  }
+
+  // Si el guardado falla, se responde igual con los datos de FastAPI.
+  private async guardarSinRomper(productos: Producto[], requestId: string) {
     try {
       await this.productsRepository.guardar(productos);
     } catch (error) {
@@ -52,8 +91,51 @@ export class ProductsService {
         `[${requestId}] No se pudieron guardar ${productos.length} productos: ${error.message}`,
       );
     }
+  }
 
-    return { respuesta, fuente: "fastapi" };
+  private async obtenerDeRespaldo(
+    codigoBarras: string,
+    requestId: string,
+    error: unknown,
+  ): Promise<Producto> {
+    const falla = this.fallaConRespaldo(error);
+
+    let producto: Producto | null;
+    try {
+      producto = await this.productsRepository.buscarPorCodigo(codigoBarras);
+    } catch (errorBase) {
+      this.logger.error(
+        `[${requestId}] ${falla} y el respaldo también falló: ${errorBase.message}`,
+      );
+      throw error;
+    }
+
+    if (!producto) {
+      this.logger.warn(
+        `[${requestId}] ${falla} y el producto ${codigoBarras} no está en la base; se mantiene el error`,
+      );
+      throw error;
+    }
+
+    this.logger.warn(
+      `[${requestId}] ${falla}; respondiendo el producto ${codigoBarras} desde la base`,
+    );
+    return producto;
+  }
+
+  /**
+   * Describe la falla si corresponde usar el respaldo; si no (4xx o un error
+   * que no es del contrato), relanza el error original.
+   */
+  private fallaConRespaldo(error: unknown): string {
+    if (
+      !(error instanceof ContratoHttpException) ||
+      !STATUS_CON_RESPALDO.has(error.getStatus())
+    ) {
+      throw error;
+    }
+    const { codigo } = (error.getResponse() as ErrorContrato).error;
+    return `FastAPI falló con ${error.getStatus()} ${codigo}`;
   }
 
   /**
@@ -65,15 +147,7 @@ export class ProductsService {
     requestId: string,
     error: unknown,
   ): Promise<RespuestaBusqueda> {
-    if (
-      !(error instanceof ContratoHttpException) ||
-      !STATUS_CON_RESPALDO.has(error.getStatus())
-    ) {
-      throw error;
-    }
-
-    const { codigo } = (error.getResponse() as ErrorContrato).error;
-    const falla = `FastAPI falló con ${error.getStatus()} ${codigo}`;
+    const falla = this.fallaConRespaldo(error);
     const inicio = performance.now();
 
     let resultado: ResultadoRespaldo;

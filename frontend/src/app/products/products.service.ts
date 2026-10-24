@@ -8,6 +8,7 @@ import { Observable, catchError, map, throwError } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { BusquedaProductos, RespuestaBusqueda } from './models/busqueda';
 import { ErrorApi, esErrorContrato } from './models/error';
+import { DetalleProducto, Producto } from './models/producto';
 
 /** Header del backend que indica si los datos vienen de FastAPI o del respaldo. */
 const HEADER_FUENTE_DATOS = 'X-Fuente-Datos';
@@ -32,6 +33,28 @@ export class ProductsService {
       .pipe(
         map((respuesta) => ({
           respuesta: respuesta.body as RespuestaBusqueda,
+          desdeRespaldo:
+            respuesta.headers.get(HEADER_FUENTE_DATOS) === 'respaldo',
+        })),
+        catchError((error: HttpErrorResponse) =>
+          throwError(() => aErrorApi(error)),
+        ),
+      );
+  }
+
+  /**
+   * Detalle de un producto. Un producto inexistente llega como ErrorApi con
+   * codigo NOT_FOUND (404).
+   */
+  obtener(codigoBarras: string): Observable<DetalleProducto> {
+    return this.http
+      .get<Producto>(
+        `${environment.apiUrl}/api/products/${encodeURIComponent(codigoBarras)}`,
+        { observe: 'response' },
+      )
+      .pipe(
+        map((respuesta) => ({
+          producto: respuesta.body as Producto,
           desdeRespaldo:
             respuesta.headers.get(HEADER_FUENTE_DATOS) === 'respaldo',
         })),

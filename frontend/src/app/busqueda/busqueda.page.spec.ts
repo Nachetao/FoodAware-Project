@@ -1,5 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { By } from '@angular/platform-browser';
+import { RouterLink, RouterModule, provideRouter } from '@angular/router';
 import { IonicModule } from '@ionic/angular/lazy';
 import { Subject, of, throwError } from 'rxjs';
 import type { Mock } from 'vitest';
@@ -76,7 +77,7 @@ describe('BusquedaPage', () => {
 
     await TestBed.configureTestingModule({
       declarations: [BusquedaPage],
-      imports: [IonicModule.forRoot()],
+      imports: [IonicModule.forRoot(), RouterModule],
       providers: [provideRouter([]), { provide: ProductsService, useValue: { buscar } }],
     }).compileComponents();
 
@@ -338,5 +339,17 @@ describe('BusquedaPage', () => {
       vi.advanceTimersByTime(1000);
       expect(despertando()).toBe(true);
     });
+  });
+
+  it('cada resultado enlaza al detalle del producto', () => {
+    buscar.mockReturnValue(of(respuesta([resultado(1)])));
+
+    page.buscar('leche');
+    fixture.detectChanges();
+
+    const enlace = fixture.debugElement
+      .query(By.css('ion-item'))
+      .injector.get(RouterLink);
+    expect(enlace.urlTree?.toString()).toBe('/producto/7800000000001');
   });
 });

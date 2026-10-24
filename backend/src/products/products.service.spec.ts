@@ -40,17 +40,23 @@ function errorFastApi(status: number, codigo: CodigoError) {
 
 describe("ProductsService", () => {
   let service: ProductsService;
-  let fastApiClient: { buscar: jest.Mock };
-  let productsRepository: { guardar: jest.Mock; buscarRespaldo: jest.Mock };
+  let fastApiClient: { buscar: jest.Mock; obtenerProducto: jest.Mock };
+  let productsRepository: {
+    guardar: jest.Mock;
+    buscarRespaldo: jest.Mock;
+    buscarPorCodigo: jest.Mock;
+  };
   let logWarn: jest.SpyInstance;
   let logError: jest.SpyInstance;
 
   beforeEach(async () => {
     fastApiClient = {
       buscar: jest.fn().mockResolvedValue(respuestaBusqueda),
+      obtenerProducto: jest.fn().mockResolvedValue(leche),
     };
     productsRepository = {
       guardar: jest.fn().mockResolvedValue(undefined),
+      buscarPorCodigo: jest.fn().mockResolvedValue(null),
       buscarRespaldo: jest
         .fn()
         .mockResolvedValue({ total: 7, resultados: resultadosRespaldo }),
@@ -184,6 +190,76 @@ describe("ProductsService", () => {
       await expect(service.buscar(PARAMETROS, REQUEST_ID)).rejects.toBe(error);
       expect(logError).toHaveBeenCalledWith(
         "[prueba-123] FastAPI falló con 503 SOURCE_UNAVAILABLE y el respaldo también falló: conexión perdida",
+      );
+    });
+  });
+
+  describe("obtener (detalle de producto)", () => {
+    it("devuelve el producto de FastAPI y lo guarda", async () => {
+      const resultado = await service.obtener("7801234000018", REQUEST_ID);
+
+      expect(fastApiClient.obtenerProducto).toHaveBeenCalledWith(
+        "7801234000018",
+        REQUEST_ID,
+      );
+      expect(productsRepository.guardar).toHaveBeenCalledWith([leche]);
+      expect(resultado).toEqual({ respuesta: leche, fuente: "fastapi" });
+    });
+
+    it("responde igual si el guardado falla", async () => {
+      productsRepository.guardar.mockRejectedValue(new Error("sin base"));
+
+      const resultado = await service.obtener("7801234000018", REQUEST_ID);
+
+      expect(resultado.fuente).toBe("fastapi");
+    });
+
+    it("propaga el 404 sin consultar la base", async () => {
+      const error = errorFastApi(404, CodigoError.NOT_FOUND);
+      fastApiClient.obtenerProducto.mockRejectedValue(error);
+
+      await expect(service.obtener("7801234000018", REQUEST_ID)).rejects.toBe(
+        error,
+      );
+      expect(productsRepository.buscarPorCodigo).not.toHaveBeenCalled();
+    });
+
+    it.each([500, 502, 503, 504])(
+      "ante %i responde el producto guardado",
+      async (status) => {
+        fastApiClient.obtenerProducto.mockRejectedValue(
+          errorFastApi(status, CodigoError.SOURCE_UNAVAILABLE),
+        );
+        productsRepository.buscarPorCodigo.mockResolvedValue(leche);
+
+        const resultado = await service.obtener("7801234000018", REQUEST_ID);
+
+        expect(resultado).toEqual({ respuesta: leche, fuente: "respaldo" });
+        expect(productsRepository.guardar).not.toHaveBeenCalled();
+        expect(logWarn).toHaveBeenCalledWith(
+          `[prueba-123] FastAPI falló con ${status} SOURCE_UNAVAILABLE; respondiendo el producto 7801234000018 desde la base`,
+        );
+      },
+    );
+
+    it("mantiene el error original si el producto no está en la base", async () => {
+      const error = errorFastApi(503, CodigoError.SOURCE_UNAVAILABLE);
+      fastApiClient.obtenerProducto.mockRejectedValue(error);
+
+      await expect(service.obtener("7801234000018", REQUEST_ID)).rejects.toBe(
+        error,
+      );
+    });
+
+    it("mantiene el error original si la base también falla", async () => {
+      const error = errorFastApi(504, CodigoError.SOURCE_TIMEOUT);
+      fastApiClient.obtenerProducto.mockRejectedValue(error);
+      productsRepository.buscarPorCodigo.mockRejectedValue(
+        new Error("conexión perdida"),
+      );
+
+      await expect(service.obtener("7801234000018", REQUEST_ID)).rejects.toBe(
+        error,
       );
     });
   });

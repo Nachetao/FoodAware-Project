@@ -20,10 +20,10 @@ const respuestaBusqueda: RespuestaBusqueda = {
 describe("ProductsController (GET /api/products/search)", () => {
   let app: INestApplication;
   let url: string;
-  let productsService: { buscar: jest.Mock };
+  let productsService: { buscar: jest.Mock; obtener: jest.Mock };
 
   beforeAll(async () => {
-    productsService = { buscar: jest.fn() };
+    productsService = { buscar: jest.fn(), obtener: jest.fn() };
 
     const module = await Test.createTestingModule({
       controllers: [ProductsController],
@@ -48,6 +48,7 @@ describe("ProductsController (GET /api/products/search)", () => {
 
   beforeEach(() => {
     productsService.buscar.mockReset();
+    productsService.obtener.mockReset();
     productsService.buscar.mockResolvedValue({
       respuesta: respuestaBusqueda,
       fuente: "fastapi",
@@ -171,4 +172,69 @@ describe("ProductsController (GET /api/products/search)", () => {
       expect(await res.json()).toEqual(respuesta);
     },
   );
+
+  describe("GET /api/products/:codigo_barras", () => {
+    const urlProducto = (codigo: string) =>
+      url.replace("/search", `/${codigo}`);
+    const producto = { codigo_barras: "7801234000018", nombre: "Leche" };
+
+    it.each(["fastapi", "respaldo"])(
+      "devuelve el producto con X-Fuente-Datos: %s",
+      async (fuente) => {
+        productsService.obtener.mockResolvedValue({
+          respuesta: producto,
+          fuente,
+        });
+
+        const res = await fetch(urlProducto("7801234000018"), {
+          headers: { "X-Request-ID": "prueba-detalle" },
+        });
+
+        expect(res.status).toBe(200);
+        expect(await res.json()).toEqual(producto);
+        expect(res.headers.get("x-fuente-datos")).toBe(fuente);
+        expect(productsService.obtener).toHaveBeenCalledWith(
+          "7801234000018",
+          "prueba-detalle",
+        );
+      },
+    );
+
+    it.each(["1234567", "123456789012345", "78012340000AB"])(
+      "responde 422 VALIDATION_ERROR con el código %s",
+      async (codigo) => {
+        const res = await fetch(urlProducto(codigo));
+        const cuerpo = await res.json();
+
+        expect(res.status).toBe(422);
+        expect(cuerpo.error.codigo).toBe(CodigoError.VALIDATION_ERROR);
+        expect(cuerpo.error.mensaje).toContain(
+          "codigo_barras debe tener de 8 a 14 dígitos",
+        );
+        expect(productsService.obtener).not.toHaveBeenCalled();
+      },
+    );
+
+    it("propaga el 404 del contrato", async () => {
+      const error = ContratoHttpException.crear(
+        404,
+        CodigoError.NOT_FOUND,
+        "Producto 7801234000018 no encontrado",
+        "r",
+      );
+      productsService.obtener.mockRejectedValue(error);
+
+      const res = await fetch(urlProducto("7801234000018"));
+
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual(error.getResponse());
+    });
+
+    it("/search no se confunde con un código de barras", async () => {
+      await fetch(`${url}?q=leche`);
+
+      expect(productsService.buscar).toHaveBeenCalled();
+      expect(productsService.obtener).not.toHaveBeenCalled();
+    });
+  });
 });

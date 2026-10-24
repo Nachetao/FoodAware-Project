@@ -193,4 +193,35 @@ describe('ProductsService', () => {
       expect(esErrorContrato(cuerpo)).toBe(false);
     });
   });
+
+  describe('obtener', () => {
+    const PRODUCTO_URL = `${environment.apiUrl}/api/products/7801234000018`;
+    const producto = respuestaBusqueda.resultados[0].producto;
+
+    it.each([
+      ['respaldo', true],
+      ['fastapi', false],
+    ])('hace GET al detalle y marca desdeRespaldo con X-Fuente-Datos %s', async (fuente, esperado) => {
+      const resultado = firstValueFrom(service.obtener('7801234000018'));
+
+      httpMock
+        .expectOne(PRODUCTO_URL)
+        .flush(producto, { headers: { 'X-Fuente-Datos': fuente } });
+
+      await expect(resultado).resolves.toEqual({ producto, desdeRespaldo: esperado });
+    });
+
+    it('convierte el 404 en ErrorApi NOT_FOUND', async () => {
+      const resultado = firstValueFrom(service.obtener('7801234000018'));
+
+      httpMock
+        .expectOne(PRODUCTO_URL)
+        .flush(errorContrato('NOT_FOUND', 'Producto 7801234000018 no encontrado'), {
+          status: 404,
+          statusText: 'Not Found',
+        });
+
+      await expect(resultado).rejects.toMatchObject({ status: 404, codigo: 'NOT_FOUND' });
+    });
+  });
 });

@@ -42,7 +42,7 @@
       <ion-list lines="full">
         @for (resultado of resultados(); track resultado.producto.codigo_barras) {
           @let producto = resultado.producto;
-          <ion-item>
+          <ion-item [routerLink]="['/producto', producto.codigo_barras]" [button]="true" [detail]="true">
             <ion-thumbnail slot="start">
               @if (producto.imagen_url) {
                 <img [src]="producto.imagen_url" alt="" loading="lazy" />
