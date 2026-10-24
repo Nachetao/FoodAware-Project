@@ -9,6 +9,7 @@ import {
 } from "@nestjs/common";
 import {
   ApiBadGatewayResponse,
+  ApiBearerAuth,
   ApiGatewayTimeoutResponse,
   ApiHeader,
   ApiInternalServerErrorResponse,
@@ -18,6 +19,7 @@ import {
   ApiParam,
   ApiServiceUnavailableResponse,
   ApiTags,
+  ApiUnauthorizedResponse,
   ApiUnprocessableEntityResponse,
 } from "@nestjs/swagger";
 import { Request, Response } from "express";
@@ -31,7 +33,9 @@ import { Producto } from "./contrato/producto";
 import { ProductsService } from "./products.service";
 import { requestIdDe } from "../observabilidad/request-id";
 import { HEADER_FUENTE_DATOS } from "./fuente-datos";
-import { Public } from "../auth/decoradores";
+import { Public, UsuarioActual } from "../auth/decoradores";
+import { UsuarioToken } from "../auth/jwt.strategy";
+import { Compatibilidad } from "./dto/compatibilidad.dto";
 
 const HEADER_RESPUESTA = {
   [HEADER_REQUEST_ID]: {
@@ -103,6 +107,56 @@ export class ProductsController {
     const { respuesta, fuente } = await this.productsService.buscar(
       query,
       requestId,
+    );
+    res.setHeader(HEADER_FUENTE_DATOS, fuente);
+    return respuesta;
+  }
+
+  // Antes de ":codigo_barras": si no, "compatibles" se tomaría como un código.
+  @Get("compatibles")
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: "Productos guardados compatibles con las alergias del usuario",
+    description:
+      "Requiere token. Busca en los productos guardados (mismo ranking que el respaldo) y excluye los que contienen alguno de los alérgenos del usuario. Misma forma que /search, con estado_fuente \"cache\".",
+  })
+  @ApiOkResponse({ type: RespuestaBusqueda })
+  @ApiUnauthorizedResponse({ description: "Falta el token o no es válido." })
+  @ApiUnprocessableEntityResponse({
+    type: ErrorContrato,
+    description: "Parámetros inválidos (VALIDATION_ERROR).",
+  })
+  compatibles(
+    @Query() query: BuscarProductosQueryDto,
+    @UsuarioActual() usuario: UsuarioToken,
+  ): Promise<RespuestaBusqueda> {
+    return this.productsService.compatibles(query, usuario.id);
+  }
+
+  @Get(":codigo_barras/compatibilidad")
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: "Compatibilidad del producto con las alergias del usuario",
+    description:
+      "Requiere token. apto es false si algún alérgeno coincide; las trazas que coinciden se informan pero no lo hacen no apto. El producto se obtiene como en el detalle (X-Fuente-Datos indica si vino del respaldo).",
+  })
+  @ApiParam({ name: "codigo_barras", description: "De 8 a 14 dígitos." })
+  @ApiOkResponse({ type: Compatibilidad, headers: HEADER_RESPUESTA })
+  @ApiUnauthorizedResponse({ description: "Falta el token o no es válido." })
+  @ApiNotFoundResponse({
+    type: ErrorContrato,
+    description: "El producto no existe (NOT_FOUND).",
+  })
+  async compatibilidad(
+    @Param() { codigo_barras }: CodigoBarrasParamDto,
+    @UsuarioActual() usuario: UsuarioToken,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<Compatibilidad> {
+    const { respuesta, fuente } = await this.productsService.compatibilidad(
+      codigo_barras,
+      usuario.id,
+      requestIdDe(req),
     );
     res.setHeader(HEADER_FUENTE_DATOS, fuente);
     return respuesta;

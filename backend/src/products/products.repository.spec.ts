@@ -309,4 +309,34 @@ describe("ProductsRepository", () => {
       expect(await repository.buscarPorCodigo("7801234000018")).toBeNull();
     });
   });
+
+  describe("buscarCompatibles", () => {
+    it("excluye por las alergias del usuario con el índice GIN y pagina", async () => {
+      typeormRepository.query
+        .mockResolvedValueOnce([{ total: 3 }])
+        .mockResolvedValueOnce([]);
+
+      await repository.buscarCompatibles(
+        { q: "Galletas de AVENA", limit: 20, offset: 0 },
+        [AllergenCode.MANI],
+      );
+
+      const [[sqlTotal, paramsTotal], [sqlPagina, paramsPagina]] =
+        typeormRepository.query.mock.calls;
+      expect(sqlTotal).toContain("NOT (p.alergenos && $2::text[])");
+      expect(paramsTotal).toEqual([["galleta", "avena"], ["mani"]]);
+      expect(sqlPagina).toContain("LIMIT $3 OFFSET $4");
+      expect(paramsPagina).toEqual([["galleta", "avena"], ["mani"], 20, 0]);
+    });
+
+    it("no consulta la base si la consulta no tiene tokens útiles", async () => {
+      const resultado = await repository.buscarCompatibles(
+        { q: "de la", limit: 20, offset: 0 },
+        [],
+      );
+
+      expect(resultado).toEqual({ total: 0, resultados: [] });
+      expect(typeormRepository.query).not.toHaveBeenCalled();
+    });
+  });
 });

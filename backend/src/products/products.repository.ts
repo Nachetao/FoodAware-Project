@@ -3,6 +3,7 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { ParametrosBusqueda, ResultadoBusqueda } from "./contrato/busqueda";
 import { Producto } from "./contrato/producto";
+import { AllergenCode } from "./contrato/enums";
 import { Product } from "./entities/product.entity";
 import { tokensRespaldo } from "./busqueda-respaldo";
 import { aFilaProducto, aProducto, FilaProducto } from "./producto.mapper";
@@ -44,6 +45,15 @@ const SQL_TOTAL = `SELECT count(*)::int AS total ${DESDE_PUNTUADOS}`;
 const SQL_PAGINA = `SELECT p.*, s.score ${DESDE_PUNTUADOS}
   ORDER BY s.score DESC, p.completitud DESC, p.codigo_barras
   LIMIT $2 OFFSET $3`;
+
+// Compatibles: además, ningún alérgeno del usuario ($2). Usa el índice GIN
+// IDX_products_alergenos_gin; con $2 = '{}' no excluye nada.
+const SIN_ALERGIAS_DEL_USUARIO = `AND NOT (p.alergenos && $2::text[])`;
+const SQL_TOTAL_COMPATIBLES = `${SQL_TOTAL} ${SIN_ALERGIAS_DEL_USUARIO}`;
+const SQL_PAGINA_COMPATIBLES = `SELECT p.*, s.score ${DESDE_PUNTUADOS}
+  ${SIN_ALERGIAS_DEL_USUARIO}
+  ORDER BY s.score DESC, p.completitud DESC, p.codigo_barras
+  LIMIT $3 OFFSET $4`;
 
 @Injectable()
 export class ProductsRepository {
@@ -102,6 +112,44 @@ export class ProductsRepository {
 
     const filas: Array<FilaProducto & { score: number }> =
       await this.repository.query(SQL_PAGINA, [tokens, limit, offset]);
+    return {
+      total,
+      resultados: filas.map((fila, i) => ({
+        producto: aProducto(fila),
+        score: fila.score,
+        posicion: offset + i + 1,
+      })),
+    };
+  }
+
+  /**
+   * Productos guardados que coinciden con la búsqueda (mismo score que el
+   * respaldo) y no contienen ninguno de los alérgenos indicados.
+   */
+  async buscarCompatibles(
+    { q, limit, offset }: ParametrosBusqueda,
+    alergias: AllergenCode[],
+  ): Promise<ResultadoRespaldo> {
+    const tokens = tokensRespaldo(q);
+    if (tokens.length === 0) {
+      return { total: 0, resultados: [] };
+    }
+
+    const [{ total }] = await this.repository.query(SQL_TOTAL_COMPATIBLES, [
+      tokens,
+      alergias,
+    ]);
+    if (total === 0) {
+      return { total: 0, resultados: [] };
+    }
+
+    const filas: Array<FilaProducto & { score: number }> =
+      await this.repository.query(SQL_PAGINA_COMPATIBLES, [
+        tokens,
+        alergias,
+        limit,
+        offset,
+      ]);
     return {
       total,
       resultados: filas.map((fila, i) => ({

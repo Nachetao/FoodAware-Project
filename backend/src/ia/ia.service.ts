@@ -10,6 +10,8 @@ import { Repository } from "typeorm";
 import { firstValueFrom } from "rxjs";
 import { Food } from "../foods/entities/food.entity";
 import { User } from "../users/user.entity";
+import { aCodigosAlergenos } from "../users/alergias";
+import { AllergenCode } from "../products/contrato/enums";
 
 @Injectable()
 export class IaAnalysisService {
@@ -65,11 +67,11 @@ export class IaAnalysisService {
         const user = await this.userRepository.findOne({
           where: { id: userId },
         });
-        if (user && user.alergias && savedFood.alergenosPresentes) {
-          const tieneAlergia = savedFood.alergenosPresentes.some((alergeno) =>
-            user.alergias.includes(alergeno),
+        if (user) {
+          aptoParaConsumo = !tieneConflicto(
+            savedFood.alergenosPresentes ?? [],
+            user.alergias,
           );
-          aptoParaConsumo = !tieneAlergia;
         }
       }
 
@@ -86,4 +88,19 @@ export class IaAnalysisService {
       );
     }
   }
+}
+
+/**
+ * FastAPI /analizar todavía devuelve "lácteos" y "maní" con tilde: se
+ * normalizan a códigos del contrato antes de cruzarlos con las alergias del
+ * usuario, que ya son códigos.
+ */
+export function tieneConflicto(
+  alergenosDetectados: readonly string[],
+  alergiasUsuario: readonly AllergenCode[],
+): boolean {
+  const alergias = new Set<string>(alergiasUsuario);
+  return aCodigosAlergenos(alergenosDetectados).some((codigo) =>
+    alergias.has(codigo),
+  );
 }

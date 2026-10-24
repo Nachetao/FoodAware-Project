@@ -1,4 +1,5 @@
 import { Entity, PrimaryGeneratedColumn, Column } from "typeorm";
+import { AllergenCode } from "../products/contrato/enums";
 
 @Entity("users")
 export class User {
@@ -14,6 +15,7 @@ export class User {
   @Column({ type: "text" })
   password: string;
 
-  @Column({ type: "simple-array", nullable: true })
-  alergias: string[];
+  // Códigos del contrato (AllergenCode), nunca texto libre.
+  @Column({ type: "text", array: true, default: () => "'{}'" })
+  alergias: AllergenCode[];
 }

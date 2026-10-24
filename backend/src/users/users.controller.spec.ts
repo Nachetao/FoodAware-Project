@@ -53,4 +53,28 @@ describe("UsersController (POST /api/users)", () => {
     expect(res.status).toBe(201);
     expect(usersService.createTestUser).toHaveBeenCalledWith(valido);
   });
+
+  it("acepta alergias con los códigos del contrato", async () => {
+    usersService.createTestUser.mockResolvedValue({ id: "uuid-2" });
+
+    const res = await registrar({ ...valido, alergias: ["mani", "lacteos"] });
+
+    expect(res.status).toBe(201);
+  });
+
+  it.each([["maní"], ["chocolate"], ["Lacteos"]])(
+    "rechaza con 400 una alergia que no es un código (%s)",
+    async (alergia) => {
+      usersService.createTestUser.mockClear();
+
+      const res = await registrar({ ...valido, alergias: [alergia] });
+      const cuerpo = await res.json();
+
+      expect(res.status).toBe(400);
+      expect(cuerpo.message.join(" ")).toContain(
+        "Cada alergia debe ser uno de estos códigos: lacteos, gluten",
+      );
+      expect(usersService.createTestUser).not.toHaveBeenCalled();
+    },
+  );
 });

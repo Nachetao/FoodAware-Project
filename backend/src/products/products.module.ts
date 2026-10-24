@@ -8,6 +8,7 @@ import { TIMEOUT_FASTAPI_MS_POR_DEFECTO, leerEntero } from "./fastapi.config";
 import { ProductsController } from "./products.controller";
 import { ProductsRepository } from "./products.repository";
 import { ProductsService } from "./products.service";
+import { UsersModule } from "../users/users.module";
 
 @Module({
   imports: [
@@ -24,6 +25,8 @@ import { ProductsService } from "./products.service";
       }),
     }),
     TypeOrmModule.forFeature([Product]),
+    // Alergias del usuario para la compatibilidad y los compatibles.
+    UsersModule,
   ],
   controllers: [ProductsController],
   providers: [FastApiClientService, ProductsRepository, ProductsService],

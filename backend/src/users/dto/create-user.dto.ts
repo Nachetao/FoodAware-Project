@@ -4,7 +4,9 @@ import {
   IsEmail,
   IsOptional,
   IsArray,
+  IsEnum,
 } from "class-validator";
+import { AllergenCode } from "../../products/contrato/enums";
 
 export class CreateUserDto {
   @IsString()
@@ -20,7 +22,10 @@ export class CreateUserDto {
   password: string;
 
   @IsArray()
-  @IsString({ each: true })
+  @IsEnum(AllergenCode, {
+    each: true,
+    message: `Cada alergia debe ser uno de estos códigos: ${Object.values(AllergenCode).join(", ")}`,
+  })
   @IsOptional()
-  alergias?: string[];
+  alergias?: AllergenCode[];
 }

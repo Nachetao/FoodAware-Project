@@ -6,6 +6,8 @@ import { ContratoHttpException } from "./contrato-http.exception";
 import { FastApiClientService } from "./fastapi-client.service";
 import { FuenteDatos } from "./fuente-datos";
 import { ProductsRepository, ResultadoRespaldo } from "./products.repository";
+import { Compatibilidad } from "./dto/compatibilidad.dto";
+import { UsersService } from "../users/users.service";
 
 // Errores de FastAPI (ya con los reintentos agotados) que usan el respaldo:
 // error interno (500), respuesta fuera del contrato (502), sin conexión (503)
@@ -29,7 +31,61 @@ export class ProductsService {
   constructor(
     private readonly fastApiClient: FastApiClientService,
     private readonly productsRepository: ProductsRepository,
+    private readonly usersService: UsersService,
   ) {}
+
+  /**
+   * Compatibilidad del producto con las alergias del usuario. El producto se
+   * obtiene igual que el detalle (FastAPI o respaldo); las trazas se informan
+   * pero no lo hacen no apto.
+   */
+  async compatibilidad(
+    codigoBarras: string,
+    usuarioId: string,
+    requestId: string,
+  ): Promise<{ respuesta: Compatibilidad; fuente: FuenteDatos }> {
+    const [{ respuesta: producto, fuente }, { alergias }] = await Promise.all([
+      this.obtener(codigoBarras, requestId),
+      this.usersService.perfil(usuarioId),
+    ]);
+    const delUsuario = new Set(alergias);
+    const alergenos_en_conflicto = producto.alergenos.filter((a) =>
+      delUsuario.has(a),
+    );
+    const trazas_en_conflicto = producto.trazas.filter((a) =>
+      delUsuario.has(a),
+    );
+    return {
+      respuesta: {
+        apto: alergenos_en_conflicto.length === 0,
+        alergenos_en_conflicto,
+        trazas_en_conflicto,
+      },
+      fuente,
+    };
+  }
+
+  /**
+   * Productos guardados que coinciden con la búsqueda y no contienen ningún
+   * alérgeno del usuario, con la forma de RespuestaBusqueda (estado_fuente
+   * "cache": vienen de la base).
+   */
+  async compatibles(
+    params: ParametrosBusqueda,
+    usuarioId: string,
+  ): Promise<RespuestaBusqueda> {
+    const { alergias } = await this.usersService.perfil(usuarioId);
+    const inicio = performance.now();
+    const { total, resultados } =
+      await this.productsRepository.buscarCompatibles(params, alergias);
+    return {
+      consulta: params.q,
+      total,
+      tiempo_ms: Math.round((performance.now() - inicio) * 1000) / 1000,
+      resultados,
+      estado_fuente: "cache",
+    };
+  }
 
   /**
    * Busca en FastAPI y guarda los productos encontrados. Si FastAPI falla,
