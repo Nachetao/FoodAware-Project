@@ -19,6 +19,7 @@ import { BuscarProductosQueryDto } from "./dto/buscar-productos.query.dto";
 import { ProductsService } from "./products.service";
 import { requestIdDe } from "../observabilidad/request-id";
 import { HEADER_FUENTE_DATOS } from "./fuente-datos";
+import { Public } from "../auth/decoradores";
 
 const HEADER_RESPUESTA = {
   [HEADER_REQUEST_ID]: {
@@ -42,6 +43,7 @@ const SIN_RESPALDO =
 export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
 
+  @Public()
   @Get("search")
   @ApiOperation({
     summary: "Busca productos por texto con ranking de relevancia",

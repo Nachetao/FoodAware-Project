@@ -33,7 +33,11 @@ async function bootstrap() {
 
   const config = new DocumentBuilder()
     .setTitle("FoodAware Backend")
+    .setDescription(
+      "Las rutas exigen un JWT (Authorization: Bearer <token>, de POST /api/auth/login) salvo las públicas: GET /api/health, POST /api/auth/login, POST /api/users, GET /api/products/search y POST /api/food/analizar (token opcional).",
+    )
     .setVersion("1.0")
+    .addBearerAuth()
     .build();
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup("docs", app, document);

@@ -8,8 +8,10 @@ import {
 import { Response } from "express";
 import { RespuestaSalud } from "./salud.dto";
 import { SaludService } from "./salud.service";
+import { Public } from "../auth/decoradores";
 
 @ApiTags("salud")
+@Public()
 @Controller("health")
 export class SaludController {
   constructor(private readonly saludService: SaludService) {}
