@@ -16,30 +16,27 @@ en el Blueprint [`render.yaml`](../render.yaml), en la raíz del repositorio.
 Todo está en la región `virginia`. El backend se conecta a la base por su host
 interno y llama a python-service por su URL **pública**, porque los web
 services gratuitos no reciben tráfico por la red privada de Render. El
-frontend se compila en Render y debería tomar la URL del backend de `API_URL`
-(ver el aviso de abajo).
+frontend se compila en Render y toma la URL del backend de `API_URL`. El
+backend escucha en `PORT` y solo acepta por CORS los orígenes de
+`CORS_ORIGINS` (la URL del frontend).
 
-Si al crear el Blueprint Render agrega un sufijo a algún nombre (porque ya
-existe en otra cuenta), las URL reales cambian: ver el paso 6.
+Las URL de la tabla son las que Render asigna si el nombre está libre. Si ya
+existe en otra cuenta, agrega un sufijo (por ejemplo
+`foodaware-staging-python-a1b2.onrender.com`). Por eso las tres variables que
+llevan URL (`PYTHON_API_URL`, `CORS_ORIGINS` y `API_URL`) no están fijas en
+`render.yaml`: son `sync: false`, se completan al crear el Blueprint y, si
+hace falta, se corrigen en Render sin tocar el repositorio (paso 6).
 
-## Pendiente antes de que staging funcione de punta a punta
+## Pendiente
 
-`render.yaml` ya declara todo, pero hay tres cosas que el código todavía no
-hace. Están anotadas en [limitaciones.md](limitaciones.md#4-staging-en-el-plan-gratuito):
+Solo falta el workflow de despliegue automático. Mientras no exista, los
+servicios (con `autoDeployTrigger: "off"`) se despliegan a mano (ver
+"Despliegues siguientes").
 
-- **El frontend no lee `API_URL`.** `frontend/src/environments/environment.prod.ts`
-  tiene `apiUrl: 'http://localhost:3000'` fijo, así que el frontend compilado
-  en Render llamaría a `localhost` desde el navegador de quien lo abra. Hay
-  que hacer que la compilación tome `API_URL` (frontend).
-- **El backend no lee `CORS_ORIGINS`.** `main.ts` llama a `enableCors` sin
-  lista de orígenes, así que acepta cualquiera. Funciona, pero no restringe
-  nada (backend).
-- **No existe todavía el workflow de despliegue.** Los servicios tienen
-  `autoDeployTrigger: "off"` y, mientras no esté ese workflow, se despliegan
-  a mano (ver "Despliegues siguientes").
-
-Mientras tanto, python-service y backend se pueden probar directamente con sus
-URL (paso 7).
+Lo que estaba pendiente en el código antes de publicar ya está resuelto en
+`main`: el frontend toma `API_URL` al compilar, el backend restringe CORS con
+`CORS_ORIGINS` y escucha en `PORT`, y Trivy ya no encuentra vulnerabilidades
+CRITICAL con arreglo en la imagen del backend.
 
 ## Por qué Blueprint y no Terraform
 
@@ -72,7 +69,8 @@ endpoint *Validate Blueprint* de la API, que no crea ni modifica recursos.
 | `JWT_SECRET` | Render (backend) | `generateValue: true` (Render genera 256 bits aleatorios) |
 | `INGESTA_CLAVE` | Render (python-service) | `generateValue: true` |
 | `OFF_USER_AGENT` | Render (python-service) | `sync: false`: se escribe al crear el Blueprint, con el correo del equipo |
-| Lo demás (puertos, URL, timeouts) | `render.yaml` | Valores no sensibles, versionados |
+| `PYTHON_API_URL`, `CORS_ORIGINS` (backend) y `API_URL` (frontend) | Render | `sync: false`: se escriben al crear el Blueprint. No son secretas, pero dependen de las URL que asigne Render |
+| Lo demás (puertos, timeouts, opciones de ingesta) | `render.yaml` | Valores no sensibles, versionados |
 | `RENDER_API_KEY` | GitHub, Secret | Render → Account Settings → API Keys |
 | `RENDER_OWNER_ID` | GitHub, Variable | ID del workspace (`tea-…` o `usr-…`), en Render → Workspace Settings |
 
@@ -103,20 +101,37 @@ tarjeta de crédito.
    - Nombre sugerido: `foodaware-staging`.
    - Render muestra lo que va a crear: 1 base (`foodaware-staging-db`) y
      3 servicios. Si el archivo tiene errores, aparecen aquí.
-   - Completa `OFF_USER_AGENT` con el formato `FoodAware/1.0 (correo@del-equipo)`.
+   - Render pide las variables con `sync: false`. Las URL todavía no existen,
+     así que se escriben las esperadas (sin `/` al final) y se revisan en el
+     paso 6:
+
+     | Servicio | Variable | Valor |
+     |---|---|---|
+     | `foodaware-staging-python` | `OFF_USER_AGENT` | `FoodAware/1.0 (correo@del-equipo)` |
+     | `foodaware-staging-backend` | `PYTHON_API_URL` | `https://foodaware-staging-python.onrender.com` |
+     | `foodaware-staging-backend` | `CORS_ORIGINS` | `https://foodaware-staging-frontend.onrender.com` |
+     | `foodaware-staging-frontend` | `API_URL` | `https://foodaware-staging-backend.onrender.com` |
+
    - Pulsa *Deploy Blueprint*. El primer despliegue construye las dos imágenes
      Docker y el frontend; puede tardar 10 a 15 minutos.
 5. **Desactivar Auto Sync.** En el Blueprint, *Settings → Auto Sync → No*. Así
    un cambio en `render.yaml` no se aplica antes de que pase el CI: se aplica
    a mano con *Manual Sync* (ver "Cambiar la infraestructura").
-6. **Revisar las URL.** Abre cada servicio y compara su URL con la tabla de
-   arriba. Si alguna tiene sufijo (por ejemplo
-   `foodaware-staging-python-a1b2.onrender.com`), actualiza en `render.yaml`
-   `PYTHON_API_URL`, `PYTHON_SERVICE_URL`, `CORS_ORIGINS` y `API_URL`, haz el
-   commit por un PR y, después del merge, pulsa *Manual Sync*. Después
-   redespliega el frontend, porque la URL del backend queda fija al compilar.
-7. **Probar que responde.** En PowerShell (la primera llamada a cada servicio
-   puede tardar hasta un minuto si estaba dormido):
+6. **Revisar las URL.** Abre cada servicio y compara la URL que aparece bajo
+   su nombre con la que escribiste en el paso 4. Si alguna tiene sufijo,
+   corrígela en la pestaña *Environment* del servicio que la usa y guarda con
+   *Save, rebuild, and deploy*:
+
+   | Si cambió la URL de… | Corrige… | En el servicio |
+   |---|---|---|
+   | python-service | `PYTHON_API_URL` | backend |
+   | frontend | `CORS_ORIGINS` | backend |
+   | backend | `API_URL` | frontend (se recompila: la URL queda fija en el build) |
+
+   No hace falta cambiar `render.yaml`: un *Manual Sync* no pisa las
+   variables `sync: false`.
+7. **Probar que responde.** En PowerShell, con las URL reales (la primera
+   llamada a cada servicio puede tardar hasta un minuto si estaba dormido):
 
    ```powershell
    Invoke-RestMethod https://foodaware-staging-python.onrender.com/health
@@ -128,9 +143,21 @@ tarjeta de crédito.
    python-service debe responder `estado` `ok` o `degradado`, con unos 383
    productos en `detalle.cache.productos` (los de la semilla). El backend debe
    reportar `postgresql` y `fastapi` `ok`.
-8. **Datos para el despliegue automático.** Copia el ID (`srv-…`, en la URL de
-   cada servicio en el Dashboard) y la URL de los tres servicios. Los usará el
-   workflow de despliegue como Variables del Environment `staging` de GitHub.
+8. **Datos para el despliegue automático.** Copia el ID (`srv-…`, al final de
+   la URL de cada servicio en el Dashboard) y la URL pública de los tres
+   servicios. En GitHub, *Settings → Environments → New environment*, crea el
+   Environment `staging` y agrégale estas Variables (no son secretas):
+
+   | Variable | Valor |
+   |---|---|
+   | `RENDER_SERVICE_ID_PYTHON` | ID de `foodaware-staging-python` |
+   | `RENDER_SERVICE_ID_BACKEND` | ID de `foodaware-staging-backend` |
+   | `RENDER_SERVICE_ID_FRONTEND` | ID de `foodaware-staging-frontend` |
+   | `STAGING_URL_PYTHON` | URL de python-service, sin `/` al final |
+   | `STAGING_URL_BACKEND` | URL del backend, sin `/` al final |
+   | `STAGING_URL_FRONTEND` | URL del frontend, sin `/` al final |
+
+   El workflow de despliegue usa además el Secret `RENDER_API_KEY` del paso 3.
 
 ## Despliegues siguientes
 
@@ -243,6 +270,6 @@ Según la [documentación de Render](https://render.com/docs/free):
 | La primera petición tarda ~1 min o da 502 | El servicio estaba dormido | Reintentar; despertar los servicios antes de usarlos |
 | Búsqueda con `X-Fuente-Datos: respaldo` | python-service dormido o lento | Despertar python-service (`/health`) y repetir |
 | `/api/health` del backend con `fastapi: error` | `PYTHON_API_URL` no coincide con la URL real o python-service está dormido | Revisar el paso 6; despertar python-service |
-| El frontend no llega al backend (error de red o CORS) | `API_URL` o `CORS_ORIGINS` con una URL distinta | Revisar el paso 6 y redesplegar el frontend |
+| El frontend no llega al backend (error de red o CORS) | `API_URL` o `CORS_ORIGINS` con una URL distinta, o `API_URL` terminada en `/api` | Revisar el paso 6 y redesplegar el frontend |
 | El deploy falla porque Render no detecta un puerto abierto | El servicio no escucha en `PORT` | Revisar `PORT` en `render.yaml` (8000 y 3000) |
 | python-service con `cache.productos` en 0 | La semilla no se cargó | Revisar los logs ("Semilla cargada…" o el error) |

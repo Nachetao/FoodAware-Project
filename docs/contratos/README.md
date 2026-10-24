@@ -448,6 +448,12 @@ del buscador o corpus (por ejemplo, antes y después de los sinónimos), no como
 nota absoluta. Si `consultas_evaluadas` baja, el corpus perdió cobertura de
 algún tipo de producto.
 
+El valor depende del corpus de cada caché: con otros productos cambian los
+relevantes de cada consulta y, con ellos, la métrica. El 0.53 de este
+documento es el de la caché local de 383 productos; el valor de referencia
+será el de staging, que arranca siempre desde la semilla (ver
+[recuperacion-y-evaluacion.md](../recuperacion-y-evaluacion.md#evaluación-de-la-búsqueda)).
+
 ## Convenciones
 
 - Campos en español `snake_case`.

@@ -19,7 +19,7 @@ concurrency:
 
 env:
   # Misma versión que backend/Dockerfile.
-  NODE_VERSION: ${{ vars.NODE_VERSION_BACKEND || '20' }}
+  NODE_VERSION: ${{ vars.NODE_VERSION_BACKEND || '22' }}
 
 jobs:
   build:
@@ -52,3 +52,9 @@ jobs:
 
       - name: Ejecutar pruebas unitarias
         run: npm run test
+
+      # Levantan la app completa contra un FastAPI simulado (servidor HTTP
+      # local) y repositorios en memoria: sin Docker, sin PostgreSQL y sin
+      # llamar a Open Food Facts.
+      - name: Ejecutar pruebas de integración (FastAPI simulado)
+        run: npm run test:integration
