@@ -6,6 +6,7 @@ import { HEADER_REQUEST_ID } from "./products/contrato/request-id";
 import { HEADER_FUENTE_DATOS } from "./products/fuente-datos";
 import { Logger } from "nestjs-pino";
 import { requestIdMiddleware } from "./observabilidad/request-id";
+import { origenesCors, puerto } from "./config/despliegue";
 
 async function bootstrap() {
   // bufferLogs: los logs del arranque esperan al logger de pino.
@@ -16,9 +17,12 @@ async function bootstrap() {
   app.use(requestIdMiddleware);
   // Todas las rutas estarán bajo el prefijo /api
   app.setGlobalPrefix("api");
-  // Se habilitan los CORS por defecto para el MVP. Los headers expuestos son
-  // los que el frontend necesita leer de la respuesta.
-  app.enableCors({ exposedHeaders: [HEADER_REQUEST_ID, HEADER_FUENTE_DATOS] });
+  // CORS solo para los orígenes de CORS_ORIGINS (en local, los de desarrollo).
+  // Los headers expuestos son los que el frontend necesita leer de la respuesta.
+  app.enableCors({
+    origin: origenesCors(process.env.CORS_ORIGINS),
+    exposedHeaders: [HEADER_REQUEST_ID, HEADER_FUENTE_DATOS],
+  });
 
   // Activar validación global para los DTOs
   // whitelist + forbidNonWhitelisted: un campo que no está en el DTO se
@@ -42,6 +46,7 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup("docs", app, document);
 
-  await app.listen(3000);
+  // Swagger (/docs) queda expuesto también en staging, a propósito, para la evaluación.
+  await app.listen(puerto(process.env.PORT));
 }
 bootstrap();
