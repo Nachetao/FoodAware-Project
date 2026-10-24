@@ -1,0 +1,56 @@
+.contenedor {
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+ion-card {
+  margin: 0 0 var(--app-espacio-4);
+}
+
+ion-card-title {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.metricas {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--app-espacio-4);
+  margin: 0;
+
+  dt {
+    font-size: 14px;
+    color: var(--ion-color-medium);
+  }
+
+  dd {
+    margin: var(--app-espacio-1) 0 0;
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--ion-color-primary);
+
+    &.texto {
+      font-size: 16px;
+    }
+  }
+}
+
+.ayuda {
+  margin: var(--app-espacio-1) 0 0;
+  font-size: 12px;
+  line-height: 1.33;
+}
+
+.estado-ingesta {
+  margin-bottom: var(--app-espacio-3);
+}
+
+.estado {
+  display: flex;
+  justify-content: center;
+  padding: var(--app-espacio-4) 0;
+}
+
+.error {
+  margin: 0;
+}

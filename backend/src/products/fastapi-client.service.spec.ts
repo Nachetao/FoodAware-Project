@@ -364,4 +364,58 @@ describe("FastApiClientService", () => {
       },
     );
   });
+
+  describe("métricas e ingesta", () => {
+    const calidad = {
+      porcentaje_validos: 92,
+      porcentaje_duplicados: 5,
+      cobertura_ingredientes: 87.5,
+      antiguedad_promedio_horas: 18.2,
+      total_productos: 1240,
+    };
+
+    it.each([
+      ["metricasCalidad", "/metrics/quality"],
+      ["metricasEvaluacion", "/metrics/evaluation"],
+      ["ultimaIngesta", "/ingest/runs/latest"],
+    ] as const)(
+      "%s hace GET a %s con X-Request-ID y devuelve el cuerpo tal cual",
+      async (metodo, ruta) => {
+        responderEnOrden(respuestaHttp(200, calidad));
+
+        const resultado = await service[metodo](REQUEST_ID);
+
+        expect(resultado).toEqual(calidad);
+        expect(httpService.get).toHaveBeenCalledWith(
+          `${PYTHON_API_URL}${ruta}`,
+          { headers: { "X-Request-ID": REQUEST_ID } },
+        );
+      },
+    );
+
+    it("propaga el 404 NOT_FOUND de la última ingesta sin reintentar", async () => {
+      responderEnOrden(errorHttpContrato(404, CodigoError.NOT_FOUND));
+
+      const error = await service
+        .ultimaIngesta(REQUEST_ID)
+        .catch((e: ContratoHttpException) => e);
+
+      expect(intentos).toBe(1);
+      expect((error as ContratoHttpException).getStatus()).toBe(404);
+    });
+
+    it("reintenta los errores transitorios e indica la ruta en el log", async () => {
+      jest.spyOn(Math, "random").mockReturnValue(0);
+      responderEnOrden(errorAxios("ECONNREFUSED"), respuestaHttp(200, calidad));
+
+      const resultado = service.metricasCalidad(REQUEST_ID);
+      await jest.runAllTimersAsync();
+
+      expect(await resultado).toEqual(calidad);
+      expect(intentos).toBe(2);
+      expect(logWarn).toHaveBeenCalledWith(
+        "[prueba-123] Reintento 1/2 de GET /metrics/quality tras ECONNREFUSED; espera 250 ms",
+      );
+    });
+  });
 });

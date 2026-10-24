@@ -8,6 +8,7 @@ import { FoodsModule } from "./foods/foods.module";
 import { AuthModule } from "./auth/auth.module";
 import { ProductsModule } from "./products/products.module";
 import { SaludModule } from "./salud/salud.module";
+import { MetricasModule } from "./metricas/metricas.module";
 import { LoggerModule } from "nestjs-pino";
 import { configuracionLogger } from "./observabilidad/logger.config";
 import { TiempoRespuestaInterceptor } from "./observabilidad/tiempo-respuesta.interceptor";
@@ -41,6 +42,7 @@ import { TiempoRespuestaInterceptor } from "./observabilidad/tiempo-respuesta.in
     AuthModule,
     ProductsModule,
     SaludModule,
+    MetricasModule,
   ],
   providers: [
     // Header X-Response-Time-ms y log de acceso en todas las rutas.

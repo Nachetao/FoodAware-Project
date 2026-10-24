@@ -4,6 +4,11 @@ import { ConfigService } from "@nestjs/config";
 import { AxiosError, isAxiosError } from "axios";
 import { firstValueFrom, retry, throwError, timer } from "rxjs";
 import { ParametrosBusqueda, RespuestaBusqueda } from "./contrato/busqueda";
+import {
+  MetricasCalidad,
+  MetricasEvaluacion,
+  ResumenIngesta,
+} from "./contrato/metricas";
 import { CodigoError } from "./contrato/enums";
 import { esErrorContrato } from "./contrato/error";
 import { HEADER_REQUEST_ID } from "./contrato/request-id";
@@ -44,11 +49,37 @@ export class FastApiClientService {
     { q, limit, offset }: ParametrosBusqueda,
     requestId: string,
   ): Promise<RespuestaBusqueda> {
+    return this.get<RespuestaBusqueda>("/search", requestId, {
+      q,
+      limit,
+      offset,
+    });
+  }
+
+  metricasCalidad(requestId: string): Promise<MetricasCalidad> {
+    return this.get<MetricasCalidad>("/metrics/quality", requestId);
+  }
+
+  metricasEvaluacion(requestId: string): Promise<MetricasEvaluacion> {
+    return this.get<MetricasEvaluacion>("/metrics/evaluation", requestId);
+  }
+
+  /** 404 NOT_FOUND (del contrato) si todavía no hay ninguna ingesta. */
+  ultimaIngesta(requestId: string): Promise<ResumenIngesta> {
+    return this.get<ResumenIngesta>("/ingest/runs/latest", requestId);
+  }
+
+  /** GET a FastAPI con timeout, reintentos, X-Request-ID y errores del contrato. */
+  private async get<T>(
+    ruta: string,
+    requestId: string,
+    params?: Record<string, unknown>,
+  ): Promise<T> {
     try {
       const response = await firstValueFrom(
         this.httpService
-          .get<RespuestaBusqueda>(`${this.pythonApiUrl}/search`, {
-            params: { q, limit, offset },
+          .get<T>(`${this.pythonApiUrl}${ruta}`, {
+            ...(params && { params }),
             headers: { [HEADER_REQUEST_ID]: requestId },
           })
           .pipe(
@@ -56,7 +87,7 @@ export class FastApiClientService {
             retry({
               count: this.reintentos,
               delay: (error, intento) =>
-                this.esperarReintento(error, intento, requestId),
+                this.esperarReintento(error, intento, ruta, requestId),
             }),
           ),
       );
@@ -66,7 +97,12 @@ export class FastApiClientService {
     }
   }
 
-  private esperarReintento(error: unknown, intento: number, requestId: string) {
+  private esperarReintento(
+    error: unknown,
+    intento: number,
+    ruta: string,
+    requestId: string,
+  ) {
     if (!esTransitorio(error)) {
       return throwError(() => error);
     }
@@ -74,7 +110,7 @@ export class FastApiClientService {
       BACKOFF_BASE_MS * 2 ** (intento - 1) +
       Math.floor(Math.random() * (JITTER_MAX_MS + 1));
     this.logger.warn(
-      `[${requestId}] Reintento ${intento}/${this.reintentos} de GET /search tras ${motivo(error)}; espera ${espera} ms`,
+      `[${requestId}] Reintento ${intento}/${this.reintentos} de GET ${ruta} tras ${motivo(error)}; espera ${espera} ms`,
     );
     return timer(espera);
   }
