@@ -13,6 +13,8 @@ const NIVELES: Record<string, string> = { warn: "warning" };
  * level primero; el resto de los campos va en el orden acordado.
  */
 export const opcionesPino: LoggerOptions = {
+  // "silent" en las pruebas de integración; info por defecto.
+  level: process.env.LOG_LEVEL || "info",
   messageKey: "message",
   timestamp: () => `,"timestamp":"${new Date().toISOString()}"`,
   // Reemplaza pid y hostname.
