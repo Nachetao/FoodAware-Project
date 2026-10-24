@@ -42,7 +42,8 @@ export class ProductsService {
   }
 }
 
-function aErrorApi(error: HttpErrorResponse): ErrorApi {
+/** Convierte un error HTTP en ErrorApi (mensaje del contrato o uno genérico). */
+export function aErrorApi(error: HttpErrorResponse): ErrorApi {
   if (esErrorContrato(error.error)) {
     const { codigo, mensaje, request_id } = error.error.error;
     return { status: error.status, codigo, mensaje, requestId: request_id };

@@ -11,6 +11,10 @@ const routes: Routes = [
     loadChildren: () => import('./busqueda/busqueda.module').then( m => m.BusquedaPageModule)
   },
   {
+    path: 'metricas',
+    loadChildren: () => import('./metricas/metricas.module').then( m => m.MetricasPageModule)
+  },
+  {
     path: '',
     redirectTo: 'home',
     pathMatch: 'full'

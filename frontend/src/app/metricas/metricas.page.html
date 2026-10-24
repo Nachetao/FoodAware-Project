@@ -1,0 +1,139 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-buttons slot="start">
+      <ion-back-button defaultHref="/home" text=""></ion-back-button>
+    </ion-buttons>
+    <ion-title>Métricas</ion-title>
+    <ion-buttons slot="end">
+      <ion-button aria-label="Actualizar métricas" (click)="actualizar()">
+        <ion-icon slot="icon-only" name="refresh-outline" aria-hidden="true"></ion-icon>
+      </ion-button>
+    </ion-buttons>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="ion-padding">
+  <div class="contenedor">
+    <!-- Calidad de datos -->
+    <ion-card class="tarjeta-calidad">
+      <ion-card-header>
+        <ion-card-title>Calidad de los datos</ion-card-title>
+        <ion-card-subtitle>Productos obtenidos de Open Food Facts</ion-card-subtitle>
+      </ion-card-header>
+      <ion-card-content>
+        @let seccionCalidad = calidad();
+        @if (seccionCalidad.datos; as c) {
+          <dl class="metricas">
+            <div>
+              <dt>Registros válidos</dt>
+              <dd>{{ formato.porcentaje(c.porcentaje_validos) }}</dd>
+              <p class="ayuda">Productos descargados que cumplen las reglas mínimas.</p>
+            </div>
+            <div>
+              <dt>Duplicados</dt>
+              <dd>{{ formato.porcentaje(c.porcentaje_duplicados) }}</dd>
+              <p class="ayuda">Válidos que no aportaron un producto nuevo.</p>
+            </div>
+            <div>
+              <dt>Cobertura de ingredientes</dt>
+              <dd>{{ formato.porcentaje(c.cobertura_ingredientes) }}</dd>
+              <p class="ayuda">Productos con ingredientes para detectar alérgenos.</p>
+            </div>
+            <div>
+              <dt>Productos disponibles</dt>
+              <dd>{{ formato.entero(c.total_productos) }}</dd>
+              <p class="ayuda">Productos válidos en los que se busca.</p>
+            </div>
+            <div>
+              <dt>Antigüedad promedio</dt>
+              <dd>{{ formato.decimal(c.antiguedad_promedio_horas) }} h</dd>
+              <p class="ayuda">Tiempo desde la última verificación con la fuente.</p>
+            </div>
+          </dl>
+        }
+        <ng-container *ngTemplateOutlet="estadoSeccion; context: { $implicit: seccionCalidad }"></ng-container>
+      </ion-card-content>
+    </ion-card>
+
+    <!-- Evaluación de la búsqueda -->
+    <ion-card class="tarjeta-evaluacion">
+      <ion-card-header>
+        <ion-card-title>Evaluación de la búsqueda</ion-card-title>
+        <ion-card-subtitle>Consultas de prueba con resultados conocidos</ion-card-subtitle>
+      </ion-card-header>
+      <ion-card-content>
+        @let seccionEvaluacion = evaluacion();
+        @if (seccionEvaluacion.datos; as e) {
+          <dl class="metricas">
+            <div>
+              <dt>Precision&#64;{{ e.k }}</dt>
+              <dd>{{ formato.proporcion(e.precision_at_k) }}</dd>
+              <p class="ayuda">De los {{ e.k }} primeros resultados, cuántos le sirven al usuario.</p>
+            </div>
+            <div>
+              <dt>Recall&#64;{{ e.k }}</dt>
+              <dd>{{ formato.proporcion(e.recall_at_k) }}</dd>
+              <p class="ayuda">De todos los productos útiles, cuántos aparecen entre los {{ e.k }} primeros.</p>
+            </div>
+            <div>
+              <dt>Consultas evaluadas</dt>
+              <dd>{{ formato.entero(e.consultas_evaluadas) }}</dd>
+              <p class="ayuda">Consultas de prueba con al menos un producto útil.</p>
+            </div>
+            <div>
+              <dt>Tiempo promedio</dt>
+              <dd>{{ formato.decimal(e.tiempo_promedio_ms) }} ms</dd>
+              <p class="ayuda">Lo que tarda cada búsqueda en el servicio.</p>
+            </div>
+          </dl>
+        }
+        <ng-container *ngTemplateOutlet="estadoSeccion; context: { $implicit: seccionEvaluacion }"></ng-container>
+      </ion-card-content>
+    </ion-card>
+
+    <!-- Última ingesta -->
+    <ion-card class="tarjeta-ingesta">
+      <ion-card-header>
+        <ion-card-title>Última ingesta</ion-card-title>
+        <ion-card-subtitle>Descarga de productos desde Open Food Facts</ion-card-subtitle>
+      </ion-card-header>
+      <ion-card-content>
+        @let seccionIngesta = ingesta();
+        @if (seccionIngesta.datos; as i) {
+          @let etiqueta = etiquetaEstado(i.estado);
+          <ion-badge class="estado-ingesta" [color]="etiqueta.color">{{ etiqueta.texto }}</ion-badge>
+          <dl class="metricas">
+            <div>
+              <dt>Inicio</dt>
+              <dd class="texto">{{ formato.fecha(i.inicio) }}</dd>
+            </div>
+            <div>
+              <dt>Duración</dt>
+              <dd class="texto">{{ i.duracion_ms === null ? 'En curso' : formato.duracion(i.duracion_ms) }}</dd>
+            </div>
+            <div><dt>Recuperados</dt><dd>{{ formato.entero(i.recuperados) }}</dd></div>
+            <div><dt>Válidos</dt><dd>{{ formato.entero(i.validos) }}</dd></div>
+            <div><dt>Inválidos</dt><dd>{{ formato.entero(i.invalidos) }}</dd></div>
+            <div><dt>Duplicados</dt><dd>{{ formato.entero(i.duplicados) }}</dd></div>
+            <div><dt>Errores</dt><dd>{{ formato.entero(i.errores) }}</dd></div>
+          </dl>
+        } @else if (seccionIngesta.error?.codigo === 'NOT_FOUND') {
+          <p class="estado">Todavía no hay ninguna ingesta.</p>
+        }
+        @if (seccionIngesta.error?.codigo !== 'NOT_FOUND') {
+          <ng-container *ngTemplateOutlet="estadoSeccion; context: { $implicit: seccionIngesta }"></ng-container>
+        }
+      </ion-card-content>
+    </ion-card>
+  </div>
+</ion-content>
+
+<!-- Carga y error de una tarjeta (el error trae el mensaje del contrato). -->
+<ng-template #estadoSeccion let-seccion>
+  @if (seccion.cargando && !seccion.datos) {
+    <div class="estado"><ion-spinner name="crescent" aria-label="Cargando"></ion-spinner></div>
+  }
+  @if (seccion.error) {
+    <ion-text color="danger"><p class="error" role="alert">{{ seccion.error.mensaje }}</p></ion-text>
+  }
+</ng-template>
