@@ -23,6 +23,11 @@ const routes: Routes = [
     redirectTo: 'home',
     pathMatch: 'full'
   },
+  {
+    // /login, /registro y /perfil (privada, con authGuard).
+    path: '',
+    loadChildren: () => import('./cuenta/cuenta.module').then( m => m.CuentaModule)
+  },
 ];
 
 @NgModule({

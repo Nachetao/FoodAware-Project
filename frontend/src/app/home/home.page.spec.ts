@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { IonicModule } from '@ionic/angular/lazy';
 
 import { HomePage } from './home.page';
+import { AuthService } from '../auth/auth.service';
 
 describe('HomePage', () => {
   let component: HomePage;
@@ -64,6 +65,25 @@ describe('HomePage', () => {
       await fixture.whenStable();
 
       expect(botonAnalizar().disabled).toBe(true);
+    });
+  });
+
+  describe('toolbar según la sesión', () => {
+    const toolbar = () => {
+      fixture.detectChanges();
+      return fixture.nativeElement as HTMLElement;
+    };
+
+    it('sin sesión muestra "Ingresar"', () => {
+      expect(toolbar().querySelector('ion-button.ingresar')?.textContent?.trim()).toBe('Ingresar');
+      expect(toolbar().querySelector('ion-button[aria-label="Mi perfil"]')).toBeNull();
+    });
+
+    it('con sesión muestra el ícono de perfil', () => {
+      TestBed.inject(AuthService).token.set('jwt-1');
+
+      expect(toolbar().querySelector('ion-button[aria-label="Mi perfil"]')).not.toBeNull();
+      expect(toolbar().querySelector('ion-button.ingresar')).toBeNull();
     });
   });
 });

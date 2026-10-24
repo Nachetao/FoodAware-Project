@@ -1,0 +1,33 @@
+.formulario {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-espacio-4);
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+h2 {
+  margin: var(--app-espacio-2) 0 0;
+}
+
+.ayuda,
+.correo,
+.alternativa {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ion-color-medium);
+}
+
+.nombre {
+  margin: 0;
+}
+
+.alternativa {
+  text-align: center;
+}
+
+.estado {
+  display: flex;
+  justify-content: center;
+  padding: var(--app-espacio-6) 0;
+}

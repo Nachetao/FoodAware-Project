@@ -71,6 +71,12 @@ export function aErrorApi(error: HttpErrorResponse): ErrorApi {
     const { codigo, mensaje, request_id } = error.error.error;
     return { status: error.status, codigo, mensaje, requestId: request_id };
   }
+  // Errores por defecto de NestJS (login, registro, validación): { message }.
+  const message = (error.error as { message?: unknown } | null)?.message;
+  if (typeof message === 'string' || Array.isArray(message)) {
+    const mensaje = Array.isArray(message) ? message.join('. ') : message;
+    return { status: error.status, codigo: null, mensaje, requestId: null };
+  }
   const mensaje =
     error.status === 0
       ? 'No se pudo conectar con el servidor.'
