@@ -1,6 +1,15 @@
 import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { EMPTY, Subject, catchError, distinctUntilChanged, switchMap, tap } from 'rxjs';
+import {
+  EMPTY,
+  Subject,
+  catchError,
+  defer,
+  distinctUntilChanged,
+  finalize,
+  switchMap,
+  tap,
+} from 'rxjs';
 import { ProductsService } from '../products/products.service';
 import { etiquetaAlergeno } from '../products/models/alergenos';
 import { ResultadoBusqueda } from '../products/models/busqueda';
@@ -8,6 +17,8 @@ import { ErrorApi } from '../products/models/error';
 
 const TAMANO_PAGINA = 20;
 const MIN_CARACTERES = 2;
+// En Render (plan gratuito) el backend se duerme y la primera respuesta tarda.
+const ESPERA_DESPERTAR_MS = 5000;
 
 @Component({
   selector: 'app-busqueda',
@@ -29,6 +40,8 @@ export class BusquedaPage {
   readonly error = signal<string | null>(null);
   // Se activa si alguna página de la búsqueda actual vino del respaldo.
   readonly desdeRespaldo = signal(false);
+  // La búsqueda lleva más de 5 s: probablemente el servidor está despertando.
+  readonly despertando = signal(false);
   readonly hayMas = computed(() => this.resultados().length < this.total());
 
   readonly minCaracteres = MIN_CARACTERES;
@@ -44,22 +57,7 @@ export class BusquedaPage {
         distinctUntilChanged(),
         tap((q) => this.reiniciar(q)),
         switchMap((q) =>
-          q.length < MIN_CARACTERES
-            ? EMPTY
-            : this.productsService.buscar(q, TAMANO_PAGINA, 0).pipe(
-                tap(({ respuesta, desdeRespaldo }) => {
-                  this.resultados.set(respuesta.resultados);
-                  this.total.set(respuesta.total);
-                  this.desdeRespaldo.set(desdeRespaldo);
-                  this.buscado.set(true);
-                  this.cargando.set(false);
-                }),
-                catchError((error: ErrorApi) => {
-                  this.error.set(error.mensaje);
-                  this.cargando.set(false);
-                  return EMPTY;
-                }),
-              ),
+          q.length < MIN_CARACTERES ? EMPTY : this.buscarPrimeraPagina(q),
         ),
         takeUntilDestroyed(this.destroyRef),
       )
@@ -98,6 +96,32 @@ export class BusquedaPage {
           }
         },
       });
+  }
+
+  // defer: el temporizador del aviso empieza al suscribirse, y finalize lo
+  // limpia al terminar o cuando switchMap cancela la búsqueda.
+  private buscarPrimeraPagina(q: string) {
+    return defer(() => {
+      const aviso = setTimeout(() => this.despertando.set(true), ESPERA_DESPERTAR_MS);
+      return this.productsService.buscar(q, TAMANO_PAGINA, 0).pipe(
+        tap(({ respuesta, desdeRespaldo }) => {
+          this.resultados.set(respuesta.resultados);
+          this.total.set(respuesta.total);
+          this.desdeRespaldo.set(desdeRespaldo);
+          this.buscado.set(true);
+          this.cargando.set(false);
+        }),
+        catchError((error: ErrorApi) => {
+          this.error.set(error.mensaje);
+          this.cargando.set(false);
+          return EMPTY;
+        }),
+        finalize(() => {
+          clearTimeout(aviso);
+          this.despertando.set(false);
+        }),
+      );
+    });
   }
 
   private reiniciar(q: string): void {

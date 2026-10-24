@@ -5,10 +5,10 @@
   "homepage": "https://ionicframework.com/",
   "scripts": {
     "ng": "ng",
-    "start": "ng serve",
-    "build": "ng build",
-    "watch": "ng build --watch --configuration development",
-    "test": "ng test",
+    "start": "node scripts/generar-api-url.js && ng serve",
+    "build": "node scripts/generar-api-url.js && ng build",
+    "watch": "node scripts/generar-api-url.js && ng build --watch --configuration development",
+    "test": "node scripts/generar-api-url.js && ng test",
     "lint": "ng lint"
   },
   "private": true,

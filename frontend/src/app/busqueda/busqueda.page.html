@@ -21,6 +21,9 @@
       <div class="estado">
         <ion-spinner name="crescent" aria-label="Buscando productos"></ion-spinner>
       </div>
+      @if (despertando()) {
+        <p class="estado" role="status">Despertando el servidor…</p>
+      }
     } @else if (buscado() && total() > 0) {
       @if (desdeRespaldo()) {
         <div class="aviso-respaldo" role="status">

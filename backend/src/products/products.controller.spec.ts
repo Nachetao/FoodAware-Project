@@ -33,7 +33,13 @@ describe("ProductsController (GET /api/products/search)", () => {
     // Misma configuración que main.ts.
     app = module.createNestApplication({ logger: false });
     app.setGlobalPrefix("api");
-    app.useGlobalPipes(new ValidationPipe({ transform: true }));
+    app.useGlobalPipes(
+      new ValidationPipe({
+        transform: true,
+        whitelist: true,
+        forbidNonWhitelisted: true,
+      }),
+    );
     await app.listen(0, "127.0.0.1");
     url = `${await app.getUrl()}/api/products/search`;
   });
@@ -116,6 +122,11 @@ describe("ProductsController (GET /api/products/search)", () => {
       "limit debe ser un número entero",
     ],
     ["offset negativo", "q=leche&offset=-1", "offset no puede ser negativo"],
+    [
+      "un parámetro desconocido",
+      "q=leche&userId=1",
+      "property userId should not exist",
+    ],
   ])(
     "responde 422 VALIDATION_ERROR con %s",
     async (_caso, query, mensajeEsperado) => {

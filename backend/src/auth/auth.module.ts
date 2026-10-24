@@ -4,10 +4,15 @@ import { ConfigModule, ConfigService } from "@nestjs/config";
 import { UsersModule } from "../users/users.module";
 import { AuthService } from "./auth.service";
 import { AuthController } from "./auth.controller";
+import { APP_GUARD } from "@nestjs/core";
+import { PassportModule } from "@nestjs/passport";
+import { JwtStrategy } from "./jwt.strategy";
+import { JwtAuthGuard } from "./jwt-auth.guard";
 
 @Module({
   imports: [
     UsersModule,
+    PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -18,7 +23,12 @@ import { AuthController } from "./auth.controller";
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    // Todas las rutas exigen JWT salvo las marcadas con @Public().
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+  ],
   exports: [AuthService, JwtModule],
 })
 export class AuthModule {}

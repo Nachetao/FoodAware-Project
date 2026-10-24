@@ -23,6 +23,9 @@ log.txt
 /platforms
 /plugins
 
+# Generado al compilar desde API_URL (scripts/generar-api-url.js)
+/src/environments/api-url.ts
+
 # Compiled output
 /dist
 /tmp

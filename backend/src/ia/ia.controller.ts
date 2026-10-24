@@ -1,78 +1,38 @@
-import { Controller, Get, Post, Body } from "@nestjs/common";
-import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { Controller, Post, Body } from "@nestjs/common";
+import { ApiBearerAuth, ApiOperation } from "@nestjs/swagger";
 import { IaAnalysisService } from "./ia.service";
-import { User } from "../users/user.entity";
 import { AnalizarProductoDto } from "./dto/analizar-producto.dto";
+import { Public, UsuarioActual } from "../auth/decoradores";
+import { UsuarioToken } from "../auth/jwt.strategy";
 
 @Controller("food")
 export class IaController {
-  constructor(
-    private readonly iaAnalysisService: IaAnalysisService,
-    @InjectRepository(User)
-    private readonly userRepository: Repository<User>,
-  ) {}
+  constructor(private readonly iaAnalysisService: IaAnalysisService) {}
 
+  // Público para el frontend actual, que todavía no tiene login.
+  @Public()
   @Post("analizar")
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: "Analiza un producto (token opcional)",
+    description:
+      "Sin token analiza sin usuario. Con un token válido cruza los alérgenos con los del usuario del token. El userId del body se ignora.",
+  })
   async analizar(
     @Body() body: AnalizarProductoDto,
+    @UsuarioActual() usuario: UsuarioToken | null,
   ) {
-    const { nombre, ingredientes, userId } = body;
+    const { nombre, ingredientes } = body;
 
     const resultado = await this.iaAnalysisService.analizarProducto(
       nombre,
       ingredientes,
-      userId,
+      usuario?.id,
     );
 
     return {
       message: "Análisis completado",
       resultado,
-    };
-  }
-
-  @Get("test-ia")
-  async testIa() {
-    const nombre = "Barrita energética";
-    const ingredientes = ["avena", "maní", "azúcar", "miel"];
-
-    const respuesta = await this.iaAnalysisService.analizarProducto(
-      nombre,
-      ingredientes,
-    );
-
-    return {
-      message: "Prueba de integración exitosa NestJS -> FastAPI",
-      resultado: respuesta,
-    };
-  }
-
-  @Get("test-alergia")
-  async testAlergia() {
-    // 1. Crear un usuario de prueba (con un correo aleatorio para no violar constraint 'unique' si se llama varias veces)
-    const randomEmail = `prueba-${Date.now()}@test.com`;
-    const newUser = this.userRepository.create({
-      nombre: "Usuario de Prueba",
-      correo: randomEmail,
-      password: "passwordFicticia123",
-      alergias: ["maní"],
-    });
-    const savedUser = await this.userRepository.save(newUser);
-
-    // 2. Analizar el producto pasándole el ID de este nuevo usuario
-    const nombre = "Barrita energética";
-    const ingredientes = ["avena", "maní", "azúcar", "miel"];
-
-    const respuesta = await this.iaAnalysisService.analizarProducto(
-      nombre,
-      ingredientes,
-      savedUser.id,
-    );
-
-    return {
-      message: "Prueba de cruce de alergias NestJS",
-      usuario: savedUser,
-      resultado: respuesta,
     };
   }
 }

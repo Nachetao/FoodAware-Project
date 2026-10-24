@@ -4,7 +4,6 @@ import {
   IsArray,
   ArrayNotEmpty,
   IsOptional,
-  IsUUID,
 } from "class-validator";
 
 export class AnalizarProductoDto {
@@ -17,7 +16,8 @@ export class AnalizarProductoDto {
   @IsString({ each: true, message: "Cada ingrediente debe ser texto" })
   ingredientes: string[];
 
+  // Se ignora: el usuario sale del token. Se acepta para no romper clientes
+  // que todavía lo envían (forbidNonWhitelisted lo rechazaría).
   @IsOptional()
-  @IsUUID("4", { message: "El userId debe ser un ID válido" })
-  userId?: string;
+  userId?: unknown;
 }

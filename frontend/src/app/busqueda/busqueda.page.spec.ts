@@ -291,4 +291,52 @@ describe('BusquedaPage', () => {
       expect(aviso()).toEqual([]);
     });
   });
+
+  describe('aviso "Despertando el servidor…"', () => {
+    afterEach(() => vi.useRealTimers());
+
+    const despertando = () => texto().includes('Despertando el servidor…');
+
+    it('aparece si la búsqueda tarda más de 5 s y se quita al responder', () => {
+      vi.useFakeTimers();
+      const respuestaLenta = new Subject<BusquedaProductos>();
+      buscar.mockReturnValue(respuestaLenta);
+
+      page.buscar('leche');
+      vi.advanceTimersByTime(4999);
+      expect(despertando()).toBe(false);
+
+      vi.advanceTimersByTime(1);
+      expect(despertando()).toBe(true);
+
+      respuestaLenta.next(respuesta(rango(1, 3)));
+      respuestaLenta.complete();
+      expect(despertando()).toBe(false);
+      expect(elemento().querySelectorAll('ion-item')).toHaveLength(3);
+    });
+
+    it('no aparece si la búsqueda responde antes de 5 s', () => {
+      vi.useFakeTimers();
+      buscar.mockReturnValue(of(respuesta(rango(1, 3))));
+
+      page.buscar('leche');
+      vi.advanceTimersByTime(6000);
+
+      expect(despertando()).toBe(false);
+    });
+
+    it('se reinicia si el usuario cambia la consulta', () => {
+      vi.useFakeTimers();
+      buscar.mockReturnValue(new Subject<BusquedaProductos>());
+
+      page.buscar('leche');
+      vi.advanceTimersByTime(4000);
+      page.buscar('pan');
+      vi.advanceTimersByTime(4000);
+
+      expect(despertando()).toBe(false);
+      vi.advanceTimersByTime(1000);
+      expect(despertando()).toBe(true);
+    });
+  });
 });
