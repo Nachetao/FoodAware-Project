@@ -2,6 +2,7 @@ import { Component, inject, ChangeDetectorRef } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { AlertController, LoadingController } from '@ionic/angular/lazy';
 import { environment } from '../../environments/environment';
+import { AuthService } from '../auth/auth.service';
 
 @Component({
   selector: 'app-home',
@@ -14,6 +15,8 @@ export class HomePage {
   private alertCtrl = inject(AlertController);
   private loadingCtrl = inject(LoadingController);
   private cdr = inject(ChangeDetectorRef);
+  // Toolbar: "Ingresar" o el ícono de perfil según la sesión.
+  readonly auth = inject(AuthService);
 
   productoNombre: string = '';
   ingredientesTexto: string = '';
