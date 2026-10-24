@@ -1,83 +1,264 @@
 # FoodAware
 
-## 1. Descripción y Definición del Proyecto
-FoodAware es una aplicación web multiplataforma diseñada para ayudar a los usuarios a elegir alimentos compatibles con sus necesidades, clasificando productos según sus restricciones o preferencias personales mediante Inteligencia Artificial, entregando alertas tempranas sobre alérgenos y compatibilidad dietética.
+FoodAware es una aplicación web multiplataforma para ayudar a las personas con
+alergias, intolerancias o dietas específicas a elegir alimentos procesados.
+Busca productos reales vendidos en Chile, revisa su lista de ingredientes y
+muestra qué alérgenos contienen y cuáles pueden venir como trazas.
 
-**Integrantes:**
-* Ignacio Reyes
-* Joaquín Muñoz
+Integrantes:
 
-### Problema Delimitado
-Las personas con restricciones alimentarias (alergias,intolerancias,etc) o dietas específicas tienen problemas para poder identificar si un producto procesado es apto para su consumo o no. Las etiquetas de ingredientes suelen ser complejas, ya que usan nombres técnicos u ocultan alérgenos, lo que representa un riesgo para la salud del consumidor y genera una mala experiencia de compra.
+- Ignacio Reyes
+- Joaquín Muñoz
 
-### Usuarios Objetivo
-* **Personas con alergias o intolerancias alimentarias:** Usuarios que necesitan ver los ingredientes de los productos para evitar problemas de salud.
-* **Consumidores con dietas específicas:** Personas que tiene un regimen como veganos, vegetarianos o libres de gluten.
-* **Usuarios enfocados en salud:** Personas interesadas en conocer el perfil nutricional real de lo que consumen.
+## Problema
 
-### Objetivos y Alcance
-* **Objetivo General:** Desarrollar una herramienta tecnológica que analice listas de ingredientes y determine la viabilidad de consumo basándose en el perfil de salud del usuario.
-* **Alcance (EP1):** Implementación de la arquitectura base (Frontend, Backend, Servicio de IA, BD), autenticación de usuarios segura (JWT/Bcrypt) y pipeline DevSecOps estricto.
+Las personas con restricciones alimentarias (alergias, intolerancias o
+dietas como la vegana o sin gluten) tienen problemas para saber si un
+producto procesado es apto para ellas. Las etiquetas usan nombres técnicos
+("caseinato", "lactosuero"), esconden alérgenos dentro de subingredientes o
+los mencionan solo como "puede contener". Equivocarse es un riesgo para la
+salud, y revisar cada etiqueta en el supermercado es lento.
 
-## 2. Principales Funcionalidades
-* Registro y gestión de perfiles nutricionales.
-* Búsqueda y clasificación de alimentos aptos.
-* Escaneo/Búsqueda de productos.
+### Usuarios objetivo
 
-## 3. Capacidad Adaptativa o Inteligente
-* **Descripción:** El sistema clasificará productos en tiempo real determinando si son aptos o no, basándose en las restricciones configuradas en el perfil del usuario.
-* **Mecanismo:** Procesamiento mediante reglas/clasificación implementado en un servicio especializado de Python (FastAPI).
+- Personas con alergias o intolerancias alimentarias, que necesitan saber
+  qué tiene cada producto para evitar problemas de salud.
+- Consumidores con dietas específicas: veganos, vegetarianos o sin gluten.
+- Personas interesadas en conocer mejor lo que comen.
 
-## 4. Fuentes de Información Web
-Para las siguientes etapas del proyecto (EP2), el sistema se integrará con la API de **Open Food Facts**, una base de datos abierta y colaborativa de productos alimenticios, para extraer los ingredientes reales de los productos comerciales a partir de su nombre o código.
+### Objetivos
 
-## 5. Arquitectura General y Tecnologías
-* **Frontend:** Angular + Ionic Framework + Capacitor
-* **Backend Principal:** NestJS (API REST principal)
-* **Servicio Especializado:** Python + FastAPI (Procesamiento inteligente)
-* **Base de Datos:** PostgreSQL
-* **Infraestructura y DevSecOps:** Docker, Docker Compose, Terraform, GitHub Actions.
+- Objetivo general: desarrollar una herramienta que analice los ingredientes
+  de productos reales y determine si son aptos según el perfil de la persona.
+- EP1: arquitectura base (frontend, backend, servicio de Python y base de
+  datos), autenticación (JWT y bcrypt) y pipeline DevSecOps.
+- EP2: integrar una fuente web real (Open Food Facts), limpiar y preparar sus
+  datos, detectar alérgenos y trazas, buscar con BM25, medir la calidad de los
+  datos y de la búsqueda, y desplegar un ambiente de staging.
 
-## 6. Configuración de Entorno (Variables)
-Para levantar este proyecto en local, se requiere un archivo `.env` en la raíz del proyecto. Las variables necesarias son:
-* `DB_HOST`: Host de la base de datos (usualmente `db` cuando se usa Docker Compose).
-* `DB_PORT`: Puerto de PostgreSQL (por defecto `5432`).
-* `DB_USER`: Nombre de usuario administrador de la base de datos.
-* `DB_PASSWORD`: Contraseña del usuario de la base de datos.
-* `DB_NAME`: Nombre de la base de datos (ej. `foodaware_db`).
-* `JWT_SECRET`: Llave secreta utilizada para firmar los tokens de autenticación de los usuarios.
-* `PYTHON_API_URL`: Ruta interna donde el backend de NestJS se comunica con el servicio de IA (ej. `http://python-service:8000`).
+## Qué hace hoy
 
-## 7. Instrucciones de Instalación y Ejecución
-Siga los pasos a continuación para configurar y ejecutar el proyecto en su entorno local:
+- Busca productos por texto (por ejemplo "galletas de avena") en un corpus de
+  383 productos chilenos de Open Food Facts, ordenados por relevancia con
+  BM25.
+- Muestra los alérgenos y las trazas de cada producto, detectados en el texto
+  de ingredientes y unidos con lo que declara Open Food Facts.
+- Actualiza los datos solo: una ingesta cada 24 horas, con limitadores de
+  tasa y reintentos para no abusar de la fuente.
+- Mide la calidad de los datos (porcentaje de válidos, duplicados, cobertura
+  de ingredientes, antigüedad y fallas de la fuente) y de la búsqueda
+  (Precision@5 y Recall@5).
+- Sigue respondiendo si un servicio falla: si el python-service no contesta,
+  el backend responde desde su propia base y el frontend lo avisa.
+- Registro de usuarios con su perfil de alergias y análisis manual de
+  ingredientes (de la EP1).
 
-1. **Clonar el repositorio:** 
-   Descargue el código fuente a su entorno local.
-2. **Crear las variables de entorno:** 
-   Copie el archivo `.env.example`, renómbrelo a `.env` y configure los valores locales correspondientes.
-3. **Levantar los contenedores:** 
-   Utilice el comando `docker compose up --build -d` para construir y levantar la base de datos, el frontend, el backend y el servicio de Python en segundo plano.
+## Capacidad adaptativa
 
-## 8. Pipeline DevSecOps
-El proyecto utiliza GitHub Actions para establecer un flujo robusto de automatización e integración continua (CI). Este pipeline se encarga de ejecutar la instalación de dependencias, realizar revisiones de formato (Linting), ejecutar pruebas unitarias, realizar análisis de dependencias vulnerables críticas (`npm audit` y `pip-audit`), y llevar a cabo un escaneo estricto de seguridad utilizando GitLeaks para prevenir la exposición accidental de credenciales.
+La idea es que FoodAware clasifique cada producto como apto o no apto según
+el perfil de alergias de la persona, en vez de dejar que ella revise los
+alérgenos uno por uno. La necesidad salió de la evaluación de la búsqueda.
+Las consultas de producto ("pan integral") rinden bien, con Precision@5 de
+0,75. Las consultas con restricción se quedan en 0,20: en "chocolate sin
+leche" los 5 primeros resultados tienen leche, y en "galletas sin gluten" el
+tercero es una galleta con gluten que sube solo porque su nombre dice "sin
+sal". Un buscador por palabras no entiende el "sin". Para responder bien hay
+que usar los alérgenos y trazas que ya detectamos en cada producto y filtrar
+según el perfil. La especificación preliminar está en
+[docs/capacidad-adaptativa.md](docs/capacidad-adaptativa.md) (en
+elaboración).
 
-## 8.1 Evidencia del pipeline en funcionamiento
+## Arquitectura
 
-Para comprobar que el pipeline bloquea el flujo ante un problema de seguridad, hicimos intencionalmente un secreto falso en una rama de prueba. El job de Gitleaks lo detectó de
-inmediato y falló el pipeline, identificando el archivo, la línea y la regla activada.
+```mermaid
+flowchart LR
+    Usuario([Usuario]) --> Front["Frontend<br/>Angular + Ionic"]
+    Front -->|"REST /api"| Back["Backend<br/>NestJS"]
+    Back --> PG[("PostgreSQL<br/>usuarios y respaldo<br/>de productos")]
+    Back -->|"REST + X-Request-ID"| Py["python-service<br/>FastAPI + BM25"]
+    Py --> SQLite[("Caché SQLite")]
+    Py -->|"ingesta con límites<br/>de tasa"| OFF[("Open Food Facts")]
 
-![Checks fallando](docs/evidencia/7dd0b35e-ced6-458c-be62-37fe8d19b212.png)
-![Log de detección](docs/evidencia/4e13e96e-90f3-4be7-b47b-b2ddeba5c437.png)
-![Log de detección 2](docs/evidencia/a2601e1e-e4bc-463b-be64-5f0f5800a625.png)
+    GH["GitHub Actions<br/>CI y seguridad"] -.->|"valida y prueba"| Back
+    GH -.-> Py
+    GH -.-> Front
+    GH -.->|"valida render.yaml"| Render["Render<br/>staging, plan gratuito"]
+    Render -.->|"aloja"| Front
+    Render -.-> Back
+    Render -.-> Py
+    Render -.-> PG
+```
 
-Tras eliminar el secreto (limpiando también el historial, ya que Gitleaks escanea los commits, no solo el código final), el pipeline volvió a estar en verde.
+| Componente | Tecnología | Responsabilidad |
+|---|---|---|
+| Frontend | Angular 22, Ionic 9, Capacitor; nginx en Docker | Interfaz de búsqueda y de análisis |
+| Backend | NestJS 10, TypeORM, pino | API principal, usuarios y autenticación, proxy de la búsqueda y respaldo |
+| python-service | Python 3.11, FastAPI, Pydantic, httpx | Ingesta desde Open Food Facts, preparación de datos, alérgenos, búsqueda BM25 y métricas |
+| Base de datos | PostgreSQL 15 | Datos del backend |
+| Caché | SQLite | Productos de Open Food Facts con su payload crudo y procedencia |
+| CI/CD | GitHub Actions | Lint, pruebas, integración, seguridad e infraestructura |
+| Staging | Render (Blueprint `render.yaml`) | Ambiente de staging en el plan gratuito |
 
-![Pipeline en verde](docs/evidencia/no-leaks.webp)
+Los diagramas de contexto, contenedores y despliegue, junto con las
+decisiones de arquitectura, están en [docs/Arquitectura.md](docs/Arquitectura.md).
 
-Esto confirma que el quality gate impide continuar el flujo mientras exista un secreto expuesto.
+## Levantar el proyecto en local
 
-## 9. Ambiente de staging
-El ambiente de staging se levanta localmente mediante Docker Compose, replicando la misma arquitectura de contenedores que se usaría en un despliegue real: frontend (puerto 4200), backend (puerto 3000), servicio Python (puerto 8000) y PostgreSQL (puerto interno 5432). La infraestructura está definida como código en la carpeta `terraform/`, validada automáticamente en cada push mediante el workflow `ci-terraform.yml` (`terraform fmt`, `terraform validate` y `terraform plan`).
+Requisitos: Docker Desktop y Git. No hace falta instalar Node ni Python para
+levantar la app.
 
-## 10. Prototipo
-Enlace al diseño interactivo en Figma: https://www.figma.com/design/5ckGTwcAkx4wRjsVI7VfEw/FoodAware?node-id=0-1&t=bg6G2XpqgT3mjuvQ-1
+1. Clonar el repositorio:
+
+   ```powershell
+   git clone https://github.com/Nachetao/FoodAware-Project.git
+   cd FoodAware-Project
+   ```
+
+2. Crear el `.env` a partir del ejemplo y completarlo:
+
+   ```powershell
+   Copy-Item .env.example .env
+   ```
+
+   Como mínimo hay que cambiar `DB_USER`, `DB_PASSWORD`, `JWT_SECRET` y
+   `OFF_USER_AGENT` (con un correo real de contacto, por ejemplo
+   `FoodAware/1.0 (correo@del-equipo)`). Si se quiere lanzar ingestas a mano,
+   también `INGESTA_CLAVE`; en `.env.example` está el comando de PowerShell
+   para generarla.
+
+3. Levantar todo:
+
+   ```powershell
+   docker compose up --build -d
+   docker compose ps
+   ```
+
+   La primera vez tarda varios minutos porque construye las imágenes. Las
+   migraciones de PostgreSQL corren solas al iniciar el backend, y el
+   python-service carga la semilla del corpus (383 productos) si su caché
+   está vacía, sin llamar a Open Food Facts.
+
+4. Probar:
+
+   | Qué | URL |
+   |---|---|
+   | Frontend | http://localhost:4200 |
+   | Backend | http://localhost:3000/api/health |
+   | Swagger del backend | http://localhost:3000/docs |
+   | python-service | http://localhost:8000/health |
+   | Swagger del python-service | http://localhost:8000/docs |
+
+   ```powershell
+   Invoke-RestMethod "http://localhost:3000/api/products/search?q=galletas&limit=3"
+   ```
+
+Para bajar todo: `docker compose down` (con `-v` se borran también los
+volúmenes de PostgreSQL y de la caché).
+
+## Variables de entorno
+
+Todas están en [`.env.example`](.env.example), con comentarios. El `.env` real
+no se sube al repositorio.
+
+| Variable | Servicio | Para qué | Por defecto |
+|---|---|---|---|
+| `DB_HOST`, `DB_PORT` | backend | Host y puerto de PostgreSQL (`db` dentro de Docker Compose) | `db`, `5432` |
+| `DB_USER`, `DB_PASSWORD`, `DB_NAME` | backend, db | Credenciales y nombre de la base | se definen en `.env` |
+| `PORT` | backend | Puerto del backend | `3000` |
+| `JWT_SECRET` | backend | Firma de los tokens de autenticación | se define en `.env` |
+| `PYTHON_API_URL` | backend | URL del python-service (`http://python-service:8000` en Docker) | |
+| `PYTHON_API_TIMEOUT_MS`, `PYTHON_API_REINTENTOS` | backend | Timeout por intento y reintentos al python-service | `2000`, `2` |
+| `LOG_LEVEL` | python-service | Nivel de los logs JSON | `INFO` |
+| `SIMULAR_ERRORES_HABILITADO` | python-service | Habilita el header `X-Simular-Error` (solo desarrollo) | `false` |
+| `OFF_BASE_URL`, `OFF_USER_AGENT`, `OFF_TIMEOUT_SEGUNDOS` | python-service | Open Food Facts: URL, identificación obligatoria y timeout | `https://world.openfoodfacts.org`, sin valor, `10` |
+| `LIMITADOR_ESPERA_MAX_SEGUNDOS` | python-service | Máximo que una petición espera al limitador de tasa | `3` |
+| `CACHE_DB_PATH` | python-service | Ruta de la caché SQLite | `/data/foodaware-cache.sqlite3` |
+| `INGESTA_CLAVE` | python-service | Clave de `POST /ingest/runs`; vacía, el endpoint queda cerrado | vacía |
+| `CARGAR_SEMILLA_SI_VACIA` | python-service | Cargar la semilla del corpus si la caché está vacía | `true` |
+| `INGESTA_AL_INICIAR`, `INGESTA_INTERVALO_HORAS`, `CACHE_TTL_HORAS` | python-service | Estrategia de actualización | `true`, `24`, `72` |
+| `INGESTA_CATEGORIAS`, `INGESTA_MAX_PRODUCTOS` | python-service | Categorías y tope de productos de cada ingesta | 7 categorías, `500` |
+
+El detalle de las variables del python-service está en
+[docs/contratos/README.md](docs/contratos/README.md#estrategia-de-actualización).
+En staging, Render genera los secretos (`JWT_SECRET`, `INGESTA_CLAVE` y la
+contraseña de la base); ver [docs/despliegue-staging.md](docs/despliegue-staging.md#secretos-y-configuración).
+
+## Documentación
+
+| Documento | Contenido | Estado |
+|---|---|---|
+| [docs/Arquitectura.md](docs/Arquitectura.md) | Diagramas de contexto, contenedores y despliegue; modelo de datos; decisiones de arquitectura | Actualizado a la EP2 (modelo de BD pendiente del backend) |
+| [docs/Flujo de Datos.md](docs/Flujo%20de%20Datos.md) | Flujo de búsqueda (EP2) y de análisis manual (EP1) | Actualizado a la EP2 |
+| [docs/contratos/README.md](docs/contratos/README.md) | API FastAPI: endpoints, errores, headers, búsqueda y métricas ([OpenAPI](docs/contratos/fastapi-openapi.json)) | Listo |
+| [docs/backend.md](docs/backend.md) | API NestJS | En elaboración |
+| [docs/frontend.md](docs/frontend.md) | Frontend | En elaboración |
+| [docs/observabilidad.md](docs/observabilidad.md) | Logs, request id y salud del backend | En elaboración |
+| [docs/capacidad-adaptativa.md](docs/capacidad-adaptativa.md) | Especificación preliminar de la capacidad adaptativa | En elaboración |
+| [docs/fuente-web.md](docs/fuente-web.md) | Open Food Facts: qué datos usamos, cómo los obtenemos y revisión legal y ética | Listo |
+| [docs/extraccion-y-preparacion.md](docs/extraccion-y-preparacion.md) | Extracción, limpieza, alérgenos, calidad, deduplicación y trazabilidad | Listo |
+| [docs/recuperacion-y-evaluacion.md](docs/recuperacion-y-evaluacion.md) | Persistencia, índice, BM25 y métricas con sus resultados | Listo |
+| [docs/pipeline-devsecops.md](docs/pipeline-devsecops.md) | Workflows, quality gates, Variables y Secrets, pruebas y evidencia | Listo |
+| [docs/despliegue-staging.md](docs/despliegue-staging.md) | Despliegue en Render paso a paso | Listo |
+| [docs/limitaciones.md](docs/limitaciones.md) | Limitaciones conocidas, su impacto y su mitigación | Listo |
+
+## Staging
+
+Staging corre en Render con el plan gratuito, declarado en
+[`render.yaml`](render.yaml). Son cuatro recursos: el frontend como sitio
+estático, el backend y el python-service como web services Docker, y una base
+PostgreSQL.
+
+- URL del frontend: _por agregar al publicar_
+- URL del backend: _por agregar al publicar_
+- URL del python-service: _por agregar al publicar_
+
+Los servicios gratuitos se duermen tras 15 minutos sin tráfico, así que la
+primera petición puede tardar cerca de un minuto. Las instrucciones de
+despliegue, los secretos y las limitaciones del plan están en
+[docs/despliegue-staging.md](docs/despliegue-staging.md). Antes de que
+funcione de punta a punta faltan dos cambios en el código (que el frontend
+lea `API_URL` y que el backend lea `CORS_ORIGINS`), descritos en ese mismo
+documento.
+
+## Pipeline DevSecOps
+
+Cada push a cualquier rama y cada pull request a `main` corre 7 workflows de
+GitHub Actions:
+
+| Workflow | Qué revisa |
+|---|---|
+| CI Backend (NestJS) | `npm audit`, lint y 108 pruebas unitarias |
+| CI Frontend (Angular) | Lint, 40 pruebas unitarias, `npm audit` y compilación |
+| CI Python (FastAPI) | flake8, 293 pruebas unitarias, 535 pruebas del proceso de recuperación, contrato OpenAPI al día y `pip-audit` |
+| CI Integración | La app completa con Docker Compose y 5 pruebas entre NestJS y FastAPI |
+| CI Seguridad | Gitleaks, Bandit, CodeQL (Python y TypeScript) y Trivy sobre las 3 imágenes |
+| CI Render Blueprint | `render.yaml` contra el esquema oficial y contra la API de Render |
+| Terraform CI | `fmt`, `validate` y `plan` de `terraform/` |
+
+Hoy, en el último commit de `main`, 6 de los 7 workflows están en verde. CI
+Seguridad falla porque Trivy encuentra una vulnerabilidad crítica con arreglo
+en la imagen base del backend. Qué hace fallar a cada uno, cómo correr las
+pruebas y las Variables y Secrets que usan están en
+[docs/pipeline-devsecops.md](docs/pipeline-devsecops.md).
+
+## Evidencia
+
+La evidencia del pipeline (incluida la prueba de la EP1 en que Gitleaks
+bloqueó un secreto falso) y de las pruebas está en
+[docs/pipeline-devsecops.md](docs/pipeline-devsecops.md#evidencia). Los
+resultados de las métricas, con las salidas reales de los scripts, están en
+[docs/recuperacion-y-evaluacion.md](docs/recuperacion-y-evaluacion.md#7-métricas).
+
+## Limitaciones
+
+Las limitaciones conocidas (datos incompletos de la fuente, casos que la
+detección de alérgenos no resuelve, la búsqueda léxica con restricciones, el
+plan gratuito de Render y las vulnerabilidades pendientes) están en
+[docs/limitaciones.md](docs/limitaciones.md). Lo más importante: la
+información de alérgenos es orientativa y no reemplaza leer la etiqueta del
+producto.
+
+## Prototipo
+
+Diseño interactivo en Figma:
+https://www.figma.com/design/5ckGTwcAkx4wRjsVI7VfEw/FoodAware?node-id=0-1&t=bg6G2XpqgT3mjuvQ-1
