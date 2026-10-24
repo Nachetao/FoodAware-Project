@@ -32,7 +32,7 @@ export class UsersService {
       nombre,
       correo,
       password: await bcrypt.hash(password, 10),
-      alergias,
+      alergias: alergias ?? [],
     });
 
     try {
