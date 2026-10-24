@@ -40,6 +40,7 @@ describe("ProductsRepository", () => {
   let typeormRepository: {
     createQueryBuilder: jest.Mock;
     query: jest.Mock;
+    findOne: jest.Mock;
     metadata: object;
   };
 
@@ -53,6 +54,7 @@ describe("ProductsRepository", () => {
     typeormRepository = {
       createQueryBuilder: jest.fn().mockReturnValue(qb),
       query: jest.fn(),
+      findOne: jest.fn(),
       metadata: {
         columns: [
           { databaseName: "codigo_barras", isPrimary: true },
@@ -274,6 +276,37 @@ describe("ProductsRepository", () => {
       await expect(
         repository.buscarRespaldo({ q: "leche", limit: 20, offset: 0 }),
       ).rejects.toThrow("conexión perdida");
+    });
+  });
+
+  describe("buscarPorCodigo", () => {
+    it("devuelve el producto guardado con la forma del contrato", async () => {
+      const fila = {
+        ...crearProducto("7801234000018"),
+        fuente: "openfoodfacts",
+        url_fuente: "https://world.openfoodfacts.org/product/7801234000018",
+        recuperado_en: new Date("2026-10-20T14:30:00.000Z"),
+        modificado_en_fuente: null,
+        run_id: "3f2b8c1e-9d4a-4e7b-8a6f-1c2d3e4f5a6b",
+        hash_contenido: "a".repeat(64),
+        es_valido: true,
+        problemas: ["sin_imagen"],
+        completitud: 0.9,
+      };
+      typeormRepository.findOne.mockResolvedValue(fila);
+
+      const producto = await repository.buscarPorCodigo("7801234000018");
+
+      expect(typeormRepository.findOne).toHaveBeenCalledWith({
+        where: { codigo_barras: "7801234000018" },
+      });
+      expect(producto).toEqual(crearProducto("7801234000018"));
+    });
+
+    it("devuelve null si no está guardado", async () => {
+      typeormRepository.findOne.mockResolvedValue(null);
+
+      expect(await repository.buscarPorCodigo("7801234000018")).toBeNull();
     });
   });
 });

@@ -418,4 +418,34 @@ describe("FastApiClientService", () => {
       );
     });
   });
+
+  describe("obtenerProducto", () => {
+    it("hace GET a /products/{codigo} con X-Request-ID", async () => {
+      responderEnOrden(
+        respuestaHttp(200, respuestaBusqueda.resultados[0].producto),
+      );
+
+      const producto = await service.obtenerProducto(
+        "7801234000018",
+        REQUEST_ID,
+      );
+
+      expect(producto.codigo_barras).toBe("7801234000018");
+      expect(httpService.get).toHaveBeenCalledWith(
+        `${PYTHON_API_URL}/products/7801234000018`,
+        { headers: { "X-Request-ID": REQUEST_ID } },
+      );
+    });
+
+    it("propaga el 404 NOT_FOUND sin reintentar", async () => {
+      responderEnOrden(errorHttpContrato(404, CodigoError.NOT_FOUND));
+
+      const error = await service
+        .obtenerProducto("7801234000018", REQUEST_ID)
+        .catch((e: ContratoHttpException) => e);
+
+      expect(intentos).toBe(1);
+      expect((error as ContratoHttpException).getStatus()).toBe(404);
+    });
+  });
 });

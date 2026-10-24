@@ -4,6 +4,7 @@ import { ConfigService } from "@nestjs/config";
 import { AxiosError, isAxiosError } from "axios";
 import { firstValueFrom, retry, throwError, timer } from "rxjs";
 import { ParametrosBusqueda, RespuestaBusqueda } from "./contrato/busqueda";
+import { Producto } from "./contrato/producto";
 import {
   MetricasCalidad,
   MetricasEvaluacion,
@@ -54,6 +55,14 @@ export class FastApiClientService {
       limit,
       offset,
     });
+  }
+
+  /** 404 NOT_FOUND (del contrato) si el producto no existe en la fuente. */
+  obtenerProducto(codigoBarras: string, requestId: string): Promise<Producto> {
+    return this.get<Producto>(
+      `/products/${encodeURIComponent(codigoBarras)}`,
+      requestId,
+    );
   }
 
   metricasCalidad(requestId: string): Promise<MetricasCalidad> {

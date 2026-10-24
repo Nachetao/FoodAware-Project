@@ -1,11 +1,21 @@
-import { Controller, Get, Query, Req, Res, UseFilters } from "@nestjs/common";
+import {
+  Controller,
+  Get,
+  Param,
+  Query,
+  Req,
+  Res,
+  UseFilters,
+} from "@nestjs/common";
 import {
   ApiBadGatewayResponse,
   ApiGatewayTimeoutResponse,
   ApiHeader,
   ApiInternalServerErrorResponse,
+  ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiParam,
   ApiServiceUnavailableResponse,
   ApiTags,
   ApiUnprocessableEntityResponse,
@@ -16,6 +26,8 @@ import { ErrorContrato } from "./contrato/error";
 import { HEADER_REQUEST_ID } from "./contrato/request-id";
 import { ContratoExceptionFilter } from "./contrato-exception.filter";
 import { BuscarProductosQueryDto } from "./dto/buscar-productos.query.dto";
+import { CodigoBarrasParamDto } from "./dto/codigo-barras.param.dto";
+import { Producto } from "./contrato/producto";
 import { ProductsService } from "./products.service";
 import { requestIdDe } from "../observabilidad/request-id";
 import { HEADER_FUENTE_DATOS } from "./fuente-datos";
@@ -90,6 +102,47 @@ export class ProductsController {
     res.setHeader(HEADER_REQUEST_ID, requestId);
     const { respuesta, fuente } = await this.productsService.buscar(
       query,
+      requestId,
+    );
+    res.setHeader(HEADER_FUENTE_DATOS, fuente);
+    return respuesta;
+  }
+
+  // Después de "search": si no, /products/search se tomaría como un código.
+  @Public()
+  @Get(":codigo_barras")
+  @ApiOperation({
+    summary: "Detalle de un producto por código de barras",
+    description:
+      "Consulta /products/{codigo_barras} de FastAPI y guarda el producto. Si FastAPI falla (500, 502, 503 o 504) responde el producto guardado con X-Fuente-Datos: respaldo. Un 404 de FastAPI se propaga.",
+  })
+  @ApiParam({ name: "codigo_barras", description: "De 8 a 14 dígitos." })
+  @ApiOkResponse({ type: Producto, headers: HEADER_RESPUESTA })
+  @ApiNotFoundResponse({
+    type: ErrorContrato,
+    description: "El producto no existe (NOT_FOUND).",
+  })
+  @ApiUnprocessableEntityResponse({
+    type: ErrorContrato,
+    description: "Código de barras inválido (VALIDATION_ERROR).",
+  })
+  @ApiServiceUnavailableResponse({
+    type: ErrorContrato,
+    description: "FastAPI no disponible y el producto no está guardado.",
+  })
+  @ApiGatewayTimeoutResponse({
+    type: ErrorContrato,
+    description:
+      "FastAPI sin respuesta a tiempo y el producto no está guardado.",
+  })
+  async obtener(
+    @Param() { codigo_barras }: CodigoBarrasParamDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<Producto> {
+    const requestId = requestIdDe(req);
+    const { respuesta, fuente } = await this.productsService.obtener(
+      codigo_barras,
       requestId,
     );
     res.setHeader(HEADER_FUENTE_DATOS, fuente);

@@ -112,6 +112,14 @@ export class ProductsRepository {
     };
   }
 
+  /** Producto guardado con ese código, o null; respaldo del detalle de producto. */
+  async buscarPorCodigo(codigoBarras: string): Promise<Producto | null> {
+    const fila = await this.repository.findOne({
+      where: { codigo_barras: codigoBarras },
+    });
+    return fila ? aProducto(fila) : null;
+  }
+
   // Postgres rechaza un ON CONFLICT DO UPDATE que toca la misma fila dos veces
   // en un INSERT; si un código se repite, se queda el dato más reciente.
   private sinRepetidos(filas: FilaProducto[]): FilaProducto[] {

@@ -22,9 +22,13 @@ import { Food } from "../../src/foods/entities/food.entity";
  */
 export class ProductosEnMemoria implements Pick<
   ProductsRepository,
-  "guardar" | "buscarRespaldo"
+  "guardar" | "buscarRespaldo" | "buscarPorCodigo"
 > {
   readonly productos = new Map<string, Producto>();
+
+  async buscarPorCodigo(codigoBarras: string): Promise<Producto | null> {
+    return this.productos.get(codigoBarras) ?? null;
+  }
 
   async guardar(productos: Producto[]): Promise<void> {
     for (const producto of productos) {
