@@ -14,6 +14,7 @@ import { Product } from "../../src/products/entities/product.entity";
 import { ResultadoRespaldo } from "../../src/products/products.repository";
 import { ProductsRepository } from "../../src/products/products.repository";
 import { User } from "../../src/users/user.entity";
+import { AllergenCode } from "../../src/products/contrato/enums";
 import { Food } from "../../src/foods/entities/food.entity";
 
 /**
@@ -22,7 +23,7 @@ import { Food } from "../../src/foods/entities/food.entity";
  */
 export class ProductosEnMemoria implements Pick<
   ProductsRepository,
-  "guardar" | "buscarRespaldo" | "buscarPorCodigo"
+  "guardar" | "buscarRespaldo" | "buscarPorCodigo" | "buscarCompatibles"
 > {
   readonly productos = new Map<string, Producto>();
 
@@ -34,6 +35,23 @@ export class ProductosEnMemoria implements Pick<
     for (const producto of productos) {
       this.productos.set(producto.codigo_barras, producto);
     }
+  }
+
+  async buscarCompatibles(
+    params: ParametrosBusqueda,
+    alergias: AllergenCode[],
+  ): Promise<ResultadoRespaldo> {
+    const excluir = new Set<string>(alergias);
+    const todos = await this.buscarRespaldo({ ...params, limit: 1000, offset: 0 });
+    const compatibles = todos.resultados.filter(
+      (r) => !r.producto.alergenos.some((a) => excluir.has(a)),
+    );
+    return {
+      total: compatibles.length,
+      resultados: compatibles
+        .slice(params.offset, params.offset + params.limit)
+        .map((r, i) => ({ ...r, posicion: params.offset + i + 1 })),
+    };
   }
 
   async buscarRespaldo({
@@ -55,6 +73,29 @@ export class ProductosEnMemoria implements Pick<
         .slice(offset, offset + limit)
         .map((r, i) => ({ ...r, posicion: offset + i + 1 })),
     };
+  }
+}
+
+/** Repositorio de usuarios en memoria (findOne por id o correo, save). */
+export class UsuariosEnMemoria {
+  readonly usuarios = new Map<string, User>();
+
+  async findOne({ where }: { where: Partial<User> }): Promise<User | null> {
+    return (
+      [...this.usuarios.values()].find((u) =>
+        Object.entries(where).every(([k, v]) => u[k as keyof User] === v),
+      ) ?? null
+    );
+  }
+
+  create(datos: Partial<User>): User {
+    return { ...datos } as User;
+  }
+
+  async save(usuario: User): Promise<User> {
+    const guardado = { ...usuario, id: usuario.id ?? `usuario-${this.usuarios.size + 1}` };
+    this.usuarios.set(guardado.id, guardado);
+    return guardado;
   }
 }
 
@@ -80,6 +121,7 @@ export async function crearApp(pythonApiUrl: string) {
   process.env.PYTHON_API_URL = pythonApiUrl;
   const productos = new ProductosEnMemoria();
   const base = new BaseDeDatosFalsa();
+  const usuarios = new UsuariosEnMemoria();
 
   const modulo = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(DataSource)
@@ -87,7 +129,7 @@ export async function crearApp(pythonApiUrl: string) {
     .overrideProvider(getRepositoryToken(Product))
     .useValue({})
     .overrideProvider(getRepositoryToken(User))
-    .useValue({})
+    .useValue(usuarios)
     .overrideProvider(getRepositoryToken(Food))
     .useValue({})
     .overrideProvider(ProductsRepository)
@@ -99,7 +141,7 @@ export async function crearApp(pythonApiUrl: string) {
   });
   configurarApp(app);
   await app.init();
-  return { app, productos, base };
+  return { app, productos, base, usuarios };
 }
 
 /** Producto con la forma exacta del contrato. */

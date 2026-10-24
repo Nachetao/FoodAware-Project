@@ -1,9 +1,14 @@
-import { ConflictException, Injectable } from "@nestjs/common";
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { QueryFailedError, Repository } from "typeorm";
 import * as bcrypt from "bcrypt";
 import { User } from "./user.entity";
 import { CreateUserDto } from "./dto/create-user.dto";
+import { AllergenCode } from "../products/contrato/enums";
 
 /** Usuario sin el hash de la contraseña, para responder al cliente. */
 export type UsuarioPublico = Omit<User, "password">;
@@ -36,14 +41,7 @@ export class UsersService {
     });
 
     try {
-      const guardado = await this.userRepository.save(newUser);
-      // Lista explícita: un campo nuevo de User no se expone por accidente.
-      return {
-        id: guardado.id,
-        nombre: guardado.nombre,
-        correo: guardado.correo,
-        alergias: guardado.alergias,
-      };
+      return aUsuarioPublico(await this.userRepository.save(newUser));
     } catch (error) {
       // Dos registros simultáneos con el mismo correo: lo resuelve el UNIQUE.
       if (
@@ -59,4 +57,37 @@ export class UsersService {
   async findByCorreo(correo: string): Promise<User | null> {
     return this.userRepository.findOne({ where: { correo } });
   }
+
+  /** Perfil del usuario, sin password; 404 si ya no existe. */
+  async perfil(id: string): Promise<UsuarioPublico> {
+    return aUsuarioPublico(await this.buscarOFallar(id));
+  }
+
+  /** Reemplaza las alergias (ya validadas contra AllergenCode), sin repetir. */
+  async actualizarAlergias(
+    id: string,
+    alergias: AllergenCode[],
+  ): Promise<UsuarioPublico> {
+    const usuario = await this.buscarOFallar(id);
+    usuario.alergias = [...new Set(alergias)];
+    return aUsuarioPublico(await this.userRepository.save(usuario));
+  }
+
+  private async buscarOFallar(id: string): Promise<User> {
+    const usuario = await this.userRepository.findOne({ where: { id } });
+    if (!usuario) {
+      throw new NotFoundException("Usuario no encontrado");
+    }
+    return usuario;
+  }
+}
+
+// Lista explícita: un campo nuevo de User no se expone por accidente.
+function aUsuarioPublico(usuario: User): UsuarioPublico {
+  return {
+    id: usuario.id,
+    nombre: usuario.nombre,
+    correo: usuario.correo,
+    alergias: usuario.alergias,
+  };
 }

@@ -1,4 +1,4 @@
-import { ConflictException } from "@nestjs/common";
+import { ConflictException, NotFoundException } from "@nestjs/common";
 import { QueryFailedError } from "typeorm";
 import { UsersService } from "./users.service";
 import { User } from "./user.entity";
@@ -74,5 +74,56 @@ describe("UsersService.createTestUser", () => {
 
     expect(repo.save.mock.calls[0][0].alergias).toEqual([]);
     expect(usuario.alergias).toEqual([]);
+  });
+
+  describe("perfil y alergias", () => {
+    const guardado = {
+      id: "u1",
+      nombre: "Ana",
+      correo: "ana@correo.cl",
+      password: "$2b$10$hash",
+      alergias: [AllergenCode.MANI],
+    } as User;
+
+    it("perfil devuelve el usuario sin password", async () => {
+      repo.findOne.mockResolvedValue(guardado);
+
+      const perfil = await service.perfil("u1");
+
+      expect(repo.findOne).toHaveBeenCalledWith({ where: { id: "u1" } });
+      expect(perfil).toEqual({
+        id: "u1",
+        nombre: "Ana",
+        correo: "ana@correo.cl",
+        alergias: [AllergenCode.MANI],
+      });
+    });
+
+    it("actualizarAlergias reemplaza las alergias sin repetir", async () => {
+      repo.findOne.mockResolvedValue({ ...guardado });
+
+      const perfil = await service.actualizarAlergias("u1", [
+        AllergenCode.LACTEOS,
+        AllergenCode.LACTEOS,
+        AllergenCode.SOYA,
+      ]);
+
+      expect(repo.save.mock.calls[0][0].alergias).toEqual([
+        AllergenCode.LACTEOS,
+        AllergenCode.SOYA,
+      ]);
+      expect(perfil).not.toHaveProperty("password");
+    });
+
+    it.each(["perfil", "actualizarAlergias"] as const)(
+      "%s responde 404 si el usuario ya no existe",
+      async (metodo) => {
+        repo.findOne.mockResolvedValue(null);
+
+        await expect(service[metodo]("u1", [])).rejects.toBeInstanceOf(
+          NotFoundException,
+        );
+      },
+    );
   });
 });

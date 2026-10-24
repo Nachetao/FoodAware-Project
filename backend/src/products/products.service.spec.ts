@@ -3,6 +3,8 @@ import { Test } from "@nestjs/testing";
 import { ProductsService } from "./products.service";
 import { FastApiClientService } from "./fastapi-client.service";
 import { ProductsRepository } from "./products.repository";
+import { UsersService } from "../users/users.service";
+import { AllergenCode } from "./contrato/enums";
 import { ContratoHttpException } from "./contrato-http.exception";
 import { RespuestaBusqueda, ResultadoBusqueda } from "./contrato/busqueda";
 import { CodigoError } from "./contrato/enums";
@@ -45,9 +47,11 @@ describe("ProductsService", () => {
     guardar: jest.Mock;
     buscarRespaldo: jest.Mock;
     buscarPorCodigo: jest.Mock;
+    buscarCompatibles: jest.Mock;
   };
   let logWarn: jest.SpyInstance;
   let logError: jest.SpyInstance;
+  const usersService = { perfil: jest.fn() };
 
   beforeEach(async () => {
     fastApiClient = {
@@ -57,6 +61,7 @@ describe("ProductsService", () => {
     productsRepository = {
       guardar: jest.fn().mockResolvedValue(undefined),
       buscarPorCodigo: jest.fn().mockResolvedValue(null),
+      buscarCompatibles: jest.fn(),
       buscarRespaldo: jest
         .fn()
         .mockResolvedValue({ total: 7, resultados: resultadosRespaldo }),
@@ -69,6 +74,7 @@ describe("ProductsService", () => {
         ProductsService,
         { provide: FastApiClientService, useValue: fastApiClient },
         { provide: ProductsRepository, useValue: productsRepository },
+        { provide: UsersService, useValue: usersService },
       ],
     }).compile();
 
@@ -261,6 +267,80 @@ describe("ProductsService", () => {
       await expect(service.obtener("7801234000018", REQUEST_ID)).rejects.toBe(
         error,
       );
+    });
+  });
+
+  describe("compatibilidad y compatibles", () => {
+    const galletas = {
+      codigo_barras: "7801234000018",
+      alergenos: [AllergenCode.GLUTEN, AllergenCode.LACTEOS],
+      trazas: [AllergenCode.MANI],
+    } as Producto;
+
+    beforeEach(() => {
+      fastApiClient.obtenerProducto.mockResolvedValue(galletas);
+      usersService.perfil.mockResolvedValue({
+        id: "u1",
+        alergias: [AllergenCode.LACTEOS, AllergenCode.MANI],
+      });
+    });
+
+    it("no es apto si un alérgeno coincide e informa las trazas en conflicto", async () => {
+      const resultado = await service.compatibilidad("7801234000018", "u1", REQUEST_ID);
+
+      expect(usersService.perfil).toHaveBeenCalledWith("u1");
+      expect(resultado).toEqual({
+        respuesta: {
+          apto: false,
+          alergenos_en_conflicto: [AllergenCode.LACTEOS],
+          trazas_en_conflicto: [AllergenCode.MANI],
+        },
+        fuente: "fastapi",
+      });
+    });
+
+    it("las trazas en conflicto no lo hacen no apto", async () => {
+      usersService.perfil.mockResolvedValue({ id: "u1", alergias: [AllergenCode.MANI] });
+
+      const { respuesta } = await service.compatibilidad("7801234000018", "u1", REQUEST_ID);
+
+      expect(respuesta).toEqual({
+        apto: true,
+        alergenos_en_conflicto: [],
+        trazas_en_conflicto: [AllergenCode.MANI],
+      });
+    });
+
+    it("informa si el producto vino del respaldo", async () => {
+      fastApiClient.obtenerProducto.mockRejectedValue(
+        errorFastApi(503, CodigoError.SOURCE_UNAVAILABLE),
+      );
+      productsRepository.buscarPorCodigo.mockResolvedValue(galletas);
+
+      const { fuente } = await service.compatibilidad("7801234000018", "u1", REQUEST_ID);
+
+      expect(fuente).toBe("respaldo");
+    });
+
+    it("compatibles busca en la base excluyendo las alergias del usuario", async () => {
+      productsRepository.buscarCompatibles.mockResolvedValue({
+        total: 7,
+        resultados: resultadosRespaldo,
+      });
+
+      const respuesta = await service.compatibles(PARAMETROS, "u1");
+
+      expect(productsRepository.buscarCompatibles).toHaveBeenCalledWith(PARAMETROS, [
+        AllergenCode.LACTEOS,
+        AllergenCode.MANI,
+      ]);
+      expect(respuesta).toEqual({
+        consulta: "leche",
+        total: 7,
+        tiempo_ms: expect.any(Number),
+        resultados: resultadosRespaldo,
+        estado_fuente: "cache",
+      });
     });
   });
 });
