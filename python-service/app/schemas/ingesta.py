@@ -62,6 +62,13 @@ class ResumenIngesta(BaseModel):
     estado: Literal[
         "en_curso", "completado", "completado_con_errores", "fallido"
     ] = Field(examples=["completado_con_errores"])
+    origen: Literal["ingesta", "semilla"] = Field(
+        "ingesta",
+        description="ingesta = la ejecutó este servicio; semilla = es una "
+        "ingesta real que produjo el corpus de la semilla, importada al "
+        "cargarla en una caché vacía (no consultó la fuente desde aquí).",
+        examples=["ingesta"],
+    )
 
     @model_validator(mode="after")
     def _validar_consistencia(self):

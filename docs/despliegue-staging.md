@@ -140,7 +140,7 @@ tarjeta de crédito.
    Start-Process https://foodaware-staging-frontend.onrender.com
    ```
 
-   python-service debe responder `estado` `ok` o `degradado`, con unos 383
+   python-service debe responder `estado` `ok` o `degradado`, con 385
    productos en `detalle.cache.productos` (los de la semilla). El backend debe
    reportar `postgresql` y `fastapi` `ok`.
 8. **Datos para el despliegue automático.** Copia el ID (`srv-…`, al final de
@@ -216,6 +216,42 @@ que los datos nuevos sobrevivan hay que regenerar la semilla
 (`scripts/exportar_semilla.py`, ver
 [contratos/README.md](contratos/README.md)) y desplegar.
 
+## Las ingestas de la semilla en staging
+
+Además de los productos, la semilla trae los resúmenes de las 5 ingestas
+reales que armaron el corpus en nuestra caché local (del 21 al 25 de octubre de
+2026), con sus conteos, su detalle y las fallas de Open Food Facts que
+registraron. Al arrancar con la caché vacía se importan con
+`"origen": "semilla"`, para no confundirlas con ingestas hechas en staging. Por
+eso, recién desplegado:
+
+- `GET /metrics/quality` (y `/api/metricas/calidad` del backend) muestra los
+  valores reales del corpus y no ceros: 75,47 % de válidos, 70,96 % de
+  duplicados y 75,31 % de cobertura de ingredientes.
+- `GET /ingest/runs/latest` (y `/api/ingesta/ultima` del backend) devuelve la
+  última de esas ingestas, la del 25 de octubre, con `"origen": "semilla"`.
+- `/health` sigue con `openfoodfacts` `no_verificado` y `/search` con
+  `estado_fuente` `cache`: staging no ha consultado la fuente por su cuenta.
+- La primera ingesta periódica no se adelanta: se programa 24 horas después
+  del arranque, igual que antes.
+
+Si se lanza una ingesta manual, queda con `"origen": "ingesta"`, pasa a ser la
+última y sus conteos se suman a los de la semilla hasta que el servicio se
+reinicie. Precision@5 sale del índice y no de las ingestas, así que no cambia:
+sigue en 0,53.
+
+Para regenerar la semilla desde la caché del volumen de Docker sin modificarla
+(el script de exportación agrega columnas nuevas si la base es antigua), se
+copia primero la base con la API de backup de SQLite:
+
+```powershell
+docker compose exec python-service python -c "import sqlite3; s=sqlite3.connect('file:/data/foodaware-cache.sqlite3?mode=ro', uri=True); d=sqlite3.connect('/tmp/copia.sqlite3'); s.backup(d); d.close()"
+docker compose exec python-service python scripts/exportar_semilla.py --db /tmp/copia.sqlite3 --salida /tmp/corpus-off.json.gz
+docker compose cp python-service:/tmp/corpus-off.json.gz python-service/semilla/corpus-off.json.gz
+```
+
+El script avisa si hay una ingesta en curso, porque esa no queda en la semilla.
+
 ## Recrear la base cada 30 días
 
 La base gratuita vence 30 días después de crearse. Render avisa por correo;
@@ -273,3 +309,4 @@ Según la [documentación de Render](https://render.com/docs/free):
 | El frontend no llega al backend (error de red o CORS) | `API_URL` o `CORS_ORIGINS` con una URL distinta, o `API_URL` terminada en `/api` | Revisar el paso 6 y redesplegar el frontend |
 | El deploy falla porque Render no detecta un puerto abierto | El servicio no escucha en `PORT` | Revisar `PORT` en `render.yaml` (8000 y 3000) |
 | python-service con `cache.productos` en 0 | La semilla no se cargó | Revisar los logs ("Semilla cargada…" o el error) |
+| El panel de métricas muestra 0 % y "Todavía no hay ninguna ingesta" | Se desplegó una semilla anterior, sin el historial de ingestas | Regenerar la semilla (ver "Las ingestas de la semilla en staging") y desplegar; el log de arranque dice cuántas ejecuciones importó |

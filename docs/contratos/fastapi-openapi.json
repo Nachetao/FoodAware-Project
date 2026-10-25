@@ -1461,6 +1461,19 @@
             "examples": [
               "completado_con_errores"
             ]
+          },
+          "origen": {
+            "type": "string",
+            "enum": [
+              "ingesta",
+              "semilla"
+            ],
+            "title": "Origen",
+            "description": "ingesta = la ejecutó este servicio; semilla = es una ingesta real que produjo el corpus de la semilla, importada al cargarla en una caché vacía (no consultó la fuente desde aquí).",
+            "default": "ingesta",
+            "examples": [
+              "ingesta"
+            ]
           }
         },
         "type": "object",
