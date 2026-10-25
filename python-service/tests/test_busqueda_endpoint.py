@@ -182,7 +182,7 @@ class RepositorioLento:
         assert self.continuar.wait(timeout=5)
         return self.registros
 
-    def ultima_ejecucion_terminada(self):
+    def ultima_ejecucion_terminada(self, excluir_semilla=False):
         return None
 
 

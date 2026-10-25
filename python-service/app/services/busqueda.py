@@ -106,8 +106,9 @@ class ServicioBusqueda:
         inicio = time.perf_counter()
         instantanea = self.instantanea  # se lee una sola vez
         total, resultados = instantanea.buscar(consulta, limit, offset)
+        # Con solo la semilla, los datos vienen de la caché ("cache").
         ultima = await asyncio.to_thread(
-            self._repositorio.ultima_ejecucion_terminada
+            self._repositorio.ultima_ejecucion_terminada, excluir_semilla=True
         )
         terminada_bien = ultima is not None and ultima.estado != "fallido"
         return RespuestaBusqueda(

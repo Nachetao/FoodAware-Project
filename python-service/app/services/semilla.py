@@ -6,21 +6,32 @@ datos sin llamar a Open Food Facts: si la caché está vacía, se cargan los
 payloads crudos y se procesan con la VERSION_PROCESAMIENTO actual. La
 ingesta periódica los actualiza después como siempre.
 
+La semilla también guarda los resúmenes de las ingestas reales que
+produjeron el corpus (conteos, detalle y fallas de la fuente). Se importan
+con origen "semilla" para que /metrics/quality e /ingest/runs/latest
+muestren los valores del corpus y no ceros, sin confundirlas con ingestas
+hechas por el propio servicio.
+
 Los datos vienen de Open Food Facts (ODbL); ver semilla/ATRIBUCION.md.
 """
 import gzip
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from uuid import UUID
 
 from pydantic import ValidationError
 
 from app.procesamiento import VERSION_PROCESAMIENTO
-from app.repositories.cache import RepositorioCache
+from app.repositories.cache import (
+    DetalleIngesta,
+    ErrorFuente,
+    RepositorioCache,
+)
+from app.schemas.ingesta import ResumenIngesta
 from app.services.mapeo_off import ProductoInvalido, mapear_producto
 
 logger = logging.getLogger(__name__)
@@ -46,14 +57,20 @@ class ResumenSemilla:
     total: int = 0
     cargados: int = 0
     errores: int = 0
+    # Ejecuciones de ingesta importadas y omitidas (ya existían o no se
+    # pudieron leer).
+    ejecuciones: int = 0
+    ejecuciones_omitidas: int = 0
 
 
 def exportar_semilla(repositorio: RepositorioCache, ruta: Path) -> int:
     """Escribe los productos válidos con su payload crudo, procedencia y
-    versión de procesamiento. Devuelve cuántos exportó.
+    versión de procesamiento, y las ejecuciones de ingesta terminadas con
+    su detalle y sus fallas. Devuelve cuántos productos exportó.
 
-    El orden es por código de barras y el gzip no guarda fecha, así que dos
-    exportaciones del mismo corpus solo difieren en `exportado_en`.
+    El orden es fijo (productos por código de barras, ejecuciones por
+    inicio) y el gzip no guarda fecha, así que dos exportaciones del mismo
+    corpus solo difieren en `exportado_en`.
     """
     productos = [
         {
@@ -72,6 +89,7 @@ def exportar_semilla(repositorio: RepositorioCache, ruta: Path) -> int:
         "exportado_en": _a_texto(datetime.now(timezone.utc)),
         "version_procesamiento": VERSION_PROCESAMIENTO,
         "productos": productos,
+        "ejecuciones": _exportar_ejecuciones(repositorio),
     }
     ruta.parent.mkdir(parents=True, exist_ok=True)
     datos = json.dumps(contenido, ensure_ascii=False, sort_keys=True,
@@ -85,9 +103,11 @@ def leer_semilla(ruta: Path) -> Dict[str, Any]:
         contenido = json.loads(gzip.decompress(ruta.read_bytes()))
     except (OSError, EOFError, ValueError) as exc:
         raise SemillaInvalida(f"No se pudo leer {ruta}: {exc}") from exc
+    # "ejecuciones" es opcional: las semillas anteriores no la tienen.
     if (not isinstance(contenido, dict)
             or contenido.get("formato") != FORMATO_SEMILLA
-            or not isinstance(contenido.get("productos"), list)):
+            or not isinstance(contenido.get("productos"), list)
+            or not isinstance(contenido.get("ejecuciones", []), list)):
         raise SemillaInvalida(
             f"{ruta} no tiene el formato {FORMATO_SEMILLA} de la semilla"
         )
@@ -99,13 +119,15 @@ def cargar_semilla(
     base_url: str,
     ruta: Optional[Path] = None,
 ) -> ResumenSemilla:
-    """Procesa cada payload con las reglas actuales y lo guarda.
+    """Procesa cada payload con las reglas actuales y lo guarda, e importa
+    las ejecuciones de ingesta con origen "semilla".
 
     Conserva run_id, recuperado_en y verificado_en: los datos siguen
     siendo los de esa descarga, solo cambió cómo se procesan (igual que el
     reprocesamiento).
     """
-    productos = leer_semilla(ruta or RUTA_SEMILLA)["productos"]
+    contenido = leer_semilla(ruta or RUTA_SEMILLA)
+    productos = contenido["productos"]
     cargados = errores = 0
     for registro in productos:
         try:
@@ -126,7 +148,85 @@ def cargar_semilla(
         repositorio.guardar_producto(producto, registro["payload_off"],
                                      verificado_en=verificado_en)
         cargados += 1
-    return ResumenSemilla(len(productos), cargados, errores)
+    importadas, omitidas = _importar_ejecuciones(
+        repositorio, contenido.get("ejecuciones", [])
+    )
+    return ResumenSemilla(len(productos), cargados, errores,
+                          importadas, omitidas)
+
+
+def _exportar_ejecuciones(
+    repositorio: RepositorioCache,
+) -> List[Dict[str, Any]]:
+    """Las ejecuciones terminadas, tal como están en la caché, sin el
+    origen: al importarlas siempre quedan como "semilla"."""
+    ejecuciones = []
+    for ejecucion in repositorio.listar_ejecuciones_terminadas():
+        resumen = ejecucion.resumen.model_dump(mode="json",
+                                               exclude={"origen"})
+        resumen["inicio"] = _a_texto(ejecucion.resumen.inicio)
+        resumen["fin"] = _a_texto(ejecucion.resumen.fin)
+        fallas = repositorio.listar_errores_fuente(
+            run_id=ejecucion.resumen.run_id, limite=None
+        )
+        ejecuciones.append({
+            "resumen": resumen,
+            "detalle": (asdict(ejecucion.detalle)
+                        if ejecucion.detalle is not None else None),
+            "fallas": [
+                {"fecha": _a_texto(f.fecha), "tipo": f.tipo,
+                 "mensaje": f.mensaje}
+                for f in reversed(fallas)  # de la más antigua a la última
+            ],
+        })
+    return ejecuciones
+
+
+def _importar_ejecuciones(
+    repositorio: RepositorioCache, ejecuciones: List[Any]
+) -> Tuple[int, int]:
+    """Devuelve (importadas, omitidas)."""
+    importadas = omitidas = 0
+    for registro in ejecuciones:
+        try:
+            resumen = ResumenIngesta.model_validate(
+                {**registro["resumen"], "origen": "semilla"}
+            )
+            detalle = (_leer_detalle(registro["detalle"])
+                       if registro.get("detalle") is not None else None)
+            fallas = [
+                ErrorFuente(fecha=_desde_texto(f["fecha"]),
+                            run_id=resumen.run_id, tipo=str(f["tipo"]),
+                            mensaje=str(f["mensaje"]))
+                for f in registro.get("fallas", [])
+            ]
+            importada = repositorio.importar_ejecucion(resumen, detalle,
+                                                       fallas)
+        except (KeyError, TypeError, ValueError, ValidationError) as exc:
+            omitidas += 1
+            logger.warning("Ejecución de la semilla omitida: %s", exc)
+            continue
+        if importada:
+            importadas += 1
+        else:
+            omitidas += 1
+            logger.warning("Ejecución de la semilla omitida: %s ya existe",
+                           resumen.run_id)
+    return importadas, omitidas
+
+
+def _leer_detalle(datos: Dict[str, Any]) -> DetalleIngesta:
+    motivos = datos.get("motivos_invalidez", {})
+    if not isinstance(motivos, dict):
+        raise TypeError("motivos_invalidez debe ser un objeto")
+    return DetalleIngesta(
+        repetidos_en_ejecucion=int(datos["repetidos_en_ejecucion"]),
+        existentes_sin_cambios=int(datos["existentes_sin_cambios"]),
+        con_ingredientes=int(datos["con_ingredientes"]),
+        peticiones=int(datos["peticiones"]),
+        fallas_recuperadas=int(datos["fallas_recuperadas"]),
+        motivos_invalidez={str(k): int(v) for k, v in motivos.items()},
+    )
 
 
 def cargar_semilla_si_vacia(
@@ -148,8 +248,9 @@ def cargar_semilla_si_vacia(
         logger.error("No se cargó la semilla: %s", exc)
         return None
     logger.info("Semilla cargada en la caché vacía: %d de %d productos "
-                "(%d omitidos)", resumen.cargados, resumen.total,
-                resumen.errores)
+                "(%d omitidos) y %d ejecuciones de ingesta (%d omitidas)",
+                resumen.cargados, resumen.total, resumen.errores,
+                resumen.ejecuciones, resumen.ejecuciones_omitidas)
     return resumen
 
 

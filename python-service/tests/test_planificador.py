@@ -92,6 +92,21 @@ async def test_proxima_ingesta_segun_la_ultima(repo, off_falso, esperas,
     assert await planificador.segundos_hasta_la_proxima() == esperado
 
 
+async def test_las_ingestas_de_la_semilla_no_adelantan_el_refresco(
+    repo, off_falso, esperas
+):
+    # Son de hace días: si contaran, cada arranque en frío en Render
+    # lanzaría una ingesta completa.
+    inicio = AHORA - timedelta(days=3)
+    repo.importar_ejecucion(ResumenIngesta(
+        run_id=uuid.uuid4(), inicio=inicio, fin=inicio, recuperados=0,
+        validos=0, invalidos=0, duplicados=0, errores=0, estado="completado",
+        origen="semilla",
+    ), None, [])
+    planificador = crear(repo, off_falso, esperas)
+    assert await planificador.segundos_hasta_la_proxima() == 24 * 3600
+
+
 async def test_bucle_espera_y_refresca(repo, off_falso, esperas):
     registrar(repo, AHORA - timedelta(hours=20))
     producto = mapear_producto(LECHE, run_id=uuid.uuid4(), recuperado_en=AHORA,

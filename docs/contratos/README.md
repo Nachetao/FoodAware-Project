@@ -60,11 +60,30 @@ procedencia (`run_id`, `recuperado_en`, `verificado_en`) y su versión de
 procesamiento. Con `CARGAR_SEMILLA_SI_VACIA=true` y la caché vacía (por ejemplo,
 en Render, donde el disco se pierde en cada reinicio), el servicio la carga al
 iniciar sin llamar a Open Food Facts, procesando cada payload con la
-`VERSION_PROCESAMIENTO` actual. Como no registra una ejecución de ingesta, la
-primera ingesta periódica llega `INGESTA_INTERVALO_HORAS` después del arranque.
-Para regenerarla con la caché actual: `python scripts/exportar_semilla.py`. Los
-datos son de Open Food Facts bajo ODbL; la atribución está en
-`python-service/semilla/ATRIBUCION.md`.
+`VERSION_PROCESAMIENTO` actual. Para regenerarla con la caché actual:
+`python scripts/exportar_semilla.py`. Los datos son de Open Food Facts bajo
+ODbL; la atribución está en `python-service/semilla/ATRIBUCION.md`.
+
+La semilla también trae el historial de las ingestas reales que produjeron el
+corpus: el resumen de cada ejecución terminada (`recuperados`, `validos`,
+`invalidos`, `duplicados`, `errores`, `estado` y fechas), su detalle (el
+desglose de duplicados, los recuperados con ingredientes, las páginas pedidas,
+las fallas recuperadas y los motivos de invalidez) y las fallas de la fuente que
+registró. La versión actual tiene 385 productos y 5 ingestas, del 21 al 25 de
+octubre de 2026. Al cargarla, esas ejecuciones se importan con
+`origen: "semilla"` y su `run_id` original, que es el mismo de la procedencia de
+sus productos. Así `GET /metrics/quality` y `GET /ingest/runs/latest` muestran
+los valores reales del corpus en vez de ceros, y queda claro que esas ingestas
+no se hicieron desde la instancia que responde. Una ejecución que ya exista con
+el mismo `run_id` no se pisa.
+
+Lo que describe el estado de la propia instancia no cuenta las ejecuciones de la
+semilla: el planificador calcula la próxima ingesta periódica solo con las
+propias (si no, cada arranque con la caché vacía lanzaría una ingesta completa,
+porque las de la semilla son de hace días), `GET /health` no las usa para
+`openfoodfacts` y `/search` responde `estado_fuente: "cache"` mientras no haya
+una ingesta propia. Con solo la semilla, la primera ingesta periódica llega
+`INGESTA_INTERVALO_HORAS` después del arranque.
 
 ## Levantar el servicio
 
@@ -167,7 +186,9 @@ validez de `calidad`; no se guardan), `duplicados` (válidos que no aportaron
 un producto nuevo: repetidos en la misma ingesta o ya en la caché con el mismo
 contenido; ver [Métricas de calidad](#métricas-de-calidad-get-metricsquality)),
 `errores` (categorías con páginas perdidas tras el reintento) y `estado`. Una
-ejecución interrumpida por un reinicio queda como `fallido`.
+ejecución interrumpida por un reinicio queda como `fallido`. `origen` vale
+`ingesta` en las que lanzó el servicio y `semilla` en las importadas con la
+semilla del corpus (ver [Estrategia de actualización](#estrategia-de-actualización)).
 
 ### Salud (`GET /health`)
 
@@ -201,7 +222,8 @@ Cada dependencia vale `ok`, `degradado`, `error` o `no_verificado`:
 `/health` **no consulta Open Food Facts** (gastaría el límite de tasa): su
 estado sale de la última ingesta terminada y del registro de fallas de la
 fuente. Las fallas que una ingesta recuperó en su reintento son anteriores a su
-fin y no la degradan.
+fin y no la degradan. Las ingestas importadas con la semilla y sus fallas no
+cuentan: con solo la semilla, `openfoodfacts` queda `no_verificado`.
 
 **Estado global y código HTTP:**
 
@@ -318,7 +340,11 @@ terminadas (no `en_curso`).
 | `total_productos` | productos válidos en la caché | Tamaño del corpus que se busca. |
 
 Los porcentajes van de 0 a 100 con 2 decimales. Sin ingestas terminadas, las
-métricas de ingesta valen 0 y las de la caché se calculan igual.
+métricas de ingesta valen 0 y las de la caché se calculan igual. Las ingestas
+importadas con la semilla sí cuentan, porque son las que produjeron el corpus:
+con la semilla actual, una instancia recién arrancada (como staging) muestra
+75,47 % de válidos, 70,96 % de duplicados y 75,31 % de cobertura de
+ingredientes. Si después corre una ingesta propia, se suma a esas.
 
 **Los dos tipos de duplicado.** `duplicados` del contrato es la suma de dos
 conteos que la caché guarda por separado en cada ejecución:
@@ -451,7 +477,8 @@ algún tipo de producto.
 El valor depende del corpus de cada caché: con otros productos cambian los
 relevantes de cada consulta y, con ellos, la métrica. El 0.53 de este
 documento es el de la caché local de 383 productos; el valor de referencia
-será el de staging, que arranca siempre desde la semilla (ver
+es el de staging, que arranca siempre desde la semilla y con la del 25 de
+octubre de 2026 (385 productos) también da 0.53 (ver
 [recuperacion-y-evaluacion.md](../recuperacion-y-evaluacion.md#evaluación-de-la-búsqueda)).
 
 ## Convenciones

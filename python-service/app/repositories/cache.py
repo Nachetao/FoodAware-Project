@@ -9,7 +9,16 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Mapping, Optional, Tuple
+from typing import (
+    Any,
+    Dict,
+    Iterator,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+)
 from uuid import UUID
 
 from app.procesamiento import VERSION_PROCESAMIENTO
@@ -81,14 +90,22 @@ _COLUMNAS_AGREGADAS = {
         "peticiones": "INTEGER",
         "fallas_recuperadas": "INTEGER",
         "motivos_invalidez": "TEXT",  # JSON {problema: cantidad}
+        # Parte del resumen (ResumenIngesta.origen), no del detalle.
+        "origen": "TEXT NOT NULL DEFAULT 'ingesta'",
     },
 }
-_COLUMNAS_DETALLE = tuple(_COLUMNAS_AGREGADAS["ejecuciones_ingesta"])
+_COLUMNAS_DETALLE = tuple(
+    c for c in _COLUMNAS_AGREGADAS["ejecuciones_ingesta"] if c != "origen"
+)
 
 _COLUMNAS_EJECUCION = (
     "run_id", "inicio", "fin", "duracion_ms", "recuperados", "validos",
-    "invalidos", "duplicados", "errores", "estado",
+    "invalidos", "duplicados", "errores", "estado", "origen",
 )
+# Filtro de las consultas que describen lo que hizo este servicio (el
+# planificador, /health y estado_fuente de /search): las ejecuciones
+# importadas con la semilla no consultaron la fuente desde aquí.
+_SIN_SEMILLA = "origen != 'semilla'"
 
 
 class ResultadoUpsert(str, Enum):
@@ -473,21 +490,71 @@ class RepositorioCache:
             ).fetchone()
         return ResumenIngesta.model_validate(dict(fila)) if fila else None
 
-    def ultima_ejecucion(self) -> Optional[ResumenIngesta]:
+    def ultima_ejecucion(
+        self, excluir_semilla: bool = False
+    ) -> Optional[ResumenIngesta]:
+        filtro = f"WHERE {_SIN_SEMILLA} " if excluir_semilla else ""
         with self._conexion() as con:
             fila = con.execute(
-                "SELECT * FROM ejecuciones_ingesta "
+                f"SELECT * FROM ejecuciones_ingesta {filtro}"  # nosec B608
                 "ORDER BY inicio DESC LIMIT 1"
             ).fetchone()
         return ResumenIngesta.model_validate(dict(fila)) if fila else None
 
-    def ultima_ejecucion_terminada(self) -> Optional[ResumenIngesta]:
+    def ultima_ejecucion_terminada(
+        self, excluir_semilla: bool = False
+    ) -> Optional[ResumenIngesta]:
+        filtro = f"AND {_SIN_SEMILLA} " if excluir_semilla else ""
         with self._conexion() as con:
             fila = con.execute(
-                "SELECT * FROM ejecuciones_ingesta WHERE estado != 'en_curso' "
+                "SELECT * FROM ejecuciones_ingesta "  # nosec B608
+                f"WHERE estado != 'en_curso' {filtro}"
                 "ORDER BY inicio DESC LIMIT 1"
             ).fetchone()
         return ResumenIngesta.model_validate(dict(fila)) if fila else None
+
+    def importar_ejecucion(
+        self,
+        resumen: ResumenIngesta,
+        detalle: Optional[DetalleIngesta],
+        fallas: Sequence[ErrorFuente],
+    ) -> bool:
+        """Agrega una ejecución terminada con su detalle y sus fallas en una
+        sola transacción; la usa la semilla del corpus.
+
+        No pisa una ejecución que ya exista con el mismo run_id: en ese caso
+        no agrega nada y devuelve False.
+        """
+        if resumen.estado == "en_curso":
+            raise ValueError("solo se importan ejecuciones terminadas")
+        datos = resumen.model_dump(mode="json")
+        datos["inicio"] = _a_iso(resumen.inicio)
+        datos["fin"] = _a_iso(resumen.fin)
+        valores = (asdict(detalle) if detalle is not None
+                   else dict.fromkeys(_COLUMNAS_DETALLE))
+        if detalle is not None:
+            valores["motivos_invalidez"] = json.dumps(
+                dict(detalle.motivos_invalidez), sort_keys=True
+            )
+        columnas = (*_COLUMNAS_EJECUCION, *_COLUMNAS_DETALLE)
+        # Igual que en guardar_ejecucion: solo nombres de las constantes.
+        with self._conexion() as con:
+            cursor = con.execute(
+                f"INSERT INTO ejecuciones_ingesta ({', '.join(columnas)}) "
+                f"VALUES ({', '.join('?' for _ in columnas)}) "  # nosec B608
+                "ON CONFLICT (run_id) DO NOTHING",
+                [*(datos[c] for c in _COLUMNAS_EJECUCION),
+                 *(valores[c] for c in _COLUMNAS_DETALLE)],
+            )
+            if cursor.rowcount == 0:
+                return False
+            con.executemany(
+                "INSERT INTO errores_fuente (fecha, run_id, tipo, mensaje) "
+                "VALUES (?, ?, ?, ?)",
+                [(_a_iso(f.fecha), str(resumen.run_id), f.tipo, f.mensaje)
+                 for f in fallas],
+            )
+        return True
 
     def marcar_ejecuciones_interrumpidas(
         self, fin: Optional[datetime] = None
@@ -526,15 +593,29 @@ class RepositorioCache:
             )
 
     def listar_errores_fuente(
-        self, run_id: Optional[UUID] = None, limite: int = 100
+        self,
+        run_id: Optional[UUID] = None,
+        limite: Optional[int] = 100,
+        excluir_semilla: bool = False,
     ) -> List[ErrorFuente]:
+        """De la más reciente a la más antigua; limite None = todas."""
         consulta = "SELECT fecha, run_id, tipo, mensaje FROM errores_fuente"
+        condiciones: List[str] = []
         parametros: List[Any] = []
         if run_id is not None:
-            consulta += " WHERE run_id = ?"
+            condiciones.append("run_id = ?")
             parametros.append(str(run_id))
-        consulta += " ORDER BY fecha DESC, id DESC LIMIT ?"
-        parametros.append(limite)
+        if excluir_semilla:
+            condiciones.append(
+                "(run_id IS NULL OR run_id NOT IN (SELECT run_id FROM "
+                "ejecuciones_ingesta WHERE origen = 'semilla'))"
+            )
+        if condiciones:
+            consulta += " WHERE " + " AND ".join(condiciones)
+        consulta += " ORDER BY fecha DESC, id DESC"
+        if limite is not None:
+            consulta += " LIMIT ?"
+            parametros.append(limite)
         with self._conexion() as con:
             filas = con.execute(consulta, parametros).fetchall()
         return [

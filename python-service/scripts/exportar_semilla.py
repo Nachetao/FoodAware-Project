@@ -1,7 +1,8 @@
 """Exporta el corpus de la caché a la semilla comprimida del servicio.
 
 Guarda los productos válidos con su payload crudo de Open Food Facts, su
-procedencia y su versión de procesamiento en semilla/corpus-off.json.gz.
+procedencia y su versión de procesamiento, y las ejecuciones de ingesta
+terminadas (conteos, detalle y fallas), en semilla/corpus-off.json.gz.
 Con la caché vacía, el servicio la carga al iniciar (ver
 app/services/semilla.py). No consulta la API.
 
@@ -51,7 +52,13 @@ def main(argv=None) -> int:
         print("ERROR: la caché no tiene productos válidos", file=sys.stderr)
         return 1
     tamano = args.salida.stat().st_size
+    ejecuciones = len(repositorio.listar_ejecuciones_terminadas())
     print(f"Semilla: {exportados} productos válidos de {total} en caché")
+    print(f"Ejecuciones de ingesta: {ejecuciones}")
+    ultima = repositorio.ultima_ejecucion()
+    if ultima is not None and ultima.estado == "en_curso":
+        print("AVISO: hay una ingesta en curso; no quedó en la semilla",
+              file=sys.stderr)
     print(f"Archivo: {args.salida} ({tamano / 1024:.1f} KiB)")
     return 0
 

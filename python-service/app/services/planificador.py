@@ -69,9 +69,12 @@ class PlanificadorIngesta:
     async def segundos_hasta_la_proxima(self) -> float:
         """Intervalo desde el inicio de la última ejecución registrada.
 
-        Así un reinicio del servicio no pospone el refresco.
+        Así un reinicio del servicio no pospone el refresco. Las
+        ejecuciones de la semilla no cuentan: son antiguas y harían que
+        cada arranque con la caché vacía lanzara una ingesta completa.
         """
-        ultima = await asyncio.to_thread(self._repositorio.ultima_ejecucion)
+        ultima = await asyncio.to_thread(self._repositorio.ultima_ejecucion,
+                                         excluir_semilla=True)
         if ultima is None:
             return self._intervalo.total_seconds()
         proxima = ultima.inicio + self._intervalo

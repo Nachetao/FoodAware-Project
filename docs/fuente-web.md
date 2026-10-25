@@ -24,7 +24,7 @@ Buscábamos una fuente que cumpliera cuatro cosas, y Open Food Facts las
 cumplía todas:
 
 1. Tiene productos vendidos en Chile. La API permite filtrar por país, y
-   hoy nuestro corpus son 383 productos chilenos válidos (galletas, lácteos,
+   hoy nuestro corpus son 385 productos chilenos válidos (galletas, lácteos,
    panes, chocolates, cereales, snacks salados y bebidas vegetales).
 2. Trae el texto de ingredientes y los alérgenos declarados, que es justo
    lo que necesita el análisis de restricciones alimentarias.
@@ -145,9 +145,13 @@ licencia. Lo cumplimos así:
   también dentro del archivo, en los campos `fuente`, `licencia` y
   `contenidos`.
 
-Falta una cosa: que la interfaz muestre "Datos de Open Food Facts" donde
-aparecen los productos. Hoy el frontend no lo hace; lo dejamos anotado en
-[limitaciones.md](limitaciones.md).
+- El detalle de cada producto en el frontend muestra "Datos de Open Food
+  Facts (openfoodfacts.org), disponibles bajo la licencia Open Database
+  License (ODbL)", con la fecha de recuperación y un enlace a la ficha
+  original ([frontend.md](frontend.md#atribución-y-procedencia)).
+
+Falta una cosa: que la atribución aparezca también en la lista de resultados
+de la búsqueda. Lo dejamos anotado en [limitaciones.md](limitaciones.md).
 
 ### User-Agent identificado
 
@@ -163,6 +167,53 @@ local (que está en `.gitignore`) y en Render se escribe a mano al crear el
 servicio (`sync: false`). Además, el formateador de logs reemplaza cualquier
 correo por `[correo oculto]`, así el User-Agent no se filtra si aparece en
 una traza.
+
+### API oficial y no scraping
+
+FoodAware no hace scraping. No descargamos páginas HTML de Open Food Facts,
+no seguimos enlaces ni recorremos el sitio: solo llamamos a los dos endpoints
+de la API que aparecen arriba, pidiendo productos concretos o páginas de una
+búsqueda, con los campos justos. Es la forma de acceso que Open Food Facts
+documenta para las aplicaciones, con las condiciones que pide: User-Agent
+identificado y límites de tasa.
+
+### robots.txt
+
+`robots.txt` es el archivo con que un sitio les dice a los robots que lo
+recorren solos (buscadores, crawlers de SEO o de IA) qué rutas no deben
+visitar. Como nosotros no recorremos el sitio, no es la regla que nos aplica
+de forma directa: lo que rige nuestro uso es la documentación de la API. Igual
+lo revisamos, para saber qué piden y no contradecirlo.
+
+Consultamos <https://world.openfoodfacts.org/robots.txt> el 25 de octubre de
+2026 (2.126 bytes). Dice tres cosas:
+
+- Para cualquier robot (`User-agent: *`) prohíbe `/api`, `/cgi` y `/facets`.
+- A Googlebot y Bingbot les prohíbe lo mismo (a Googlebot no le cierra
+  `/facets`), pero les permite `/cgi/product_image.pl` y `/cgi/opensearch.pl`.
+- A 41 nombres de robots (contando variantes del mismo, como `Scrapy` y
+  `Scrapy/1.5.0`) les prohíbe el sitio completo (`Disallow: /`): crawlers
+  de SEO (SemrushBot, AhrefsBot, MJ12bot...), scrapers genéricos como Scrapy
+  y robots de empresas de IA (GPTBot, ClaudeBot, PerplexityBot, entre otros).
+
+Lo que sacamos de eso:
+
+- El `Disallow: /api` es para que los robots no rastreen ni indexen las
+  respuestas de la API mientras recorren el sitio, y no para las aplicaciones
+  que la usan como dice su documentación. Nuestro cliente no llega a la API
+  siguiendo enlaces: arma cada llamada a partir de un código de barras o de
+  una categoría.
+- No usamos ninguna de las otras rutas prohibidas (`/cgi`, `/facets`) ni
+  páginas HTML del sitio.
+- Nuestro User-Agent (`FoodAware/1.0` con el correo del equipo) no coincide
+  con ninguno de los robots bloqueados.
+- Que bloqueen a crawlers masivos y a robots de IA confirma que les importa
+  la carga sobre sus servidores. Por eso respetamos los límites con margen y
+  la búsqueda de FoodAware nunca consulta la fuente en vivo.
+
+Si algún día necesitáramos datos que la API no entrega y hubiera que leer
+páginas del sitio, ahí sí tendríamos que seguir el `robots.txt` al pie de la
+letra. Hoy no es el caso.
 
 ### Límites de tasa
 

@@ -352,10 +352,10 @@ cada falla de la fuente en `errores_fuente`, con su `run_id`. En los logs, una
 ingesta usa su `run_id` como `request_id`, así se pueden seguir todos sus
 eventos con un solo filtro.
 
-En la caché actual, los 383 productos vienen de 4 ejecuciones: 188 de la
-primera, 158 de la segunda, 31 de la tercera y 6 de la cuarta. Las dos últimas
-aportaron pocos productos nuevos porque casi todo lo que trajeron ya estaba
-en la caché.
+En la caché actual, los 385 productos vienen de 5 ejecuciones: 188 de la
+primera, 158 de la segunda, 31 de la tercera, 6 de la cuarta y 2 de la quinta
+(la del 25 de octubre de 2026). Las tres últimas aportaron pocos productos
+nuevos porque casi todo lo que trajeron ya estaba en la caché.
 
 ## 11. Errores e indisponibilidad de la fuente
 
@@ -387,18 +387,28 @@ Facts tarda varios minutos y puede fallar.
 
 Por eso guardamos en el repositorio una semilla:
 [`semilla/corpus-off.json.gz`](../python-service/semilla/corpus-off.json.gz).
-Tiene los 383 productos válidos de la caché con su payload crudo, su
+Tiene los 385 productos válidos de la caché con su payload crudo, su
 procedencia (`run_id`, `recuperado_en`, `verificado_en`) y la versión de
 procesamiento. Si la caché está vacía al arrancar (`CARGAR_SEMILLA_SI_VACIA=true`),
 el servicio carga la semilla antes de construir el índice, sin llamar a Open
 Food Facts. Cada payload se procesa con las reglas actuales, así una semilla
 vieja no trae alérgenos detectados con reglas antiguas.
 
+La semilla también guarda el resumen de las 5 ingestas que produjeron esos
+productos, con sus conteos, su detalle y sus fallas. Al cargarla se importan
+con `origen: "semilla"`, así las métricas de calidad de staging muestran los
+valores reales del corpus y no ceros, sin confundirlas con ingestas hechas en
+staging (detalle en el [contrato](contratos/README.md#estrategia-de-actualización)).
+
 Para regenerarla con la caché actual:
 
 ```powershell
 docker compose exec python-service python scripts/exportar_semilla.py
 ```
+
+Para hacerlo sin tocar la caché del volumen, sobre una copia, los comandos
+están en
+[despliegue-staging.md](despliegue-staging.md#las-ingestas-de-la-semilla-en-staging).
 
 La semilla es una base derivada de Open Food Facts y va con su licencia (ver
 [fuente-web.md](fuente-web.md#licencia-y-atribución)).
@@ -415,7 +425,7 @@ construir el índice, así la búsqueda nunca mezcla reglas viejas y nuevas.
 
 Lo usamos con el arreglo de Not Milk: subimos la versión de 1 a 2 y, al
 reiniciar, el servicio rehízo la caché desde los payloads guardados. Hoy los
-383 productos están en la versión 2. También se puede forzar a mano:
+385 productos están en la versión 2. También se puede forzar a mano:
 
 ```powershell
 docker compose exec python-service python scripts/reprocesar_cache.py          # solo los desactualizados
@@ -426,7 +436,7 @@ docker compose exec python-service python scripts/reprocesar_cache.py --todos  #
 
 - Las pruebas del proceso de recuperación (ingesta, limpieza, alérgenos,
   calidad, semilla, reprocesamiento, búsqueda y evaluación) llevan el marcador
-  `recuperacion` y son 535. No llaman a la red: usan un cliente falso de Open
+  `recuperacion` y son 543. No llaman a la red: usan un cliente falso de Open
   Food Facts que puede simular 503, timeouts y páginas que se recuperan en el
   reintento. Cómo correrlas y el resto de las pruebas está en
   [pipeline-devsecops.md](pipeline-devsecops.md).

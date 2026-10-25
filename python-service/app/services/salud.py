@@ -90,8 +90,10 @@ def evaluar_salud(
         estado_cache = "error"
     else:
         estado_cache = "ok"
-        ultima = repositorio.ultima_ejecucion_terminada()
-        fallas = repositorio.listar_errores_fuente(limite=1)
+        # Las de la semilla no dicen nada de la fuente vista desde aquí.
+        ultima = repositorio.ultima_ejecucion_terminada(excluir_semilla=True)
+        fallas = repositorio.listar_errores_fuente(limite=1,
+                                                   excluir_semilla=True)
         if ultima is not None:
             fuente.ultima_ingesta = ultima.estado
             fuente.ultima_ingesta_fin = ultima.fin

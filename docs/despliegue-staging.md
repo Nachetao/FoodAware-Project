@@ -20,23 +20,28 @@ frontend se compila en Render y toma la URL del backend de `API_URL`. El
 backend escucha en `PORT` y solo acepta por CORS los orígenes de
 `CORS_ORIGINS` (la URL del frontend).
 
-Las URL de la tabla son las que Render asigna si el nombre está libre. Si ya
-existe en otra cuenta, agrega un sufijo (por ejemplo
-`foodaware-staging-python-a1b2.onrender.com`). Por eso las tres variables que
-llevan URL (`PYTHON_API_URL`, `CORS_ORIGINS` y `API_URL`) no están fijas en
-`render.yaml`: son `sync: false`, se completan al crear el Blueprint y, si
-hace falta, se corrigen en Render sin tocar el repositorio (paso 6).
+Las URL de la tabla son las reales de nuestro staging: Render no les agregó
+sufijo. Si el Blueprint se crea en otra cuenta y el nombre ya está ocupado,
+Render agrega uno (por ejemplo `foodaware-staging-python-a1b2.onrender.com`).
+Por eso las tres variables que llevan URL (`PYTHON_API_URL`, `CORS_ORIGINS` y
+`API_URL`) no están fijas en `render.yaml`: son `sync: false`, se completan al
+crear el Blueprint y, si hace falta, se corrigen en Render sin tocar el
+repositorio (paso 6).
 
-## Pendiente
+## Estado actual
 
-Solo falta el workflow de despliegue automático. Mientras no exista, los
-servicios (con `autoDeployTrigger: "off"`) se despliegan a mano (ver
-"Despliegues siguientes").
+Staging está publicado desde el 24 de octubre de 2026 (PR #25) y funciona de
+punta a punta. Swagger del backend en
+<https://foodaware-staging-backend.onrender.com/docs> y del python-service en
+<https://foodaware-staging-python.onrender.com/docs>.
 
-Lo que estaba pendiente en el código antes de publicar ya está resuelto en
-`main`: el frontend toma `API_URL` al compilar, el backend restringe CORS con
-`CORS_ORIGINS` y escucha en `PORT`, y Trivy ya no encuentra vulnerabilidades
-CRITICAL con arreglo en la imagen del backend.
+Desde la EP2 los despliegues son automáticos: cuando todo el CI de `main` pasa,
+el workflow `CD Staging (Render)` despliega ese commit y prueba las URL
+públicas (ver "Despliegue automático"). La evidencia está en
+[`evidencia/ep2-render-servicios.png`](evidencia/ep2-render-servicios.png) (los
+4 recursos del Blueprint en Render) y
+[`evidencia/ep2-cd-staging.png`](evidencia/ep2-cd-staging.png) (el workflow en
+verde con la tabla de las pruebas de salud).
 
 ## Por qué Blueprint y no Terraform
 
@@ -140,7 +145,7 @@ tarjeta de crédito.
    Start-Process https://foodaware-staging-frontend.onrender.com
    ```
 
-   python-service debe responder `estado` `ok` o `degradado`, con unos 383
+   python-service debe responder `estado` `ok` o `degradado`, con 385
    productos en `detalle.cache.productos` (los de la semilla). El backend debe
    reportar `postgresql` y `fastapi` `ok`.
 8. **Datos para el despliegue automático.** Copia el ID (`srv-…`, al final de
@@ -157,16 +162,75 @@ tarjeta de crédito.
    | `STAGING_URL_BACKEND` | URL del backend, sin `/` al final |
    | `STAGING_URL_FRONTEND` | URL del frontend, sin `/` al final |
 
-   El workflow de despliegue usa además el Secret `RENDER_API_KEY` del paso 3.
+   En *Deployment branches and tags* del Environment, deja solo la rama
+   `main`: así ningún workflow de otra rama puede desplegar. El workflow de
+   despliegue usa además el Secret `RENDER_API_KEY` del paso 3.
 
-## Despliegues siguientes
+## Despliegue automático
 
 Los tres servicios tienen `autoDeployTrigger: "off"`: un push a `main` no
-despliega por sí solo. El despliegue automático lo dispara GitHub Actions
-cuando pasa todo el CI de `main` (workflow de despliegue, en preparación).
-Mientras tanto, se puede desplegar a mano desde cada servicio con
-*Manual Deploy → Deploy latest commit*, en este orden: python-service, backend
-y frontend.
+despliega por sí solo. Lo hace el workflow
+[`cd-staging.yml`](../.github/workflows/cd-staging.yml) (*CD Staging
+(Render)*), en tres jobs:
+
+1. **Verificar el CI del commit.** Se dispara cada vez que termina uno de los
+   7 workflows de CI en un push a `main`. Con la API de GitHub revisa que los
+   7 (incluido CI Render Blueprint) hayan terminado bien para ese commit. Si
+   falta alguno o alguno falló, no despliega y deja el motivo en el resumen de
+   la ejecución. Tampoco despliega si `main` ya avanzó a otro commit (ese se
+   desplegará con su propio CI) ni si el commit ya se desplegó, porque los 7
+   CI terminan por separado y cada uno dispara el workflow.
+2. **Desplegar en Render.** Usa el Environment `staging` y le pide a la API de
+   Render un deploy de ese commit exacto (`commitId`) para python-service,
+   después para el backend y al final para el frontend. Cada uno tiene que
+   quedar `live` antes de pasar al siguiente: el backend necesita a
+   python-service para su health check y el frontend apunta al backend. Si
+   alguno termina en `build_failed`, `update_failed`, `canceled`,
+   `pre_deploy_failed` o `deactivated`, o pasan 25 minutos, el workflow falla y
+   no sigue con los demás.
+3. **Pruebas de salud del staging.** Contra las URL públicas, con reintentos
+   cada 15 segundos durante hasta 5 minutos por prueba, para tolerar el
+   arranque en frío:
+
+   | Prueba | Pasa si |
+   |---|---|
+   | `GET /health` de python-service | `estado` es `ok` o `degradado` |
+   | `GET /api/health` del backend | `postgresql` y `fastapi` están `ok` |
+   | Búsqueda `galletas` por el backend | Devuelve productos con `X-Fuente-Datos: fastapi` (con `respaldo` no quedaría probada la comunicación con FastAPI) |
+   | `GET /api/metricas/calidad` | `porcentaje_validos` es mayor que 0 |
+   | Frontend | Responde 200 con el HTML de la aplicación (`<app-root>`) |
+
+   Al final escribe una tabla con el resultado y el detalle de cada prueba en
+   el resumen de la ejecución.
+
+Se ve en *Actions → CD Staging (Render)*. Una ejecución que no desplegó porque
+faltaba algún CI termina en verde con el motivo en el resumen; es normal ver
+varias de esas por cada push.
+
+**Redesplegar a mano.** En *Actions → CD Staging (Render) → Run workflow*,
+con la rama `main`. Despliega el último commit de `main` aunque ya estuviera
+desplegado, pero igual exige que su CI haya pasado. Sirve, por ejemplo,
+después de recrear la base o de cambiar una variable en Render.
+
+**Si GitHub Actions no está disponible**, se puede desplegar desde cada
+servicio en Render con *Manual Deploy → Deploy latest commit*, en el mismo
+orden: python-service, backend y frontend.
+
+## Antes de una demo
+
+Los servicios gratuitos se duermen tras 15 minutos sin tráfico. Para
+despertarlos y ver que todo responde:
+
+```powershell
+.\scripts\despertar-staging.ps1
+```
+
+El script llama a `/health` del python-service, a `/api/health` del backend y
+al frontend hasta que todo responde (5 minutos como máximo, se cambia con
+`-PlazoSegundos`) y muestra una tabla con el estado de cada uno. Termina con
+código 0 si todo quedó listo y con 1 si algo no respondió. Solo hace
+peticiones GET. Si PowerShell no deja correr scripts, se puede usar
+`powershell -ExecutionPolicy Bypass -File .\scripts\despertar-staging.ps1`.
 
 ## Cambiar la infraestructura
 
@@ -216,15 +280,53 @@ que los datos nuevos sobrevivan hay que regenerar la semilla
 (`scripts/exportar_semilla.py`, ver
 [contratos/README.md](contratos/README.md)) y desplegar.
 
+## Las ingestas de la semilla en staging
+
+Además de los productos, la semilla trae los resúmenes de las 5 ingestas
+reales que armaron el corpus en nuestra caché local (del 21 al 25 de octubre de
+2026), con sus conteos, su detalle y las fallas de Open Food Facts que
+registraron. Al arrancar con la caché vacía se importan con
+`"origen": "semilla"`, para no confundirlas con ingestas hechas en staging. Por
+eso, recién desplegado:
+
+- `GET /metrics/quality` (y `/api/metricas/calidad` del backend) muestra los
+  valores reales del corpus y no ceros: 75,47 % de válidos, 70,96 % de
+  duplicados y 75,31 % de cobertura de ingredientes.
+- `GET /ingest/runs/latest` (y `/api/ingesta/ultima` del backend) devuelve la
+  última de esas ingestas, la del 25 de octubre, con `"origen": "semilla"`.
+- `/health` sigue con `openfoodfacts` `no_verificado` y `/search` con
+  `estado_fuente` `cache`: staging no ha consultado la fuente por su cuenta.
+- La primera ingesta periódica no se adelanta: se programa 24 horas después
+  del arranque, igual que antes.
+
+Si se lanza una ingesta manual, queda con `"origen": "ingesta"`, pasa a ser la
+última y sus conteos se suman a los de la semilla hasta que el servicio se
+reinicie. Precision@5 sale del índice y no de las ingestas, así que no cambia:
+sigue en 0,53.
+
+Para regenerar la semilla desde la caché del volumen de Docker sin modificarla
+(el script de exportación agrega columnas nuevas si la base es antigua), se
+copia primero la base con la API de backup de SQLite:
+
+```powershell
+docker compose exec python-service python -c "import sqlite3; s=sqlite3.connect('file:/data/foodaware-cache.sqlite3?mode=ro', uri=True); d=sqlite3.connect('/tmp/copia.sqlite3'); s.backup(d); d.close()"
+docker compose exec python-service python scripts/exportar_semilla.py --db /tmp/copia.sqlite3 --salida /tmp/corpus-off.json.gz
+docker compose cp python-service:/tmp/corpus-off.json.gz python-service/semilla/corpus-off.json.gz
+```
+
+El script avisa si hay una ingesta en curso, porque esa no queda en la semilla.
+
 ## Recrear la base cada 30 días
 
 La base gratuita vence 30 días después de crearse. Render avisa por correo;
-después del vencimiento queda inaccesible, y a los 14 días se borra.
+después del vencimiento queda inaccesible, y a los 14 días se borra. La
+nuestra vence el 24 de noviembre de 2026, según el Dashboard de la base.
 
 1. En Render, elimina `foodaware-staging-db` (*Settings → Delete Database*).
 2. En el Blueprint, pulsa *Manual Sync*: crea una base nueva con el mismo nombre
    y conecta de nuevo las variables `DB_*` del backend.
-3. Redespliega el backend: las migraciones crean las tablas al iniciar.
+3. Redespliega con *Run workflow* en CD Staging (ver "Despliegue automático"),
+   o solo el backend desde Render: las migraciones crean las tablas al iniciar.
 
 Se pierden los usuarios registrados y los productos que el backend guardó
 desde las búsquedas (su respaldo); los productos vuelven a guardarse con las
@@ -238,7 +340,7 @@ Según la [documentación de Render](https://render.com/docs/free):
   y tarda cerca de un minuto en despertar. La primera petición después de una
   pausa es lenta. Si python-service está dormido, el backend agota sus
   reintentos y responde desde la base (header `X-Fuente-Datos: respaldo`).
-  Antes de una demo hay que despertar los servicios.
+  Antes de una demo hay que despertar los servicios (ver "Antes de una demo").
 - **Disco efímero:** la caché SQLite de python-service se pierde en cada
   reinicio, despliegue o apagado; no se pueden agregar discos persistentes.
   Por eso el servicio arranca con la semilla del corpus.
@@ -257,7 +359,8 @@ Según la [documentación de Render](https://render.com/docs/free):
   no consume horas), unos 500 minutos de build y 5 GB de salida al mes. Sin
   tarjeta, al pasarse se bloquean los builds o se suspenden los servicios hasta
   el mes siguiente. Cada despliegue completo construye dos imágenes Docker y el
-  frontend: conviene no desplegar en cada commit de prueba.
+  frontend. Por eso el CD solo despliega commits de `main` con todo el CI en
+  verde, una vez por commit, y no las ramas de trabajo.
 - **Sin Shell ni one-off jobs:** no se puede entrar al contenedor; los
   diagnósticos se hacen con los logs del Dashboard y los endpoints de salud.
 - **Reinicios:** Render puede reiniciar los servicios o hacer mantenimiento de
@@ -267,9 +370,13 @@ Según la [documentación de Render](https://render.com/docs/free):
 
 | Síntoma | Causa probable | Qué hacer |
 |---|---|---|
-| La primera petición tarda ~1 min o da 502 | El servicio estaba dormido | Reintentar; despertar los servicios antes de usarlos |
+| La primera petición tarda ~1 min o da 502 | El servicio estaba dormido | Reintentar, o correr `scripts/despertar-staging.ps1` antes de usarlo |
+| Un push a `main` no se desplegó | Algún CI falló o todavía no terminaba, o `main` avanzó | Revisar el resumen de las ejecuciones de CD Staging: cada una dice por qué no desplegó |
+| CD Staging falla en "Desplegar en Render" | El build o el arranque falló en Render, o falta una Variable del Environment o el Secret `RENDER_API_KEY` | El error dice qué servicio y en qué estado quedó; los logs del build están en el Dashboard de Render. Los servicios anteriores en el orden ya quedaron con el commit nuevo |
+| CD Staging falla en las pruebas de salud | Un servicio no despertó en 5 minutos, o el despliegue quedó funcionando mal | La tabla del resumen dice qué prueba falló y qué respondió; repetir con *Re-run failed jobs* si fue un arranque lento |
 | Búsqueda con `X-Fuente-Datos: respaldo` | python-service dormido o lento | Despertar python-service (`/health`) y repetir |
 | `/api/health` del backend con `fastapi: error` | `PYTHON_API_URL` no coincide con la URL real o python-service está dormido | Revisar el paso 6; despertar python-service |
 | El frontend no llega al backend (error de red o CORS) | `API_URL` o `CORS_ORIGINS` con una URL distinta, o `API_URL` terminada en `/api` | Revisar el paso 6 y redesplegar el frontend |
 | El deploy falla porque Render no detecta un puerto abierto | El servicio no escucha en `PORT` | Revisar `PORT` en `render.yaml` (8000 y 3000) |
 | python-service con `cache.productos` en 0 | La semilla no se cargó | Revisar los logs ("Semilla cargada…" o el error) |
+| El panel de métricas muestra 0 % y "Todavía no hay ninguna ingesta" | Se desplegó una semilla anterior, sin el historial de ingestas | Regenerar la semilla (ver "Las ingestas de la semilla en staging") y desplegar; el log de arranque dice cuántas ejecuciones importó |

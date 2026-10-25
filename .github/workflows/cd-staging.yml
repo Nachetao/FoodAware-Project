@@ -1,0 +1,360 @@
+name: CD Staging (Render)
+
+# Despliega en Render el commit de main cuando pasa todo su CI, y después
+# prueba el staging por sus URL públicas. Detalles en
+# docs/despliegue-staging.md ("Despliegue automático").
+#
+# workflow_run se dispara cada vez que termina uno de estos workflows; el
+# job "verificar" solo deja seguir cuando todos terminaron bien para el
+# mismo commit. Los nombres deben coincidir con el "name:" de cada archivo
+# y con CI_REQUERIDOS.
+on:
+  workflow_run:
+    workflows:
+      - CI Backend (NestJS)
+      - CI Frontend (Angular)
+      - CI Integración (NestJS ↔ FastAPI)
+      - CI Python (FastAPI)
+      - CI Render Blueprint
+      - CI Seguridad
+      - Terraform CI
+    types:
+      - completed
+    branches:
+      - main
+  # Redespliegue manual del último commit de main (también exige su CI).
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Un despliegue a la vez y sin cancelar el que está en curso: Render no
+# debe quedar a medio camino entre dos commits.
+concurrency:
+  group: cd-staging
+  cancel-in-progress: false
+
+env:
+  CI_REQUERIDOS: |-
+    CI Backend (NestJS)
+    CI Frontend (Angular)
+    CI Integración (NestJS ↔ FastAPI)
+    CI Python (FastAPI)
+    CI Render Blueprint
+    CI Seguridad
+    Terraform CI
+
+jobs:
+  verificar:
+    name: Verificar el CI del commit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Solo pushes a main; un CI que falló ni siquiera necesita revisarse.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.conclusion == 'success')
+    permissions:
+      actions: read
+      contents: read
+      deployments: read
+
+    defaults:
+      run:
+        shell: bash
+
+    outputs:
+      desplegar: ${{ steps.ci.outputs.desplegar }}
+      sha: ${{ steps.ci.outputs.sha }}
+
+    steps:
+      - name: Revisar los workflows de CI y despliegues anteriores
+        id: ci
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENTO: ${{ github.event_name }}
+          SHA_CI: ${{ github.event.workflow_run.head_sha || github.sha }}
+          REF: ${{ github.ref }}
+        run: |
+          omitir() {
+            echo "::notice::No se despliega: $1"
+            echo "No se despliega \`${SHA_CI:0:7}\`: $1" >> "$GITHUB_STEP_SUMMARY"
+            echo "desplegar=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          }
+
+          if [[ "$EVENTO" == workflow_dispatch && "$REF" != refs/heads/main ]]; then
+            echo "::error::El despliegue manual solo se hace desde main (se eligió $REF)"
+            exit 1
+          fi
+
+          # Si main avanzó, el commit nuevo se despliega con su propio CI.
+          sha_main=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+          if [[ "$sha_main" != "$SHA_CI" ]]; then
+            omitir "main ya va en ${sha_main:0:7}"
+          fi
+
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$SHA_CI&event=push&branch=main&per_page=100" \
+            > ejecuciones.json
+          pendientes=() fallidos=()
+          while IFS= read -r nombre; do
+            # La ejecución más reciente de ese workflow para el commit.
+            estado=$(jq -r --arg n "$nombre" \
+              '[.workflow_runs[] | select(.name == $n)] | max_by(.created_at)
+               | if . == null then "sin_ejecucion" else "\(.status)/\(.conclusion)" end' \
+              ejecuciones.json)
+            echo "$nombre: $estado"
+            case "$estado" in
+              completed/success) ;;
+              sin_ejecucion | queued/* | in_progress/* | waiting/* | pending/* | requested/*)
+                pendientes+=("$nombre") ;;
+              *) fallidos+=("$nombre ($estado)") ;;
+            esac
+          done <<< "$CI_REQUERIDOS"
+
+          if (( ${#fallidos[@]} )); then
+            omitir "falló el CI: ${fallidos[*]}"
+          fi
+          if (( ${#pendientes[@]} )); then
+            omitir "falta que termine: ${pendientes[*]}"
+          fi
+
+          # Cada workflow de CI que termina dispara este; con el grupo de
+          # concurrencia corren en fila, así que el segundo ya ve el
+          # despliegue del primero. El manual siempre redespliega.
+          if [[ "$EVENTO" == workflow_run ]]; then
+            for id in $(gh api "repos/$GITHUB_REPOSITORY/deployments?environment=staging&sha=$SHA_CI" --jq '.[].id'); do
+              estado=$(gh api "repos/$GITHUB_REPOSITORY/deployments/$id/statuses?per_page=1" --jq '.[0].state // ""')
+              if [[ "$estado" == success || "$estado" == in_progress ]]; then
+                omitir "este commit ya se desplegó (despliegue $id, $estado)"
+              fi
+            done
+          fi
+
+          echo "Todo el CI de \`${SHA_CI:0:7}\` pasó: se despliega." >> "$GITHUB_STEP_SUMMARY"
+          echo "desplegar=true" >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA_CI" >> "$GITHUB_OUTPUT"
+
+  desplegar:
+    name: Desplegar en Render
+    needs: verificar
+    if: needs.verificar.outputs.desplegar == 'true'
+    runs-on: ubuntu-latest
+    # Las dos imágenes Docker se construyen en Render con 0.1 CPU.
+    timeout-minutes: 80
+    # Solo main puede desplegar en este Environment (regla de GitHub).
+    environment:
+      name: staging
+      url: ${{ vars.STAGING_URL_FRONTEND }}
+
+    defaults:
+      run:
+        shell: bash
+
+    outputs:
+      url_python: ${{ vars.STAGING_URL_PYTHON }}
+      url_backend: ${{ vars.STAGING_URL_BACKEND }}
+      url_frontend: ${{ vars.STAGING_URL_FRONTEND }}
+
+    steps:
+      - name: Desplegar python-service, backend y frontend (en ese orden)
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          SHA: ${{ needs.verificar.outputs.sha }}
+          ID_PYTHON: ${{ vars.RENDER_SERVICE_ID_PYTHON }}
+          ID_BACKEND: ${{ vars.RENDER_SERVICE_ID_BACKEND }}
+          ID_FRONTEND: ${{ vars.RENDER_SERVICE_ID_FRONTEND }}
+          # Tope por servicio; un build Docker en el plan gratuito tarda
+          # entre 5 y 15 minutos.
+          ESPERA_MAX_SEGUNDOS: 1500
+          PAUSA_SEGUNDOS: 15
+        run: |
+          if [[ -z "$RENDER_API_KEY" ]]; then
+            echo "::error::Falta el Secret RENDER_API_KEY"
+            exit 1
+          fi
+          for variable in ID_PYTHON ID_BACKEND ID_FRONTEND; do
+            if [[ -z "${!variable}" ]]; then
+              echo "::error::Falta la Variable RENDER_SERVICE_$variable del Environment staging (docs/despliegue-staging.md, paso 8)"
+              exit 1
+            fi
+          done
+
+          api() {
+            curl -sS --fail-with-body --max-time 60 \
+              -H "Authorization: Bearer $RENDER_API_KEY" -H "Accept: application/json" "$@"
+          }
+          # Las consultas sí se reintentan; el POST no, para no crear dos
+          # deploys si se corta la conexión después de crearlo.
+          consultar() {
+            api --retry 3 --retry-all-errors "$@"
+          }
+
+          {
+            echo "### Despliegue de \`${SHA:0:7}\`"
+            echo
+            echo "| Servicio | Deploy | Estado | Duración |"
+            echo "|---|---|---|---|"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # El backend necesita a python-service vivo para su health check y
+          # el frontend apunta al backend: por eso este orden.
+          for servicio in "python-service:$ID_PYTHON" "backend:$ID_BACKEND" "frontend:$ID_FRONTEND"; do
+            nombre=${servicio%%:*} id=${servicio#*:}
+            echo "::group::$nombre ($id)"
+            inicio=$SECONDS
+            respuesta=$(api -X POST "https://api.render.com/v1/services/$id/deploys" \
+              -H "Content-Type: application/json" \
+              -d "{\"commitId\": \"$SHA\", \"clearCache\": \"do_not_clear\"}")
+            deploy=$(jq -r '.id // empty' <<< "$respuesta")
+            if [[ -z "$deploy" ]]; then
+              echo "::error::Render no devolvió el deploy de $nombre"
+              jq . <<< "$respuesta" || echo "$respuesta"
+              exit 1
+            fi
+            echo "Deploy $deploy creado para el commit $(jq -r '.commit.id // "?"' <<< "$respuesta")"
+
+            anterior=""
+            while true; do
+              estado=$(consultar "https://api.render.com/v1/services/$id/deploys/$deploy" | jq -r .status)
+              if [[ "$estado" != "$anterior" ]]; then
+                echo "$(( SECONDS - inicio )) s: $estado"
+                anterior=$estado
+              fi
+              case "$estado" in
+                live) break ;;
+                build_failed | update_failed | canceled | pre_deploy_failed | deactivated)
+                  echo "| $nombre | \`$deploy\` | $estado | $(( (SECONDS - inicio) / 60 )) min |" >> "$GITHUB_STEP_SUMMARY"
+                  echo "::error::El deploy de $nombre terminó en $estado (revisa sus logs en el Dashboard de Render)"
+                  exit 1 ;;
+              esac
+              if (( SECONDS - inicio > ESPERA_MAX_SEGUNDOS )); then
+                echo "::error::$nombre sigue en $estado tras $(( ESPERA_MAX_SEGUNDOS / 60 )) min"
+                exit 1
+              fi
+              sleep "$PAUSA_SEGUNDOS"
+            done
+            echo "| $nombre | \`$deploy\` | live | $(( (SECONDS - inicio) / 60 )) min |" >> "$GITHUB_STEP_SUMMARY"
+            echo "::endgroup::"
+          done
+
+  pruebas:
+    name: Pruebas de salud del staging
+    needs: desplegar
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Probar las URL públicas
+        env:
+          URL_PYTHON: ${{ needs.desplegar.outputs.url_python }}
+          URL_BACKEND: ${{ needs.desplegar.outputs.url_backend }}
+          URL_FRONTEND: ${{ needs.desplegar.outputs.url_frontend }}
+          # Un servicio dormido tarda cerca de un minuto en despertar; el
+          # plazo de cada prueba deja margen para eso y para reinicios.
+          PLAZO_SEGUNDOS: 300
+          PAUSA_SEGUNDOS: 15
+          CONSULTA: galletas
+        run: |
+          for variable in URL_PYTHON URL_BACKEND URL_FRONTEND; do
+            if [[ -z "${!variable}" ]]; then
+              echo "::error::Falta la Variable STAGING_${variable} del Environment staging"
+              exit 1
+            fi
+          done
+
+          # Cada prueba imprime una línea con lo que vio y sale con 0 si pasó.
+          salud_python() {
+            local cuerpo estado
+            cuerpo=$(curl -sS --fail-with-body --max-time 60 "$URL_PYTHON/health") || return 1
+            estado=$(jq -r .estado <<< "$cuerpo")
+            echo "estado $estado, $(jq -r .detalle.cache.productos <<< "$cuerpo") productos en caché"
+            [[ "$estado" == ok || "$estado" == degradado ]]
+          }
+          salud_backend() {
+            local cuerpo
+            cuerpo=$(curl -sS --fail-with-body --max-time 60 "$URL_BACKEND/api/health") || return 1
+            jq -r '"postgresql \(.dependencias.postgresql), fastapi \(.dependencias.fastapi)"' <<< "$cuerpo"
+            jq -e '.dependencias.postgresql == "ok" and .dependencias.fastapi == "ok"' <<< "$cuerpo" > /dev/null
+          }
+          busqueda() {
+            local fuente total
+            curl -sS --fail-with-body --max-time 60 -D cabeceras.txt -o busqueda.json \
+              "$URL_BACKEND/api/products/search?q=$CONSULTA&limit=5" || return 1
+            fuente=$(grep -i '^x-fuente-datos:' cabeceras.txt | cut -d: -f2- | tr -d ' \r')
+            total=$(jq '.resultados | length' busqueda.json)
+            echo "$total productos desde ${fuente:-(sin header)}; el primero: $(jq -r '.resultados[0].producto.nombre // "-"' busqueda.json)"
+            # "respaldo" significaría que NestJS no llegó a FastAPI.
+            (( total > 0 )) && [[ "$fuente" == fastapi ]]
+          }
+          metricas() {
+            local cuerpo
+            cuerpo=$(curl -sS --fail-with-body --max-time 60 "$URL_BACKEND/api/metricas/calidad") || return 1
+            jq -r '"válidos \(.porcentaje_validos) %, duplicados \(.porcentaje_duplicados) %, cobertura \(.cobertura_ingredientes) %"' <<< "$cuerpo"
+            jq -e '.porcentaje_validos > 0' <<< "$cuerpo" > /dev/null
+          }
+          frontend() {
+            local respuesta
+            respuesta=$(curl -sS --max-time 60 -o index.html -w '%{http_code} %{content_type}' "$URL_FRONTEND/") || return 1
+            echo "HTTP $respuesta"
+            [[ "$respuesta" == "200 text/html"* ]] && grep -q '<app-root' index.html
+          }
+
+          # reintentar <prueba>: la repite hasta que pase o se cumpla el plazo.
+          reintentar() {
+            local inicio=$SECONDS intento=0 salida
+            while true; do
+              intento=$(( intento + 1 ))
+              if salida=$("$1" 2>&1); then
+                DETALLE="$(tail -n 1 <<< "$salida") (intento $intento, $(( SECONDS - inicio )) s)"
+                echo "$DETALLE"
+                return 0
+              fi
+              echo "Intento $intento: $(tail -n 1 <<< "$salida")"
+              if (( SECONDS - inicio >= PLAZO_SEGUNDOS )); then
+                DETALLE="$(tail -n 1 <<< "$salida") ($intento intentos, $(( SECONDS - inicio )) s)"
+                return 1
+              fi
+              sleep "$PAUSA_SEGUNDOS"
+            done
+          }
+
+          pruebas=(
+            "salud_python|python-service: GET /health"
+            "salud_backend|backend: GET /api/health (PostgreSQL y FastAPI ok)"
+            "busqueda|backend: búsqueda \"$CONSULTA\" a través de FastAPI"
+            "metricas|backend: GET /api/metricas/calidad (válidos > 0)"
+            "frontend|frontend: HTML de la aplicación"
+          )
+          {
+            echo "### Pruebas de salud del staging"
+            echo
+            echo "| Prueba | Resultado | Detalle |"
+            echo "|---|---|---|"
+          } >> "$GITHUB_STEP_SUMMARY"
+          fallidas=0
+          for prueba in "${pruebas[@]}"; do
+            funcion=${prueba%%|*} titulo=${prueba#*|}
+            echo "::group::$titulo"
+            if reintentar "$funcion"; then
+              resultado="Pasó"
+            else
+              resultado="Falló"
+              fallidas=$(( fallidas + 1 ))
+              echo "::error::$titulo: $DETALLE"
+            fi
+            echo "::endgroup::"
+            # Un "|" en el detalle (p. ej. en un nombre) rompería la tabla.
+            echo "| $titulo | $resultado | ${DETALLE//|//} |" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+          if (( fallidas )); then
+            echo "::error::$fallidas de ${#pruebas[@]} pruebas fallaron"
+            exit 1
+          fi
+          echo "Las ${#pruebas[@]} pruebas pasaron."
