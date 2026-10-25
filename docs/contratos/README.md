@@ -477,7 +477,8 @@ algún tipo de producto.
 El valor depende del corpus de cada caché: con otros productos cambian los
 relevantes de cada consulta y, con ellos, la métrica. El 0.53 de este
 documento es el de la caché local de 383 productos; el valor de referencia
-será el de staging, que arranca siempre desde la semilla (ver
+es el de staging, que arranca siempre desde la semilla y con la del 25 de
+octubre de 2026 (385 productos) también da 0.53 (ver
 [recuperacion-y-evaluacion.md](../recuperacion-y-evaluacion.md#evaluación-de-la-búsqueda)).
 
 ## Convenciones

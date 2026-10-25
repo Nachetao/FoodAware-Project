@@ -8,11 +8,15 @@ dónde está la evidencia.
 
 ## Cuándo corre
 
-Los 7 workflows están en [`.github/workflows/`](../.github/workflows/) y todos
-se disparan igual:
+Los 7 workflows de CI están en [`.github/workflows/`](../.github/workflows/) y
+todos se disparan igual:
 
 - en cada push a cualquier rama;
 - en cada pull request hacia `main`.
+
+Hay un octavo, CD Staging (Render), que no corre con los push: espera a que
+los 7 de CI terminen en verde en un commit de `main` y recién ahí despliega
+(ver [CD Staging](#cd-staging-render)).
 
 Todos tienen `permissions: contents: read` (solo leen el repositorio); los
 jobs que suben resultados a la pestaña Security piden además
@@ -42,6 +46,10 @@ flowchart LR
     R --> R1["JSON Schema"]
     R --> R2["API de Render"]
     T --> T1["fmt, validate, plan"]
+
+    B & F & P & I & S & R & T -.->|"los 7 en verde<br/>en main"| CD["CD Staging"]
+    CD --> CD1["deploy en Render:<br/>python, backend, frontend"]
+    CD1 --> CD2["5 pruebas de salud<br/>contra las URL públicas"]
 ```
 
 ## Los workflows
@@ -70,7 +78,7 @@ plantilla de Angular a veces solo aparece al compilar para producción.
 
 - Lint, pruebas y contrato: `flake8 .`, luego las pruebas unitarias
   (`pytest -m "not recuperacion"`, 293), después las del proceso de
-  recuperación (`pytest -m recuperacion`, 535) y al final
+  recuperación (`pytest -m recuperacion`, 543) y al final
   `python scripts/export_openapi.py --check`, que falla si
   [`fastapi-openapi.json`](contratos/fastapi-openapi.json) no coincide con el
   código. Así el contrato que lee el backend nunca queda atrasado.
@@ -150,6 +158,26 @@ AWS y dos variables, sin recursos, así que el plan sale vacío. Por qué no la
 usamos para staging está en
 [despliegue-staging.md](despliegue-staging.md#por-qué-blueprint-y-no-terraform).
 
+### CD Staging (Render)
+
+[`cd-staging.yml`](../.github/workflows/cd-staging.yml) se dispara cuando
+termina cualquiera de los 7 workflows de CI en un push a `main`, y también a
+mano (*Run workflow*). Tiene tres jobs:
+
+- Verificar el CI del commit: con la API de GitHub revisa que los 7 hayan
+  terminado bien para ese commit. Si falta alguno, falló alguno, `main` ya
+  avanzó o el commit ya se desplegó, no sigue y deja el motivo en el resumen.
+- Desplegar en Render: con el Environment `staging`, pide a la API de Render
+  un deploy de ese commit para python-service, backend y frontend, en ese
+  orden, y espera a que cada uno quede `live`. Falla si alguno termina en
+  `build_failed`, `update_failed` o `canceled`.
+- Pruebas de salud: 5 pruebas contra las URL públicas, con reintentos hasta
+  5 minutos por el arranque en frío, y una tabla con el resultado en el
+  resumen de la ejecución.
+
+El detalle, con qué revisa cada prueba, está en
+[despliegue-staging.md](despliegue-staging.md#despliegue-automático).
+
 ## Quality gates
 
 Un quality gate es una condición que, si no se cumple, detiene el pipeline.
@@ -167,6 +195,8 @@ Estos son los nuestros y por qué elegimos cada umbral:
 | Trivy | Sin CRITICAL con arreglo disponible | Lo que no tiene arreglo no lo podemos corregir nosotros; las HIGH se reportan pero no bloquean |
 | Integración | Las 5 pruebas de CI Integración y las 36 de integración del backend pasan | Son las que prueban los servicios juntos: con Docker Compose, y el backend completo contra un FastAPI simulado |
 | Render Blueprint | Válido contra el esquema y la API | Un `render.yaml` roto solo se notaría al desplegar |
+| Despliegue a staging | Los 7 workflows de CI en verde para el commit de `main` | Lo que no pasó todos los gates anteriores no se publica |
+| Pruebas de salud del staging | Las 5 pasan dentro de 5 minutos cada una | Confirman que lo desplegado responde de punta a punta, no solo que el build terminó |
 
 Las HIGH que dejamos pasar no las ignoramos: están listadas, con su plan, en
 [limitaciones.md](limitaciones.md#5-seguridad-y-vulnerabilidades).
@@ -192,8 +222,13 @@ alguien borra una Variable. Ningún valor está en el repositorio.
 | `RENDER_OWNER_ID` | Variable | CI Render | ninguno: sin ella se omite el job | ID del workspace de Render |
 | `DB_PASSWORD` | Secret | CI Integración | aleatorio en cada ejecución | Contraseña de la base de CI |
 | `JWT_SECRET` | Secret | CI Integración | aleatorio en cada ejecución | Firma de tokens en CI |
-| `RENDER_API_KEY` | Secret | CI Render | ninguno: sin él se omite la validación con la API | Validar el Blueprint con la API de Render |
-| `GITHUB_TOKEN` | Secret automático | Gitleaks | lo crea GitHub | Leer los commits de un PR |
+| `RENDER_API_KEY` | Secret | CI Render, CD Staging | en CI Render se omite la validación con la API; CD Staging falla | Validar el Blueprint y desplegar con la API de Render |
+| `GITHUB_TOKEN` | Secret automático | Gitleaks, CD Staging | lo crea GitHub | Leer los commits de un PR; revisar el CI y los despliegues de un commit |
+| `RENDER_SERVICE_ID_PYTHON`, `RENDER_SERVICE_ID_BACKEND`, `RENDER_SERVICE_ID_FRONTEND` | Variable del Environment `staging` | CD Staging | ninguno: el despliegue falla | ID de cada servicio en Render (`srv-…`) |
+| `STAGING_URL_PYTHON`, `STAGING_URL_BACKEND`, `STAGING_URL_FRONTEND` | Variable del Environment `staging` | CD Staging | ninguno: las pruebas de salud fallan | URL pública de cada servicio |
+
+El Environment `staging` solo acepta despliegues desde `main`, así que
+ningún workflow de otra rama puede leer sus Variables ni desplegar.
 
 Los Secrets que llegan a un `.env` se enmascaran con `::add-mask::`, así que
 si se imprimen por error en el log aparecen como `***`. Los secretos de
@@ -206,15 +241,17 @@ GitHub: los genera Render (ver
 | Grupo | Herramienta | Cantidad | Qué cubren |
 |---|---|---:|---|
 | Python, unitarias | pytest | 293 | Esquemas del contrato, errores, request id, logs, simulación de errores, cliente de Open Food Facts, limitador, clave de ingesta, caché, catálogo, salud, `/analizar` |
-| Python, proceso de recuperación | pytest (`-m recuperacion`) | 535 | Ingesta por categorías y segunda ronda, mapeo, limpieza de ingredientes, alérgenos, calidad, planificador, semilla, reprocesamiento, BM25, endpoint de búsqueda, métricas y evaluación |
+| Python, proceso de recuperación | pytest (`-m recuperacion`) | 543 | Ingesta por categorías y segunda ronda, mapeo, limpieza de ingredientes, alérgenos, calidad, planificador, semilla, reprocesamiento, BM25, endpoint de búsqueda, métricas y evaluación |
 | Backend, unitarias | Jest | 192 (18 archivos) | Guard JWT, puerto y CORS, cliente de FastAPI y reintentos, respaldo, mapeo, repositorio, controlador y servicio de productos, métricas, salud, observabilidad, usuarios y alergias |
 | Backend, integración | Jest (`npm run test:integration`) | 36 (4 archivos) | La app NestJS completa contra un FastAPI simulado: búsqueda y salud, detalle de producto, métricas, y perfil, alergias y compatibilidad con JWT |
 | Frontend | Vitest | 121 (12 archivos) | Búsqueda (incluidos los avisos de respaldo y "Despertando el servidor…"), detalle de producto, métricas, login, registro y perfil, sesión, servicios y etiquetas de alérgenos |
 | Integración | bash + curl en CI | 5 | Los servicios juntos, ver arriba |
+| Salud del staging | bash + curl en CD Staging | 5 | Lo desplegado en Render, por sus URL públicas |
 
-En total son 1177 pruebas automatizadas más las 5 de CI Integración. Las de
-Python las contamos el 23 de octubre de 2026 y las del backend y el frontend
-el 24 de octubre de 2026, corriendo cada grupo; todas pasaron.
+En total son 1185 pruebas automatizadas más las 5 de CI Integración y las 5
+de salud del staging. Las de Python las contamos el 25 de octubre de 2026 y
+las del backend y el frontend el 24 de octubre de 2026, corriendo cada grupo;
+todas pasaron.
 
 Las pruebas de Python nunca llaman a Open Food Facts. Usan un cliente falso
 (`ClienteOFFFalso` en [`conftest.py`](../python-service/tests/conftest.py))
@@ -268,7 +305,11 @@ borrarlo al terminar con `docker compose -p foodaware-ci down -v`.
 ## Estado actual
 
 En el último commit de `main` revisado (`545168e`, merge del PR #24), los 7
-workflows terminaron en verde, incluidos los 7 jobs de CI Seguridad.
+workflows terminaron en verde, incluidos los 7 jobs de CI Seguridad. La
+captura [`ep2-ci-verde.png`](evidencia/ep2-ci-verde.png) muestra todos los
+checks del pipeline en verde, y
+[`ep2-cd-staging.png`](evidencia/ep2-cd-staging.png), el despliegue
+automático en verde con la tabla de las pruebas de salud.
 
 No siempre fue así, y conviene contarlo. Desde el PR #15, cuando agregamos
 Trivy, CI Seguridad falló en `main` en un solo job: Trivy sobre la imagen del
@@ -306,34 +347,27 @@ estar en verde.
 
 ### EP2
 
-Las capturas de la EP2 van en [`docs/evidencia/`](evidencia/) con estos
-nombres:
+Las capturas del pipeline de la EP2 están en [`docs/evidencia/`](evidencia/):
 
 | Archivo | Qué muestra |
 |---|---|
-| `ep2-ci-main-workflows.png` | Los 7 workflows del último commit de `main` con su estado |
-| `ep2-ci-python-pruebas.png` | Log de CI Python con "293 passed" y "535 passed" |
-| `ep2-ci-backend-pruebas.png` | Log de CI Backend con "Tests: 192 passed" (unitarias) y "Tests: 36 passed" (integración) |
-| `ep2-ci-frontend-pruebas.png` | Log de CI Frontend con "Tests 121 passed" |
-| `ep2-ci-integracion.png` | Los pasos de CI Integración con las 5 pruebas en verde |
-| `ep2-ci-seguridad-jobs.png` | Los 7 jobs de CI Seguridad |
-| `ep2-trivy-backend-critical.png` | El log de Trivy del backend con el CRITICAL de `tar`, antes del PR #17 |
-| `ep2-security-code-scanning.png` | La pestaña Security, con los reportes de Bandit, CodeQL y Trivy |
-| `ep2-github-variables.png` | La lista de Variables de Actions (con el valor de `OFF_USER_AGENT` tapado, porque lleva un correo) |
-| `ep2-github-secrets.png` | La lista de Secrets de Actions (GitHub solo muestra los nombres) |
-| `ep2-ci-render-blueprint.png` | El job de CI Render con "render.yaml es válido" |
+| `ep2-ci-verde.png` | Todos los checks del pipeline en verde |
+| `ep2-trivy-backend-critical.png` | Trivy bloqueando el CRITICAL de `tar` en la imagen del backend, antes del PR #17 |
+| `ep2-github-secrets.png` | Los Secrets de GitHub Actions (GitHub solo muestra los nombres) |
+| `ep2-github-variables.png` | Las Variables de GitHub Actions (con el valor de `OFF_USER_AGENT` tapado, porque lleva un correo) |
+| `ep2-render-servicios.png` | Los 4 recursos del Blueprint desplegados en Render |
+| `ep2-cd-staging.png` | El workflow CD Staging en verde, con la tabla de las pruebas de salud |
 
-![Workflows de main](evidencia/ep2-ci-main-workflows.png)
-![Pruebas de Python](evidencia/ep2-ci-python-pruebas.png)
-![Pruebas del backend](evidencia/ep2-ci-backend-pruebas.png)
-![Pruebas del frontend](evidencia/ep2-ci-frontend-pruebas.png)
-![Pruebas de integración](evidencia/ep2-ci-integracion.png)
-![Jobs de CI Seguridad](evidencia/ep2-ci-seguridad-jobs.png)
-![Trivy del backend](evidencia/ep2-trivy-backend-critical.png)
-![Pestaña Security](evidencia/ep2-security-code-scanning.png)
-![Variables de Actions](evidencia/ep2-github-variables.png)
+![Checks del pipeline en verde](evidencia/ep2-ci-verde.png)
+![Trivy bloqueando el CRITICAL del backend](evidencia/ep2-trivy-backend-critical.png)
 ![Secrets de Actions](evidencia/ep2-github-secrets.png)
-![Validación del Blueprint](evidencia/ep2-ci-render-blueprint.png)
+![Variables de Actions](evidencia/ep2-github-variables.png)
+![Recursos del Blueprint en Render](evidencia/ep2-render-servicios.png)
+![CD Staging con las pruebas de salud](evidencia/ep2-cd-staging.png)
+
+Las capturas de la aplicación (búsqueda con respaldo, panel de métricas,
+detalle del producto y compatibilidad) están en
+[frontend.md](frontend.md#evidencia) y [backend.md](backend.md#evidencia).
 
 La evidencia de las métricas (salidas de `estadisticas_corpus.py` y
 `evaluar_busqueda.py`) está como texto en

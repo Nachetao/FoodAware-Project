@@ -468,10 +468,11 @@ caché (la de otro integrante, una con una ingesta más reciente o con
 productos de prueba) tiene otros relevantes y da otro Precision@5. Por eso en
 otros documentos del equipo puede aparecer un valor distinto, medido sobre
 otra caché. El 0,53 de arriba es el de nuestra caché local de 383 productos,
-medido el 23 de octubre de 2026. El valor de referencia del proyecto será el
-que responda `GET /api/metricas/evaluacion` en staging: el python-service de
+medido el 23 de octubre de 2026. El valor de referencia del proyecto es el
+que responde `GET /api/metricas/evaluacion` en staging: el python-service de
 staging arranca siempre desde la semilla del corpus, así que da el mismo valor
-en cada despliegue mientras no se regenere la semilla.
+en cada despliegue mientras no se regenere la semilla. Con la semilla del 25
+de octubre de 2026 (385 productos), staging da también Precision@5 = 0,53.
 
 Sobre el tiempo, hay que distinguir dos números. Recorrer el índice BM25
 toma alrededor de 0,2 ms, que es lo que mide la evaluación. El `tiempo_ms`

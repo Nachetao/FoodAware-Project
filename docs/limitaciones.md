@@ -14,10 +14,10 @@ etiqueta del producto.
 | Limitación | Impacto | Mitigación o plan |
 |---|---|---|
 | Open Food Facts es colaborativa y sus datos pueden estar mal o desactualizados | Un alérgeno mal transcrito o una receta antigua llega tal cual a la app | Unimos las etiquetas de la fuente con lo que detectamos en el texto, guardamos la procedencia de cada producto (`url_fuente`, `modificado_en_fuente`) y refrescamos la caché cada 24 h. El detalle de cada producto muestra la fecha en que se recuperó y enlaza a su ficha original. Falta advertir en la interfaz que los datos pueden tener errores |
-| Muchos productos llegan incompletos | El 24 % de lo recuperado es inválido, sobre todo por no tener ingredientes (83 de los 86 inválidos de la última ingesta) | Esos productos no se guardan ni se buscan, porque sin ingredientes no se pueden revisar los alérgenos. La métrica de cobertura de ingredientes lo deja a la vista |
-| `/api/v2/search` responde 503 seguido | En las ingestas que lo registran falló entre el 35 % y el 53 % de las páginas, y las 4 ingestas terminaron `completado_con_errores` | Reintentos con backoff más largo para las búsquedas, segunda ronda por categoría después de 60 s, semilla del corpus para no depender de una ingesta al arrancar |
+| Muchos productos llegan incompletos | El 24,5 % de lo recuperado en las 5 ingestas es inválido, sobre todo por no tener ingredientes (94 de los 101 inválidos de la última, del 25 de octubre) | Esos productos no se guardan ni se buscan, porque sin ingredientes no se pueden revisar los alérgenos. La métrica de cobertura de ingredientes lo deja a la vista |
+| `/api/v2/search` responde 503 seguido | En las ingestas que lo registran falló entre el 21 % y el 53 % de las páginas, y las 5 ingestas terminaron `completado_con_errores` | Reintentos con backoff más largo para las búsquedas, segunda ronda por categoría después de 60 s, semilla del corpus para no depender de una ingesta al arrancar |
 | Límites de tasa de la fuente | Nuestras ingestas reales tardaron entre 3 y 7 minutos, y una petición de usuario puede recibir 503 si el limitador está lleno | Nos quedamos bajo los límites oficiales (12 lecturas y 8 búsquedas por minuto) y la búsqueda nunca consulta la fuente en vivo |
-| Corpus chico | 383 productos de 7 categorías, solo de Chile. Si un producto no está, no aparece | Las categorías se eligieron por ser las más relevantes para alergias. Se puede ampliar con `INGESTA_CATEGORIAS` e `INGESTA_MAX_PRODUCTOS`, a costa de ingestas más largas |
+| Corpus chico | 385 productos de 7 categorías, solo de Chile. Si un producto no está, no aparece | Las categorías se eligieron por ser las más relevantes para alergias. Se puede ampliar con `INGESTA_CATEGORIAS` e `INGESTA_MAX_PRODUCTOS`, a costa de ingestas más largas |
 | Categorías desbalanceadas | De 31 panes a 100 cereales, lo que afecta qué consultas tienen buenos resultados | El reparto de la cuota por categoría lo atenúa; la evaluación informa cuántos relevantes tiene cada consulta |
 | La atribución no aparece en la lista de resultados | La licencia ODbL pide atribuir la fuente donde se muestran los datos | La atribución está en cada producto (`procedencia`), en la semilla y en el detalle del producto en el frontend ("Datos de Open Food Facts", con la licencia ODbL). Falta agregarla a la lista de resultados de la búsqueda |
 
@@ -42,10 +42,10 @@ etiqueta del producto.
 | BM25 es léxico y no entiende "sin" | Las consultas con restricción tienen Precision@5 de 0,20. En "chocolate sin leche", "snack sin maní" y "bebida vegetal sin soya", los 5 primeros resultados tienen justo el alérgeno que se quiere evitar | No se arregla con más sinónimos ni con otros pesos. Es lo que resuelve la capacidad adaptativa: filtrar por los alérgenos detectados según el perfil ([capacidad-adaptativa.md](capacidad-adaptativa.md)) |
 | Sin corrección de errores de tipeo | "galeta" no encuentra "galleta" | Pendiente; se podría agregar una búsqueda aproximada sobre el vocabulario del índice |
 | El singular y los sinónimos son reglas simples | Algunas palabras quedan mal ("pasas" pasa a "pasa", igual que el verbo) y faltan sinónimos que no vimos en el corpus | Como productos y consultas pasan por la misma función, los errores se cancelan en la mayoría de los casos. Los sinónimos se agregan solo si aparecen en el corpus real |
-| El índice vive en memoria y se reconstruye entero | Con 383 productos tarda unos 120 ms; con decenas de miles sería lento y ocuparía mucha memoria | Para el tamaño actual sobra. Si el corpus crece, habría que pasar a un motor de búsqueda dedicado |
+| El índice vive en memoria y se reconstruye entero | Con unos 380 productos tarda unos 120 ms; con decenas de miles sería lento y ocuparía mucha memoria | Para el tamaño actual sobra. Si el corpus crece, habría que pasar a un motor de búsqueda dedicado |
 | El conjunto de evaluación es chico y lo armamos nosotros | 20 consultas pensadas por el equipo, con reglas que dependen de las categorías de Open Food Facts | Las reglas se aplican sobre todo el corpus (el recall es exacto) y comparamos siempre contra la misma línea base. Los números sirven para comparar versiones, no como nota absoluta |
 | El respaldo del backend es más simple que BM25 | Si el python-service se cae, el orden de los resultados es peor y solo incluye productos que alguien buscó antes | Es un respaldo para que la app no quede en blanco, y el frontend avisa cuando se usa |
-| `estado_fuente` es poco preciso | Vale `online` aunque la última ingesta haya tenido errores, y `cache` solo si falló entera | El detalle real está en `/health` y en `/ingest/runs/latest` |
+| `estado_fuente` es poco preciso | Vale `online` aunque la última ingesta haya tenido errores, y `cache` solo si falló entera o si no hay ninguna propia (en staging recién desplegado, donde solo están las de la semilla) | El detalle real está en `/health` y en `/ingest/runs/latest` |
 
 ## 4. Staging en el plan gratuito
 
@@ -59,8 +59,10 @@ Lo que importa para el proyecto:
 |---|---|---|
 | El servicio se duerme y el disco se borra | La primera petición tarda cerca de un minuto y la caché se pierde en cada reinicio | El servicio carga la semilla del corpus al arrancar; el backend responde desde su respaldo si el python-service tarda |
 | La ingesta periódica no alcanza a correr | Los datos de staging son los de la semilla y no se actualizan solos; la antigüedad crece todos los días | Regenerar la semilla (`scripts/exportar_semilla.py`) y desplegar cuando haga falta |
-| Las URL de Render se conocen recién al crear los servicios | Si Render agrega un sufijo a un nombre, la URL real no es la esperada y el backend o el frontend apuntan a otra parte | `PYTHON_API_URL`, `CORS_ORIGINS` y `API_URL` son `sync: false`: se completan al crear el Blueprint y se corrigen en Render sin tocar el repositorio ([paso 6](despliegue-staging.md#primer-despliegue-paso-a-paso)) |
-| No hay workflow de despliegue | Cada despliegue es manual desde el panel de Render | Pendiente: un workflow que despliegue cuando pase todo el CI de `main` |
+| Las métricas de ingesta de staging vienen de la semilla | El panel muestra los conteos de las 5 ingestas que hicimos en local (del 21 al 25 de octubre), no de ingestas hechas en staging | Es a propósito, para que el panel no quede en cero: esas ejecuciones vienen con `origen: "semilla"` y no cuentan para `/health` ni para el planificador ([despliegue-staging.md](despliegue-staging.md#las-ingestas-de-la-semilla-en-staging)) |
+| Las URL de Render se conocen recién al crear los servicios | Si Render agrega un sufijo a un nombre, la URL real no es la esperada y el backend o el frontend apuntan a otra parte | `PYTHON_API_URL`, `CORS_ORIGINS` y `API_URL` son `sync: false`: se completan al crear el Blueprint y se corrigen en Render sin tocar el repositorio ([paso 6](despliegue-staging.md#primer-despliegue-paso-a-paso)). En nuestro staging no hubo sufijos |
+| El despliegue no es atómico entre servicios | Si python-service queda `live` y el backend falla, staging queda un rato con versiones de commits distintos | El CD despliega en orden y se detiene en el primero que falla, así que nunca queda un frontend nuevo sobre un backend viejo. El CD no vuelve atrás solo: hay que revertir el commit en `main`, y el CD despliega la reversión cuando pase su CI |
+| Las pruebas de salud corren después de desplegar | Si una falla, el commit ya está publicado en staging | Es staging y no producción: la prueba deja el workflow en rojo y la tabla del resumen dice qué falló |
 | El python-service tiene URL pública | En el plan gratuito no hay red privada, así que cualquiera puede llamar a `/search` o `/products`. `GET /products/{codigo}` con un código que no está en la caché consume el límite de lecturas a Open Food Facts | El limitador protege a la fuente (12 lecturas por minuto) y las ingestas están protegidas con `INGESTA_CLAVE`. Lo que no evita es que alguien gaste nuestra cuota de lecturas |
 
 ## 5. Seguridad y vulnerabilidades
@@ -81,7 +83,7 @@ de Trivy.
 |---|---|---|
 | Las HIGH no bloquean el pipeline | Quedan vulnerabilidades altas conocidas en producción | Se reportan en la pestaña Security. Las del backend que vienen de dependencias se corrigen actualizándolas; las 44 del python-service dependen de que Debian publique el arreglo |
 | `npm audit` solo bloquea con críticas | Una dependencia de Node con una vulnerabilidad alta pasa | Decidimos ese umbral para que el pipeline no quede siempre en rojo; las altas aparecen igual en Trivy |
-| `main` no exige los checks antes del merge | Los PR #15 y #16 se integraron con CI Seguridad en rojo | Activar la protección de rama con los checks obligatorios |
+| `main` no exige los checks antes del merge | Los PR #15 y #16 se integraron con CI Seguridad en rojo | Desde la EP2, un commit de `main` con algún CI en rojo ya no llega a staging, porque el CD lo revisa antes de desplegar. Falta activar la protección de rama con los checks obligatorios para que tampoco se pueda integrar |
 | Endpoints públicos del python-service | `/metrics/*`, `/health` y `/ingest/runs/latest` no tienen autenticación | No exponen datos personales ni secretos, solo conteos. La ingesta, que es lo costoso, sí está protegida |
 
 ## 6. Terraform y el Blueprint de Render
@@ -92,13 +94,16 @@ de Trivy.
 | El estado del Blueprint lo guarda Render | No hay un `plan` local que muestre los cambios antes de aplicarlos | CI valida `render.yaml` contra la API de Render (que muestra lo que crearía un sync), Auto Sync está desactivado y los cambios se aplican a mano con *Manual Sync* después del merge |
 | Si se pasara a un plan pagado | Se podría volver a Terraform, pero habría que agregarle un backend remoto para el estado, y ese estado guardaría las contraseñas | Por ahora no es necesario |
 
-## 7. Resueltas antes de publicar staging
+## 7. Resueltas en la EP2
 
 Estas limitaciones aparecían en versiones anteriores de este documento y ya
-están corregidas en `main`:
+están corregidas en `main`. Las que venían de la EP1 están también en
+[estado-del-proyecto.md](estado-del-proyecto.md#correcciones-de-la-ep1).
 
 | Limitación | Cómo se resolvió |
 |---|---|
+| No había workflow de despliegue y cada despliegue era manual desde Render | `CD Staging (Render)` despliega cada commit de `main` con todo el CI en verde y prueba las URL públicas ([despliegue-staging.md](despliegue-staging.md#despliegue-automático)) |
+| El panel de métricas de staging mostraba 0 % y "Todavía no hay ninguna ingesta" | La semilla trae el historial real de las ingestas que armaron el corpus, marcado con `origen: "semilla"` |
 | CI Seguridad fallaba en `main` por el CRITICAL de `tar` (CVE-2026-59873) en la imagen del backend | La imagen final del backend usa `node:22-alpine` sin npm ni npx (PR #17). En el commit `545168e` de `main`, los 7 workflows están en verde |
 | Endpoints de prueba de la EP1 sin autenticación (`GET /api/food/test-alergia` creaba usuarios) | Se quitaron, y el backend exige JWT en todas las rutas salvo las públicas (PR #17) |
 | El frontend no leía `API_URL` y en Render llamaba a `http://localhost:3000` | La compilación toma la URL del backend de `API_URL` (PR #17) |
