@@ -144,6 +144,14 @@ def test_sin_falsos_positivos_obvios(texto):
         ("sémola de maíz", []),
         ("trigo sarraceno", []),
         ("lecitina de girasol", []),
+        ("lecitina de maravilla", []),
+        ("Lecitina de semillas de maravilla", []),
+        ("sunflower lecithin", []),
+        ("manteca de palmiste", []),
+        ("Manteca de Palmiste y palma hidrogenada", []),
+        ("manteca de almendras", ["frutos_secos"]),
+        # Sin decir de qué es, la lecitina sigue siendo soya.
+        ("lecitina", ["soya"]),
         ("peanut butter", ["mani"]),
         ("cocoa butter", []),
         # La excepción no tapa otra mención real en el mismo fragmento.
@@ -195,6 +203,88 @@ def test_negaciones(texto, esperado):
 def test_trazas(texto, esperados, de_trazas):
     assert alergenos(texto) == esperados
     assert trazas(texto) == de_trazas
+
+
+def en_lista(texto):
+    deteccion = detectar_alergenos(analizar_ingredientes(texto))
+    return ([a.value for a in deteccion.alergenos],
+            [t.value for t in deteccion.trazas])
+
+
+@pytest.mark.parametrize(
+    "texto, esperados, de_trazas",
+    [
+        # La frase empieza a mitad del fragmento (sin coma antes): lo que
+        # sigue tras las comas también es traza, no ingrediente.
+        ("Papas, aceite (antioxidante: TBHQ y sal. Puede contener soya, "
+         "leche y productos lácteos", [], ["lacteos", "soya"]),
+        ("Papas, aceite de girasol y sal Puede contener trigo, leche y soya",
+         [], ["lacteos", "gluten", "soya"]),
+        ("Cacao (18% azúcar. Elaborado en líneas que también procesan "
+         "almendras, huevos, leche", [], ["lacteos", "huevo",
+                                          "frutos_secos"]),
+        ("Harina de arroz, sal, cultivos lácticos (L. bulgaricus) Puede "
+         "contener trazas de: almendra, soya",
+         [], ["frutos_secos", "soya"]),
+        ("Rice, salt, PGPR emulsifier. Plant also processes eggs, milk, "
+         "peanuts, sesame", [], ["lacteos", "huevo", "mani", "sesamo"]),
+        ("Maíz, sal. Planta que también procesa maní, almendras",
+         [], ["mani", "frutos_secos"]),
+        # Otros idiomas que aparecen en Open Food Facts (el diccionario de
+        # sinónimos es de español e inglés: aquí solo "soja" y "trigo").
+        ("Wasser, Salz. Kann Spuren von Soja enthalten.", [], ["soya"]),
+        ("Farine de riz, sucre. Peut contenir des traces de soja",
+         [], ["soya"]),
+        ("Milho, açúcar, sal. Pode conter aveia, soja e trigo",
+         [], ["gluten", "soya"]),
+    ],
+)
+def test_frases_de_trazas_a_mitad_de_un_fragmento(texto, esperados,
+                                                  de_trazas):
+    assert en_lista(texto) == (esperados, de_trazas)
+
+
+@pytest.mark.parametrize(
+    "texto, esperados, de_trazas",
+    [
+        # "elaborado en" sin línea, planta ni equipo no corta la lista.
+        ("Aceite de oliva elaborado en Chile, leche entera", ["lacteos"], []),
+        ("Aceite de oliva elaborado en Chile, harina de trigo, huevo",
+         ["gluten", "huevo"], []),
+        # Dentro de un mismo fragmento: "fabricado en" sin línea, planta ni
+        # equipo no convierte en traza lo que sigue.
+        ("Producto fabricado en Argentina con harina de trigo",
+         ["gluten"], []),
+        ("Galletas elaboradas en Chile con leche y huevo",
+         ["lacteos", "huevo"], []),
+        ("Envasado en atmósfera protectora con soya", ["soya"], []),
+        ("Produced in Chile with wheat flour", ["gluten"], []),
+        # Con línea, planta o equipo sí es una traza.
+        ("Fabricado en una planta que procesa maní", [], ["mani"]),
+        ("Elaborado en líneas compartidas con leche", [], ["lacteos"]),
+        ("Manufactured in a facility that also processes milk",
+         [], ["lacteos"]),
+        # Entre paréntesis, la frase solo afecta a su grupo.
+        ("Chocolate (puede contener avellanas), leche, sal",
+         ["lacteos"], ["frutos_secos"]),
+        # Lo de antes de la frase sigue siendo ingrediente.
+        ("Leche entera y sal. Puede contener maní, soya",
+         ["lacteos"], ["mani", "soya"]),
+    ],
+)
+def test_lo_que_no_es_una_frase_de_trazas_sigue_siendo_ingrediente(
+    texto, esperados, de_trazas
+):
+    assert en_lista(texto) == (esperados, de_trazas)
+
+
+def test_la_frase_a_mitad_de_un_fragmento_queda_como_declaracion():
+    lista = analizar_ingredientes(
+        "Papas, aceite (antioxidante: TBHQ y sal. Puede contener soya, "
+        "leche")
+
+    assert [i.nombre for i in lista.ingredientes][:2] == ["papas", "aceite"]
+    assert lista.declaraciones == ("puede contener soya, leche",)
 
 
 def test_detectar_en_lista_revisa_subingredientes_y_declaraciones():

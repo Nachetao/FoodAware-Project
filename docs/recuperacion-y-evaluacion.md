@@ -625,8 +625,11 @@ la regla de "ante la duda, advertir".
 
 ### Resultados
 
-Medidos el 18 de noviembre de 2026 sobre la semilla del corpus (385 productos,
-el mismo corpus de staging), con `scripts/evaluar_adaptativo.py --semilla`.
+Primera medición, del 18 de noviembre de 2026, sobre la semilla del corpus
+(385 productos, el mismo corpus de staging) con `VERSION_PROCESAMIENTO` 2, con
+`scripts/evaluar_adaptativo.py --semilla`. Después corregimos la detección de
+frases de trazas; los valores actuales están en
+[Corrección de las frases de trazas](#corrección-de-las-frases-de-trazas).
 
 **Veredictos.** Ningún perfil tuvo falsos "apto", ni por ingrediente ni por
 traza:
@@ -666,25 +669,34 @@ esa etiqueta. Es lo esperado (ver [limitaciones.md](limitaciones.md)).
 | Trazas | 29 | 11 | 10 | 15 | 0,52 | 0,42 |
 
 La detección no dejó pasar ningún alérgeno del etiquetado (exhaustividad 1,00),
-pero marca de más. Al mirar los 22 marcados de más encontramos que 15 son
-trazas leídas como ingrediente: son exactamente las 15 trazas que faltan. Pasa
-con frases como "Elaborado en líneas que también procesan huevos y frutos
-secos", "Puede contener huevo y leche" o la declaración de trazas en alemán del
-Fitnessbrot. Los 7 restantes son casos que el etiquetado dejó a propósito como
-ambiguos o descartó: el aroma de manteca de los Crackers, "sabor leche y
-crema" del Not Milk, el lupino que solo aparece en el texto descriptivo del Pan
-Integral, el aceite de soya del Molde Integral y lo ilegible del Pocky. Las 10
-trazas de más no aparecen en el texto que leímos; pueden venir de la etiqueta
-de Open Food Facts, que el etiquetado no revisó, y sin ver la foto no sabemos
-cuál tiene razón.
+pero marca de más. Revisamos los 22 marcados de más caso por caso, mirando de
+dónde sale cada uno:
+
+| Causa | Marcados de más |
+|---|---:|
+| Open Food Facts declara como alérgeno, en `allergens_tags`, lo que el texto dice que es traza (Wafers trisabor, Fitnessbrot y la barra de cereal). No corregimos las etiquetas de la fuente | 6 |
+| Una frase de trazas que nuestra detección no reconocía: "…y sal. Puede contener soya, leche…" dentro de un paréntesis sin cerrar (papas Lays) y "…Plant also processes eggs, …, sulphites" (barra de cereal); corregido en la versión 3 | 3 |
+| Lo ambiguo que el etiquetado dejó fuera a propósito: el aroma de manteca (Crackers), "sabor leche y crema" (Not Milk, que Open Food Facts etiqueta con leche), el lupino del texto descriptivo (Pan Integral), el huevo y la soya que Open Food Facts declara en el Molde Integral y lo ilegible del Pocky | 7 |
+| "Almendras, maní, gluten" al final del Trencito, sin ninguna frase: el equipo los dejó como trazas | 3 |
+| "Manteca de palmiste" leída como lácteo (Mini Tritón y Triton); corregido en la versión 4 | 2 |
+| "Lecitina de maravilla" leída como soya (leche vegetal): maravilla es girasol; corregido en la versión 4 | 1 |
+
+Las 15 trazas que faltan son el espejo de los primeros grupos: el mismo
+alérgeno que el etiquetado tiene como traza y el sistema como ingrediente. En
+una primera versión de este documento atribuimos los 15 a frases de trazas no
+reconocidas; al revisar de dónde sale cada uno vimos que solo 3 lo eran. Las
+10 trazas de más no aparecen en el texto que leímos; pueden venir de la
+etiqueta de Open Food Facts, que el etiquetado no revisó, y sin ver la foto no
+sabemos cuál tiene razón.
 
 Por eso los falsos "no apto" vienen casi todos de la detección y no de las
-reglas del veredicto: con alergia a lácteos en modo normal, los 5 son productos
-con "puede contener leche" leído como ingrediente o con un aroma de manteca o
-de leche. En modo estricto se suman los productos con trazas que el etiquetado
-no encontró en el texto (Wafers chocolate 0 %, Pan con Romero y Molde
-Integral) y los que tienen datos insuficientes porque Open Food Facts declara
-alérgenos que no reconocemos.
+reglas del veredicto. Con alergia a lácteos en modo normal, los 5 son: las
+papas Lays ("puede contener … leche" leído como ingrediente), la manteca de
+palmiste del Mini Tritón y del Triton, el aroma de manteca de los Crackers y el
+Not Milk etiquetado con leche. En modo estricto se suman los productos con
+trazas que el etiquetado no encontró en el texto (Wafers chocolate 0 %, Pan con
+Romero y Molde Integral) y los que tienen datos insuficientes porque Open Food
+Facts declara alérgenos que no reconocemos.
 
 **Búsqueda base contra personalizada.** `GET /search` contra `POST
 /search/personalized` con perfil vacío (la restricción sale de la consulta) y
@@ -711,7 +723,85 @@ confirma con la etiqueta de Open Food Facts: suben primero los productos que
 la tienen (kéfir, yogur), aunque no sean los que la regla busca, y la Leche
 Descremada Zero Lacto, que no tiene esa etiqueta, queda en
 `apto_con_advertencia` y baja del puesto 1 al 46. Además, al sacar "sin
-lactosa" del texto que busca BM25, el nombre del producto deja de ayudar.
+lactosa" del texto que busca BM25, el nombre del producto deja de ayudar
+(ver [limitaciones.md](limitaciones.md#3-búsqueda)).
+
+### Corrección de las frases de trazas
+
+La detección ya separaba las trazas cuando la frase ("puede contener",
+"trazas de", "elaborado en líneas que…") abría un fragmento de la lista, pero
+no cuando aparecía a mitad de uno, sin coma antes. Pasa cuando el texto trae
+un punto donde no lo espera, un paréntesis sin cerrar o una frase pegada al
+ingrediente anterior: en "…(antioxidante: TBHQ y sal. Puede contener soya,
+leche y productos lácteos", la soya quedaba como traza y la leche, que viene
+después de la coma, como ingrediente.
+
+La corrección es general, por patrones de frases y no por producto
+(`VERSION_PROCESAMIENTO` 3):
+
+- Una frase de trazas a mitad de un fragmento, fuera de paréntesis, corta la
+  lista: lo de antes es ingrediente y lo que sigue, aunque venga después de
+  comas, es parte de la declaración. Para no cortar un ingrediente como
+  "aceite elaborado en Chile", "elaborado en" solo cuenta si sigue una línea,
+  planta o equipo.
+- Se reconocen más variantes: "también procesa(n)", "also processes" y las
+  frases de trazas en alemán, francés y portugués que aparecen en Open Food
+  Facts ("Kann Spuren von", "Peut contenir", "Pode conter").
+
+En el etiquetado se corrigen los 3 casos de la tabla de causas que eran frases
+de trazas: los lácteos de las papas Lays y el huevo y los sulfitos de la barra
+de cereal. Los demás marcados de más tienen otra causa y siguen igual. En todo
+el corpus cambian 8 de los 385 productos; los revisamos uno por uno y en los 8
+el alérgeno que deja de ser ingrediente viene de una frase de trazas real (por
+ejemplo, "Puede contener trazas de: almendra, pasas, nuez, soya" en un yogur o
+"PODE CONTER AVEIA, SOJA E TRIGO" en unos corn flakes). Ningún ingrediente
+pasó a traza por error.
+
+Después hicimos una segunda corrección (`VERSION_PROCESAMIENTO` 4):
+
+- Dentro de un fragmento, "elaborado en", "fabricado en" y las demás
+  variantes (también en inglés, como "produced in") solo cuentan como frase
+  de trazas si sigue una línea, planta, instalación o equipo. Antes, en
+  "Producto fabricado en Argentina con harina de trigo" el trigo quedaba como
+  traza: un ingrediente real bajaba a advertencia. No cambió ningún producto
+  del corpus, pero ese error iba en la dirección peligrosa y ahora lo cubre un
+  test.
+- Excepciones nuevas: "manteca de palmiste" (y de almendra o avellana) no es
+  lácteo, y "lecitina de maravilla" (maravilla es girasol), "de semillas de
+  girasol" o "rapeseed lecithin" no es soya. En el corpus cambian 4 productos:
+  la leche vegetal y Moroketo dejan de marcar soya, y Mini Tritón y Triton
+  dejan de marcar lácteos como ingrediente, pero los conservan como traza por
+  su "puede contener leche".
+
+Antes de cada cambio guardamos los resultados como línea base. Sobre el
+etiquetado:
+
+| Medida | Versión 2 | Versión 3 | Versión 4 |
+|---|---:|---:|---:|
+| Falsos "apto" (6 perfiles, 2 modos) | 0 | 0 | 0 |
+| Falsos "no apto", alergia a lácteos, normal | 5 de 25 (0,20) | 4 de 25 (0,16) | 2 de 25 (0,08) |
+| Falsos "no apto", alergia a la soya, normal | 3 de 22 (0,14) | 3 de 22 (0,14) | 2 de 22 (0,09) |
+| Falsos "no apto", dieta vegana, normal | 6 de 25 (0,24) | 5 de 25 (0,20) | 3 de 25 (0,12) |
+| Falsos "no apto", demás perfiles y modos | | sin cambios | sin cambios |
+| Alérgenos: precisión | 0,61 (22 de más) | 0,65 (19 de más) | 0,69 (16 de más) |
+| Alérgenos: exhaustividad | 1,00 | 1,00 | 1,00 |
+| Trazas: precisión | 0,52 | 0,58 | 0,63 |
+| Trazas: exhaustividad | 0,42 (15 faltantes) | 0,54 (12 faltantes) | 0,65 (9 faltantes) |
+| P@5 de las consultas con restricción, base y personalizada | 0,20 y 0,83 | 0,20 y 0,83 | 0,20 y 0,83 |
+
+Los reportes completos de cada versión, generados con
+`scripts/evaluar_adaptativo.py --semilla` sobre el código de cada versión,
+están como evidencia en
+[`evidencia/evaluacion-adaptativa/`](evidencia/evaluacion-adaptativa/):
+[versión 2](evidencia/evaluacion-adaptativa/version-2.md) (antes de las
+correcciones), [versión 3](evidencia/evaluacion-adaptativa/version-3.md) y
+[versión 4](evidencia/evaluacion-adaptativa/version-4.md) (la actual). Los
+tres se regeneraron el mismo día con el mismo script, así que tienen el mismo
+formato.
+
+Con la caché y la semilla no hay que hacer nada: al arrancar, el servicio
+reprocesa desde el payload guardado los productos de una versión anterior, y
+la semilla se procesa con la versión actual cada vez que se carga.
 
 ### Limitaciones de esta evaluación
 
@@ -728,6 +818,12 @@ lactosa" del texto que busca BM25, el nombre del producto deja de ayudar.
   la detección del sistema (la circularidad de arriba).
 - La dieta vegana se evalúa solo por alérgenos, igual que la revisa el
   sistema: la carne, la miel o la gelatina no son alérgenos.
+- Las correcciones de las versiones 3 y 4 las hicimos después de ver los
+  resultados sobre este mismo conjunto, así que su mejora está medida con los
+  datos que la motivaron y es optimista. Para acotarlo, son correcciones por
+  patrones generales y revisamos su efecto en los 385 productos del corpus, no
+  solo en los 30 del etiquetado; aun así, una medición limpia necesitaría un
+  conjunto etiquetado nuevo.
 
 ### Cómo se calcula en el servicio
 
