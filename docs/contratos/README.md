@@ -100,15 +100,15 @@ docker compose up --build -d python-service
 | Método | Ruta | Respuesta | Errores | Estado |
 |---|---|---|---|---|
 | GET | `/health` | `RespuestaSalud` (200 `ok`/`degradado`, 503 `error`) | — | real |
-| POST | `/analizar` | análisis por reglas (sin cambios) | 422 nativo de FastAPI | real |
-| GET | `/products/{codigo_barras}` | `Producto` | 404, 422, 500, 503, 504 | real |
-| GET | `/search?q=&limit=&offset=` | `RespuestaBusqueda` | 422, 500 | real |
+| POST | `/analizar` | análisis por reglas (sin cambios) | 403, 422 nativo de FastAPI | real; requiere `X-Clave-Servicio` |
+| GET | `/products/{codigo_barras}` | `Producto` | 403, 404, 422, 500, 503, 504 | real; requiere `X-Clave-Servicio` |
+| GET | `/search?q=&limit=&offset=` | `RespuestaBusqueda` | 403, 422, 500 | real; requiere `X-Clave-Servicio` |
 | POST | `/ingest/runs` | `ResumenIngesta` (202, `en_curso`) | 403, 422, 500, 503 | real; requiere `X-Clave-Ingesta` |
-| GET | `/ingest/runs/latest` | `ResumenIngesta` | 404, 500 | real |
-| GET | `/metrics/quality` | `MetricasCalidad` | 500 | real |
-| GET | `/metrics/evaluation` | `MetricasEvaluacion` | 500 | real |
-| POST | `/products/{codigo_barras}/compatibility` | `Veredicto` | 404, 422, 500, 503, 504 | real ([Capacidad adaptativa](#capacidad-adaptativa)) |
-| POST | `/search/personalized` | `RespuestaBusquedaPersonalizada` | 422, 500 | formato definitivo; falta interpretar la consulta ([Capacidad adaptativa](#capacidad-adaptativa)) |
+| GET | `/ingest/runs/latest` | `ResumenIngesta` | 403, 404, 500 | real; requiere `X-Clave-Servicio` |
+| GET | `/metrics/quality` | `MetricasCalidad` | 403, 500 | real; requiere `X-Clave-Servicio` |
+| GET | `/metrics/evaluation` | `MetricasEvaluacion` | 403, 500 | real; requiere `X-Clave-Servicio` |
+| POST | `/products/{codigo_barras}/compatibility` | `Veredicto` | 403, 404, 422, 500, 503, 504 | real; requiere `X-Clave-Servicio` ([Capacidad adaptativa](#capacidad-adaptativa)) |
+| POST | `/search/personalized` | `RespuestaBusquedaPersonalizada` | 403, 422, 500 | real; requiere `X-Clave-Servicio` ([Capacidad adaptativa](#capacidad-adaptativa)) |
 
 Parámetros de búsqueda: `q` de 2 a 100 caracteres, `limit` de 1 a 50 (10 por
 defecto), `offset` ≥ 0. Códigos de barras: 8 a 14 dígitos.
@@ -427,25 +427,54 @@ Cuerpo (`SolicitudBusquedaPersonalizada`):
 
 Cómo arma el ranking:
 
-1. Parte del ranking base: el de `GET /search` con la misma consulta, con
-   todas las coincidencias (sin paginar).
-2. Le pone un `Veredicto` a cada producto, con las mismas reglas de
-   `/compatibility`.
-3. Ordena por veredicto (`apto`, después `apto_con_advertencia`, después
-   `no_apto`) y, dentro de cada grupo, por la posición en el ranking base.
-4. En modo `filtrar` saca los `no_apto` y recién ahí pagina, así `total` es el
+1. Interpreta las restricciones de la consulta (ver abajo) y las suma al
+   perfil solo para esta búsqueda: ese es `perfil_aplicado`.
+2. Busca con BM25 la consulta sin esas restricciones ("chocolate sin leche"
+   busca "chocolate"), con todas las coincidencias (sin paginar). Si la
+   consulta solo traía restricciones ("sin gluten"), busca la consulta
+   completa.
+3. Le pone un `Veredicto` a cada producto con `perfil_aplicado` y las mismas
+   reglas de `/compatibility`.
+4. Ordena por veredicto (`apto`, después `apto_con_advertencia`, después
+   `no_apto`) y, dentro de cada grupo, por score BM25.
+5. En modo `filtrar` saca los `no_apto` y recién ahí pagina, así `total` es el
    número de resultados visibles.
+6. Compara su top 5 con el del ranking base: `GET /search` con la consulta
+   original, sin interpretar nada. `/search` no cambió con la búsqueda
+   personalizada: es la versión no adaptativa con la que se compara.
+
+**Restricciones en la consulta.** Se reconocen "sin X", "libre de X" (o
+"libres de") y "no contiene X", donde X es un sinónimo del mismo diccionario
+que usa la detección de alérgenos en los ingredientes ("leche", "lácteos",
+"queso", "maní", "frutos secos", "harina"...), sin importar tildes ni
+mayúsculas. También:
+
+- "ni X", "y X" u "o X" justo después encadenan otra: "sin leche ni huevo".
+- "trazas de" se salta: "sin trazas de maní" excluye el maní.
+- "sin lactosa" es la dieta `sin_lactosa`, no la alergia a lácteos: un
+  deslactosado tiene lácteos y sirve a quien es intolerante a la lactosa.
+- Un sinónimo de dos alérgenos ("marisco") agrega los dos.
+- Lo que sigue a un "sin" y no es un alérgeno ("sin azúcar") se deja en la
+  consulta y aparece en `interpretacion.no_reconocidas`.
+
+| Consulta | Busca | Agrega al perfil | `no_reconocidas` |
+|---|---|---|---|
+| `chocolate sin leche` | `chocolate` | alergia `lacteos` | |
+| `galletas sin leche ni huevo` | `galletas` | alergias `lacteos` y `huevo` | |
+| `leche sin lactosa` | `leche` | dieta `sin_lactosa` | |
+| `galletas sin azúcar` | `galletas sin azúcar` | nada | `sin azúcar` |
+| `sin gluten` | `sin gluten` (no queda otra cosa) | alergia `gluten` | |
 
 Respuesta (`RespuestaBusquedaPersonalizada`):
 
 | Campo | Qué es |
 |---|---|
-| `consulta`, `interpretacion` | La consulta y lo que se buscó: `terminos` (los tokens que usó BM25), `restricciones` ("sin leche" → `lacteos`) y `no_reconocidas` ("sin azúcar") |
+| `consulta`, `interpretacion` | La consulta original y lo que se buscó: `terminos` (los tokens que usó BM25), `restricciones` (`texto`, `tipo` y `codigo`: "sin leche" → `alergeno` `lacteos`) y `no_reconocidas` ("sin azúcar") |
 | `perfil_aplicado` | El perfil recibido más las restricciones de la consulta |
 | `modo`, `total`, `total_base` | Modo usado, resultados del ranking personalizado y coincidencias del ranking base |
-| `resultados[]` | `producto`, `score` BM25, `posicion` (personalizada), `posicion_base` (en `/search`; nulo si no aparece) y `veredicto` |
+| `resultados[]` | `producto`, `score` BM25 (de la consulta sin restricciones), `posicion` (personalizada), `posicion_base` (en `/search` con la consulta original; nulo si no aparece ahí) y `veredicto` |
 | `no_aptos` | Resumen siempre presente: `total`, `ocultos` (`true` en `filtrar`), `motivos` con la `cantidad` de productos por cada `tipo` y `codigo` (un producto con dos motivos cuenta en los dos) y `texto`, listo para mostrar: "25 ocultos por contener lácteos." o "3 ocultos: 2 por contener lácteos y 1 por poder contener maní." |
-| `comparacion` | Los `k` = 5 primeros de cada ranking (`top_base`, `top_personalizado`), los que `salieron_del_top` (con su `posicion_base`, su `posicion` nueva o nulo si quedaron ocultos, y su `veredicto`) y los que `entraron_al_top` |
+| `comparacion` | Los `k` = 5 primeros de cada ranking (`top_base`, `top_personalizado`), los que `salieron_del_top` (con su `posicion_base`, su `posicion` nueva, o nulo si quedaron ocultos o no coinciden con la consulta sin restricciones, y su `veredicto` con `perfil_aplicado`) y los que `entraron_al_top` |
 | `estado_fuente`, `tiempo_ms`, `aviso` | Igual que en `/search`, más el aviso permanente |
 
 Ejemplo abreviado, con códigos ilustrativos:
@@ -485,22 +514,17 @@ Ejemplo abreviado, con códigos ilustrativos:
 }
 ```
 
-**Estado de implementación:** el formato es el definitivo. Todavía no
-interpreta las restricciones de la consulta: busca la consulta completa,
-`restricciones` y `no_reconocidas` vienen vacías y `perfil_aplicado` es el
-perfil recibido. Cuando se agregue, "chocolate sin leche" va a buscar
-"chocolate", sumar `lacteos` al perfil solo para esa búsqueda y dejar
-`posicion_base` en nulo para los productos que no estén en el ranking de la
-consulta original.
+Los dos endpoints de esta sección exigen `X-Clave-Servicio`, como todos los
+que consume NestJS (ver [Endpoints](#endpoints)).
 
 ### Pendiente
 
 - `GET /metrics/evaluation/adaptive`: Precision@5 y tasa de falsos "apto" de
-  la versión adaptativa contra la base, sobre un conjunto de productos
-  etiquetados a mano. Se define junto con la búsqueda personalizada completa.
-
-Estos dos endpoints exigen `X-Clave-Servicio`, como todos los que consume
-NestJS (ver [Endpoints](#endpoints)).
+  la versión adaptativa contra la base. Para no evaluar el veredicto con su
+  propia detección, la tasa de falsos "apto" se va a medir contra
+  [`etiquetado_manual.json`](../../python-service/app/evaluacion/etiquetado_manual.json),
+  30 productos reales con sus alérgenos revisados a mano. El archivo ya está
+  preparado; falta el etiquetado y el cálculo.
 
 ## Errores
 

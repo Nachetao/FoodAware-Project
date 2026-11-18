@@ -2438,7 +2438,7 @@
               }
             ],
             "title": "Posicion",
-            "description": "Posición en el ranking personalizado; nulo si quedó oculto.",
+            "description": "Posición en el ranking personalizado; nulo si quedó oculto o si no coincide con la consulta sin sus restricciones.",
             "examples": [
               null
             ]

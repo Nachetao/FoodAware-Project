@@ -1,0 +1,892 @@
+{
+  "descripcion": "Productos reales del corpus para revisar a mano. Sirve para medir la tasa de falsos 'apto' de la capacidad adaptativa sin usar la misma detección que se evalúa. 'sistema' es lo que detecta hoy FoodAware; 'manual' lo completa una persona leyendo ingredientes_texto.",
+  "corpus": "Semilla del corpus exportada el 2026-10-25 (385 productos), procesada con VERSION_PROCESAMIENTO 2.",
+  "fuente": "Open Food Facts (https://world.openfoodfacts.org)",
+  "licencia": "Open Database License (ODbL) v1.0 (https://opendatacommons.org/licenses/odbl/1-0/)",
+  "codigos_validos": [
+    "lacteos",
+    "gluten",
+    "huevo",
+    "mani",
+    "frutos_secos",
+    "soya",
+    "pescado",
+    "crustaceos",
+    "moluscos",
+    "sesamo",
+    "mostaza",
+    "apio",
+    "sulfitos",
+    "altramuces"
+  ],
+  "instrucciones": [
+    "Lee solo ingredientes_texto (y, si hace falta, la foto de la etiqueta en url_fuente). No mires 'sistema' antes de decidir.",
+    "manual.alergenos: lista de códigos de codigos_validos que el producto contiene como ingrediente. [] si no tiene ninguno.",
+    "manual.trazas: lista de códigos que el texto advierte como 'puede contener' o 'trazas de'. [] si no advierte ninguno.",
+    "Deja null solo si no se puede decidir (texto ilegible o en otro idioma) y explícalo en manual.notas.",
+    "Un ingrediente ambiguo (p. ej. 'lecitina' sin origen o 'harina' sin tipo) va en notas, no en la lista, salvo que el texto lo aclare."
+  ],
+  "productos": [
+    {
+      "codigo_barras": "0055653629955",
+      "nombre": "multi-grain crackers",
+      "marca": "Breton",
+      "url_fuente": "https://world.openfoodfacts.org/product/0055653629955",
+      "motivo_seleccion": "Traza detectada solo en el texto",
+      "ingredientes_texto": "Whole grains (whole wheat flour, ground wheat, purple wheat, rye, triticale, malted wheat, barley and spelt, amaranth, millet, quinoa, wild rice flour), Wheat flour, Vegetable oil (contains coconut oil), Sugars (cane sugar, barley malt syrup), Flax seeds, Salt, Sesame seeds, Ammonium bicarbonate, Yeast extract, Baking soda, Tocopherols, Soya lecithin, Natural flavour. Contains: Wheat, Barley, Rye, Triticale, Soya, Sesame seeds. May contain: Mustard seeds.",
+      "sistema": {
+        "alergenos": [
+          "gluten",
+          "sesamo",
+          "soya"
+        ],
+        "trazas": [
+          "mostaza"
+        ],
+        "alergenos_posibles": [],
+        "solo_en_el_texto": [
+          "mostaza"
+        ],
+        "etiquetas_dieta": [],
+        "alergenos_no_reconocidos": false,
+        "completitud": 1.0
+      },
+      "manual": {
+        "alergenos": null,
+        "trazas": null,
+        "notas": ""
+      }
+    },
+    {
+      "codigo_barras": "0400050613296",
+      "nombre": "Wafers trisabor",
+      "marca": "Lider",
+      "url_fuente": "https://world.openfoodfacts.org/product/0400050613296",
+      "motivo_seleccion": "Traza detectada solo en el texto",
+      "ingredientes_texto": "Barquillo: Harina, azúcar, almidón de tapioca, harina de arroz, aceite de palma no hidrogenado, sal, colorante artificial, lecitina de soya, betarraga en polvo. Relleno: Azúcar, aceite de palma no hidrogenado, maltodextrina, suero de leche en polvo, cacao en polvo, leche en polvo, almidón de maíz, lecitina de soya, sal, saborizantes artificiales, colorante betanina, frutilla deshidratada en polvo. Este producto contiene gluten (harina de trigo), soya (lecitina de soya), caseína-lactosa (leche, suero de leche). Elaborado en líneas que también procesan huevos y frutos secos. Este producto utiliza aceite de palma de fuentes sustentables.",
+      "sistema": {
+        "alergenos": [
+          "gluten",
+          "lacteos",
+          "frutos_secos",
+          "soya"
+        ],
+        "trazas": [
+          "huevo",
+          "frutos_secos"
+        ],
+        "alergenos_posibles": [],
+        "solo_en_el_texto": [
+          "frutos_secos",
+          "huevo"
+        ],
+        "etiquetas_dieta": [],
+        "alergenos_no_reconocidos": false,
+        "completitud": 1.0
+      },
+      "manual": {
+        "alergenos": null,
+        "trazas": null,
+        "notas": ""
+      }
+    },
+    {
+      "codigo_barras": "0628915232295",
+      "nombre": "leche vegetal",
+      "marca": "Great Value",
+      "url_fuente": "https://world.openfoodfacts.org/product/0628915232295",
+      "motivo_seleccion": "Alérgeno detectado solo en el texto: frutos_secos, soya",
+      "ingredientes_texto": "ngredientes: Agua filtrada, base de almendras (agua, almendras 1,5%), almidón orgánico de tapioca, fosfato tricálcico, aceite de maravilla orgánico, sal de mar, goma gelán, lecitina de maravilla, carragenina, saborizante naturai. óxido de zinc, riboflavina, palmitato de vitamina A, ergocal - ciferol (vitamina D2) y cianocobalamina (vitamina B12). Contiene ingrediente alérgeno: almendras. Elaborado en líneas que también procesan productos con otros frutos secos, leche, soya y gluten.",
+      "sistema": {
+        "alergenos": [
+          "frutos_secos",
+          "soya"
+        ],
+        "trazas": [
+          "lacteos",
+          "gluten",
+          "frutos_secos",
+          "soya"
+        ],
+        "alergenos_posibles": [],
+        "solo_en_el_texto": [
+          "frutos_secos",
+          "gluten",
+          "lacteos",
+          "soya"
+        ],
+        "etiquetas_dieta": [],
+        "alergenos_no_reconocidos": false,
+        "completitud": 1.0
+      },
+      "manual": {
+        "alergenos": null,
+        "trazas": null,
+        "notas": ""
+      }
+    },
+    {
+      "codigo_barras": "0632793464563",
+      "nombre": "Bean to Bar Keto Chocolate",
+      "marca": "Andino Chocolates",
+      "url_fuente": "https://world.openfoodfacts.org/product/0632793464563",
+      "motivo_seleccion": "El sistema no detecta ningún alérgeno ni traza",
+      "ingredientes_texto": "Pasta de cacao; alulosa; esencia de menta.",
+      "sistema": {
+        "alergenos": [],
+        "trazas": [],
+        "alergenos_posibles": [],
+        "solo_en_el_texto": [],
+        "etiquetas_dieta": [
+          "vegetariano",
+          "vegano"
+        ],
+        "alergenos_no_reconocidos": false,
+        "completitud": 1.0
+      },
+      "manual": {
+        "alergenos": null,
+        "trazas": null,
+        "notas": ""
+      }
+    },
+    {
+      "codigo_barras": "0661596797684",
+      "nombre": "Pan de Molde Blanco sin gluten",
+      "marca": "DILICI",
+      "url_fuente": "https://world.openfoodfacts.org/product/0661596797684",
+      "motivo_seleccion": "Nombre engañoso: 'sin gluten', con traza de sésamo",
+      "ingredientes_texto": "Almidón de maíz, harina de arroz, almidón de mandioca, aceite 100% maravilla prensado en frío, polidextrosa, dextrosa, levadura (Levadura natural Saccharomyces cerevisiae, Agente de rehidratación Monoesterato de Sorbitan), fibra de psyllium, sal, hidroxipropilmetilcelulosa, proteína de _arveja_ , fibra de maíz, goma xántica, almidón modificado de maíz, complejo vitamínico según R.S.A. Art. N°350 (Sulfato Ferroso heptahidratado, niacina, tiamina clorhidato, ácido fólico, Riboflavina).",
+      "sistema": {
+        "alergenos": [],
+        "trazas": [
+          "sesamo"
+        ],
+        "alergenos_posibles": [],
+        "solo_en_el_texto": [],
+        "etiquetas_dieta": [
+          "sin_gluten"
+        ],
+        "alergenos_no_reconocidos": true,
+        "completitud": 1.0
+      },
+      "manual": {
+        "alergenos": null,
+        "trazas": null,
+        "notas": ""
+      }
+    },
+    {
+      "codigo_barras": "0700083652997",
+      "nombre": "Almendra sabor Original",
+      "marca": "Vilay",
+      "url_fuente": "https://world.openfoodfacts.org/product/0700083652997",
+      "motivo_seleccion": "Open Food Facts declara alérgenos que no reconocemos",
+      "ingredientes_texto": "Agua filtrada, almendras, azúcar, mono y diglicéridos de ácidos grasos, fosfato tricálcico, gomar guar, goma xantán, sal de mar, vitamina E, sulfato de zinc, vitamina A, vitamina D, vitamina B12.",
+      "sistema": {
+        "alergenos": [
+          "frutos_secos"
+        ],
+        "trazas": [],
+        "alergenos_posibles": [],
+        "solo_en_el_texto": [],
+        "etiquetas_dieta": [
+          "vegetariano",
+          "sin_gluten",
+          "sin_lactosa",
+          "vegano"
+        ],
+        "alergenos_no_reconocidos": true,
+        "completitud": 1.0
+      },
+      "manual": {
+        "alergenos": null,
+        "trazas": null,
+        "notas": ""
+      }
+    },
+    {
+      "codigo_barras": "0799192229947",
+      "nombre": "Granola",
+      "marca": "Cáscara Foods",
+      "url_fuente": "https://world.openfoodfacts.org/product/0799192229947",
+      "motivo_seleccion": "Alérgeno detectado solo en el texto: sesamo",
+      "ingredientes_texto": "Hojuelas de avena integral (gluten), fibra de achicoria (F.O.S), pasta de maní (maní), fibra de arándano, fibra de manzana, semilla de zapallo, almendra laminada (nuez) (3%), goji, cacao (2,5%), sésamo negro, esencia de vainilla, probiótico (Bacillus coagulans Bio7).",
+      "sistema": {
+        "alergenos": [
+          "gluten",
+          "frutos_secos",
+          "mani",
+          "sesamo"
+        ],
+        "trazas": [],
+        "alergenos_posibles": [],
+        "solo_en_el_texto": [
+          "sesamo"
+        ],
+        "etiquetas_dieta": [],
+        "alergenos_no_reconocidos": false,
+        "completitud": 1.0
+      },
+      "manual": {
+        "alergenos": null,
+        "trazas": null,
+        "notas": ""
+      }
+    },
+    {
+      "codigo_barras": "32150735",
+      "nombre": "tika cebolla",
+      "marca": "tika",
+      "url_fuente": "https://world.openfoodfacts.org/product/32150735",
+      "motivo_seleccion": "El sistema no detecta ningún alérgeno ni traza",
+      "ingredientes_texto": "Papas, aceite alto oleico 100% girasol, cebolla (1,6%), azúcar (0,4%) y sal de mar. Consumir preferentemente antes de: ver fecha en el envase. Guardar en lugar fresco y seco. 20g ELABORADO POR ZE FARMS SPA Volcán Lascar 705, Pudahuel, Santiago, Chile. Resolución Seremi Salud RM N° 1813231955 del 26/06/2018 FABRICADO EN CHILE / contacto@tikachips.com 109 1,0 7,1 0,7 5,9 0,3 0,0 10,8 0,7 0,9 56 7 804630&quot;010735 ROFLEX",
+      "sistema": {
+        "alergenos": [],
+        "trazas": [],
+        "alergenos_posibles": [],
+        "solo_en_el_texto": [],
+        "etiquetas_dieta": [],
+        "alergenos_no_reconocidos": false,
+        "completitud": 0.83
+      },
+      "manual": {
+        "alergenos": null,
+        "trazas": null,
+        "notas": ""
+      }
+    },
+    {
+      "codigo_barras": "4000446001780",
+      "nombre": "Fitnessbrot",
+      "marca": "Mestemacher",
+      "url_fuente": "https://world.openfoodfacts.org/product/4000446001780",
+      "motivo_seleccion": "Open Food Facts declara alérgenos que no reconocemos",
+      "ingredientes_texto": "Getreide [Roggenvollkornschrot (38 %), Hafer (12%), Roggenvollkornmehl (6 %)], Wasser, Jodsalz (Salz, Kaliumjodat), Weizenkeime (1%), Haferfaser, Hefe. Kann Spuren von Sesam, Soja, Milch und Schalenfrüchten enthalten.",
+      "sistema": {
+        "alergenos": [
+          "gluten",
+          "sesamo",
+          "soya"
+        ],
+        "trazas": [
+          "lacteos",
+          "frutos_secos",
+          "sesamo",
+          "soya"
+        ],
+        "alergenos_posibles": [],
+        "solo_en_el_texto": [],
+        "etiquetas_dieta": [],
+        "alergenos_no_reconocidos": true,
+        "completitud": 1.0
+      },
+      "manual": {
+        "alergenos": null,
+        "trazas": null,
+        "notas": ""
+      }
+    },
+    {
+      "codigo_barras": "6901845041491",
+      "nombre": "Pocky Double Chocolate Decorated Cookies",
+      "marca": "Pocky",
+      "url_fuente": "https://world.openfoodfacts.org/product/6901845041491",
+      "motivo_seleccion": "Alérgeno detectado solo en el texto: gluten, lacteos",
+      "ingredientes_texto": "GALLETA DE PUCnT peso: 50 GR INFORME NUTRICIONAL parcion: S0 g (1 cajita) Forcion por envase: 1 snbor chocolate 100 g 1 por 249,5 499,0 Energia (kcal) Proteinas (g) Grasa total (g) Grasas saturadasig) Grasas monoinsaturadas (g) 40 20 Crasas polinsaturadas (g) colesterol'(mg) Ac grasos trans 1g) Hdratos de carbono (g Azucares totales (g) 21.0 10.5 Sodio (mg! A 4 4.2 11.5 23.0 12.0 6.0 60 30 00 0.0 00 00 630 315 266.0 1330 Ingredienles: tarina de trigo, agua, arete de soya leche en potvo traras de chocolate sesame sabonzate lecthe. beru onalo de sodo Frodusto origer Chino Av.Lib.Bdo.Ohiggins 2505 L 2 Fes Sereni de Salud N 1910343 TO3 19 fecha de elaboracion. 09:07i2019 fecha de vencimlento 10/0?2020 � ś�\u0003 �X��\u0011: ��777�",
+      "sistema": {
+        "alergenos": [
+          "lacteos",
+          "gluten",
+          "soya",
+          "sesamo"
+        ],
+        "trazas": [],
+        "alergenos_posibles": [],
+        "solo_en_el_texto": [
+          "gluten",
+          "lacteos",
+          "sesamo",
+          "soya"
+        ],
+        "etiquetas_dieta": [],
+        "alergenos_no_reconocidos": false,
+        "completitud": 1.0
+      },
+      "manual": {
+        "alergenos": null,
+        "trazas": null,
+        "notas": ""
+      }
+    },
+    {
+      "codigo_barras": "7613036637558",
+      "nombre": "Mini Tritón Sabor Chocolate",
+      "marca": "McKay",
+      "url_fuente": "https://world.openfoodfacts.org/product/7613036637558",
+      "motivo_seleccion": "Alérgeno detectado solo en el texto: sulfitos",
+      "ingredientes_texto": "Harina de trigo, azúcar, aceite vegetal de soya (con antioxidantes: TBHQ y ácido cítrico), mezcla de grasas vegetales (aceite de soya, manteca de palmiste y palma hidrogenada e interesterificada con antioxidante BHT), cacao en polvo, almidón de maíz, colorante caramelo, leudante (bicarbonato de amonio, bicarbonato de sodio y fosfato monocálcico?), sal, emulsionante (lecitina de soya), saborizantes (artificial e idéntico al natural). Contiene gluten, soya y sulfito. Puede contener huevo y leche.",
+      "sistema": {
+        "alergenos": [
+          "soya",
+          "lacteos",
+          "gluten",
+          "sulfitos"
+        ],
+        "trazas": [
+          "huevo",
+          "lacteos"
+        ],
+        "alergenos_posibles": [],
+        "solo_en_el_texto": [
+          "gluten",
+          "lacteos",
+          "sulfitos"
+        ],
+        "etiquetas_dieta": [],
+        "alergenos_no_reconocidos": false,
+        "completitud": 1.0
+      },
+      "manual": {
+        "alergenos": null,
+        "trazas": null,
+        "notas": ""
+      }
+    },
+    {
+      "codigo_barras": "7613287157294",
+      "nombre": "Trencito",
+      "marca": null,
+      "url_fuente": "https://world.openfoodfacts.org/product/7613287157294",
+      "motivo_seleccion": "Alérgeno detectado solo en el texto: mani",
+      "ingredientes_texto": "Azúcar, leche (25%), Manteca de Cacao, masa de cacao, Lecitina de soya, polirricinoleato de poliglicerol, saborizante natural vainilla de madagascar,Almendras, maní, gluten.",
+      "sistema": {
+        "alergenos": [
+          "gluten",
+          "lacteos",
+          "mani",
+          "frutos_secos",
+          "soya"
+        ],
+        "trazas": [],
+        "alergenos_posibles": [],
+        "solo_en_el_texto": [
+          "frutos_secos",
+          "lacteos",
+          "mani",
+          "soya"
+        ],
+        "etiquetas_dieta": [],
+        "alergenos_no_reconocidos": false,
+        "completitud": 0.83
+      },
+      "manual": {
+        "alergenos": null,
+        "trazas": null,
+        "notas": ""
+      }
+    },
+    {
+      "codigo_barras": "7622300847364",
+      "nombre": "Express Light",
+      "marca": "Terrabusi, Express Light",
+      "url_fuente": "https://world.openfoodfacts.org/product/7622300847364",
+      "motivo_seleccion": "Indicio sin confirmar: soya",
+      "ingredientes_texto": "Harina de trigo, aceite de girasol, jarabe de maíz, sal, levadura, emulsionantes (ins 322, ins 471, ins 472, ins 481).",
+      "sistema": {
+        "alergenos": [
+          "gluten"
+        ],
+        "trazas": [
+          "gluten",
+          "soya"
+        ],
+        "alergenos_posibles": [
+          "soya"
+        ],
+        "solo_en_el_texto": [],
+        "etiquetas_dieta": [],
+        "alergenos_no_reconocidos": false,
+        "completitud": 1.0
+      },
+      "manual": {
+        "alergenos": null,
+        "trazas": null,
+        "notas": ""
+      }
+    },
+    {
+      "codigo_barras": "7750727010594",
+      "nombre": "Salmas Horneadas con Maíz Morado",
+      "marca": "Sanissimo",
+      "url_fuente": "https://world.openfoodfacts.org/product/7750727010594",
+      "motivo_seleccion": "El sistema no detecta ningún alérgeno ni traza",
+      "ingredientes_texto": "Harina de maíz nixtamalizado, harina de maíz morado (10%), sal de mar y antioxidante (tocoferol concentrado, mezcla).",
+      "sistema": {
+        "alergenos": [],
+        "trazas": [],
+        "alergenos_posibles": [],
+        "solo_en_el_texto": [],
+        "etiquetas_dieta": [],
+        "alergenos_no_reconocidos": false,
+        "completitud": 1.0
+      },
+      "manual": {
+        "alergenos": null,
+        "trazas": null,
+        "notas": ""
+      }
+    },
+    {
+      "codigo_barras": "7790045000907",
+      "nombre": "Galletitas Crackers Sin Sal",
+      "marca": "Granix",
+      "url_fuente": "https://world.openfoodfacts.org/product/7790045000907",
+      "motivo_seleccion": "Nombre engañoso: 'Crackers Sin Sal' (el 'sin' no es de un alérgeno)",
+      "ingredientes_texto": "Harina de trigo enriquecida (hierro 0.0030%, vitamina B1 0.00063%, ácido fólico 0.00022%, vitamina B2 0.00013%), aceite de girasol alto oleico, jarabe de maíz, levadura, aromatizante idéntico al natural de manteca, antioxidante (BHT, BHA, Tocoferol).",
+      "sistema": {
+        "alergenos": [
+          "gluten",
+          "lacteos"
+        ],
+        "trazas": [
+          "gluten"
+        ],
+        "alergenos_posibles": [],
+        "solo_en_el_texto": [
+          "lacteos"
+        ],
+        "etiquetas_dieta": [],
+        "alergenos_no_reconocidos": false,
+        "completitud": 1.0
+      },
+      "manual": {
+        "alergenos": null,
+        "trazas": null,
+        "notas": ""
+      }
+    },
+    {
+      "codigo_barras": "7801420002031",
+      "nombre": "Bebida de arroz",
+      "marca": "Tucapel",
+      "url_fuente": "https://world.openfoodfacts.org/product/7801420002031",
+      "motivo_seleccion": "Nombre engañoso: 'Bebida de arroz', con traza de frutos secos",
+      "ingredientes_texto": "Agua,arroz(10%), aceite de maravilla, carbonato de calcio, saborizante natural, fosfato dipotasico, sal, goma guar, goma de celulosa, goma gelan, vitaminas E,A,D,B12. Elaborado en líneas que procesan almendras.",
+      "sistema": {
+        "alergenos": [],
+        "trazas": [
+          "frutos_secos"
+        ],
+        "alergenos_posibles": [],
+        "solo_en_el_texto": [
+          "frutos_secos"
+        ],
+        "etiquetas_dieta": [
+          "sin_lactosa"
+        ],
+        "alergenos_no_reconocidos": false,
+        "completitud": 1.0
+      },
+      "manual": {
+        "alergenos": null,
+        "trazas": null,
+        "notas": ""
+      }
+    },
+    {
+      "codigo_barras": "7802000010606",
+      "nombre": "papas lays sensacion original",
+      "marca": null,
+      "url_fuente": "https://world.openfoodfacts.org/product/7802000010606",
+      "motivo_seleccion": "Ficha incompleta (completitud 0.33)",
+      "ingredientes_texto": "3C 0103LH ONSERAR EN LUGAR FRESCO Y SECO INGREDIENTES Papas, aceite maravilla (girasol) alto oleico (antioxidante: TBHQ (INS 319) y sal. Puede contener soya, leche y productos lacteos. INFORMACION NUTRICIONAL PORCION: 25 g (1 Taza de te) PORCIONES POR ENVASE: 8 CANTIDAD POR 100 g CANTIDAD POR PORCION % VD (*) POR PORCION Valor energetico/",
+      "sistema": {
+        "alergenos": [
+          "lacteos"
+        ],
+        "trazas": [
+          "soya"
+        ],
+        "alergenos_posibles": [],
+        "solo_en_el_texto": [
+          "lacteos",
+          "soya"
+        ],
+        "etiquetas_dieta": [],
+        "alergenos_no_reconocidos": false,
+        "completitud": 0.33
+      },
+      "manual": {
+        "alergenos": null,
+        "trazas": null,
+        "notas": ""
+      }
+    },
+    {
+      "codigo_barras": "7802095185135",
+      "nombre": "Panchitos Tortillas de Maíz",
+      "marca": "Pancho Villa",
+      "url_fuente": "https://world.openfoodfacts.org/product/7802095185135",
+      "motivo_seleccion": "El sistema no detecta ningún alérgeno ni traza",
+      "ingredientes_texto": "Maíz, aceite de maravilla, sal.",
+      "sistema": {
+        "alergenos": [],
+        "trazas": [],
+        "alergenos_posibles": [],
+        "solo_en_el_texto": [],
+        "etiquetas_dieta": [],
+        "alergenos_no_reconocidos": false,
+        "completitud": 1.0
+      },
+      "manual": {
+        "alergenos": null,
+        "trazas": null,
+        "notas": ""
+      }
+    },
+    {
+      "codigo_barras": "7802215303388",
+      "nombre": "Barra cereal frutos rojos y yogurt",
+      "marca": "Costa",
+      "url_fuente": "https://world.openfoodfacts.org/product/7802215303388",
+      "motivo_seleccion": "Alérgeno detectado solo en el texto: huevo",
+      "ingredientes_texto": "1.0 de Nicarague SA Par PARAGUAY: Parque Azúcar Glucoss Herine d 802215 PINSA Km 11.8 carretera vieja a León 1800 metros al norte. Managua. Tel: 505-1-800-3838; PANAMA: CSAT A Avda. Gabriel Pellón 460 y Victor Morinigo, Barrio San Isidro. RUC 80014942-4 RE 01923. Telf: 595 21 2377177 4 Boulevard Atanasio Tzul 42-11 Zona 12. Tel: +502 2285 5555; HONDURAS: Comit SA, Sector Anales de Leche en Polo Acetal (Soya, Palmiste, Soya Interesterificado, Palmiste Interesterificado), Extracto de Malta, Leche Entera en Pon Hojuelas de Avena, Yoghurt (4%), Sorbitol, Maltodextrina, Aceite Vegetal (Palma, Cártamo y Girasol, Acaite Very Gelatina Leche Desommata en Polvo, Fosfato Tricálcico (Leudante), Carbonato de Calcio (Antiaglomerante), Saborizante idéntico a Natural Emulsificante PGPRS/476). Contiene: Gluten, Leche y Soya. &quot;Elaborado en lineas que también procesan huevos, soya, leche, m gluter&quot;. INGREDIENTS Wheat Flour, Sugar, Glucose, Corn Flour, Oat Flakes, Yoghurt (4%), Sorbitol, Maltodextrin, Vegetable Oil (Palm Sa Kemel and Hydramated Palm), Whey Powder, Vegetable Oil (Soybean, Palm Kernel, Interesterified Soybean, Interesterified Palm Kernel, Mat Skimmed Milk Powder, Tricalcium Phosphate, Calcium Carbonate, Soybean Lecithin, Citric Acid, Salt, BHT Antioxidant, PGPR Emulsifier LSAT also processes eggs, soybean, milk, peanuts, almonds, nuts and derived products, sesame, sulphites and cereals containing ge",
+      "sistema": {
+        "alergenos": [
+          "gluten",
+          "lacteos",
+          "frutos_secos",
+          "mani",
+          "sesamo",
+          "soya",
+          "huevo",
+          "sulfitos"
+        ],
+        "trazas": [
+          "lacteos",
+          "huevo",
+          "soya"
+        ],
+        "alergenos_posibles": [],
+        "solo_en_el_texto": [
+          "huevo",
+          "lacteos",
+          "soya",
+          "sulfitos"
+        ],
+        "etiquetas_dieta": [],
+        "alergenos_no_reconocidos": false,
+        "completitud": 0.83
+      },
+      "manual": {
+        "alergenos": null,
+        "trazas": null,
+        "notas": ""
+      }
+    },
+    {
+      "codigo_barras": "7802900048013",
+      "nombre": "Leche Descremada Zero Lacto",
+      "marca": "Soprole",
+      "url_fuente": "https://world.openfoodfacts.org/product/7802900048013",
+      "motivo_seleccion": "Nombre engañoso: 'Zero Lacto' (sin lactosa, pero es leche)",
+      "ingredientes_texto": "Leche natural descremada, Enzima lactasa",
+      "sistema": {
+        "alergenos": [
+          "lacteos"
+        ],
+        "trazas": [],
+        "alergenos_posibles": [],
+        "solo_en_el_texto": [
+          "lacteos"
+        ],
+        "etiquetas_dieta": [],
+        "alergenos_no_reconocidos": false,
+        "completitud": 1.0
+      },
+      "manual": {
+        "alergenos": null,
+        "trazas": null,
+        "notas": ""
+      }
+    },
+    {
+      "codigo_barras": "7803468001762",
+      "nombre": "Pan Integral Multigrano",
+      "marca": "Castaño",
+      "url_fuente": "https://world.openfoodfacts.org/product/7803468001762",
+      "motivo_seleccion": "Alérgeno detectado solo en el texto: altramuces",
+      "ingredientes_texto": "() Respecto del total de haihes, ganos y semillas l producto. comtbinar palada, atemas Dstuta bs eue te entregan los granos yermilate o rer wligrano Las semillas de maravilla rigo de grano enter ente de hidratos de tono, as y fibrs. Ricen les como el fóston pilasio, y vitaminas del grupol avena y sésamo son ebuena fuente de potasi Y calcio. ma de centeno semillas alabaza y lupino muna buena ente de fibra. Las sa de amara S semillas de finaza, amapola chia son una excelente fuente Omega 3. quínoa son ricas e nerales y vitaminas. INFORMACION NTRI ONAL Ingredintes: Harina de trioo de grano entero Poon: 2vebanada (50 g) Po cion por envase:12 aprox. agua, o triturado, mix muliğranos avena, sesamo, linaza, maravilla, polenta, chia, 1909 1porción nanna de centeno, levadura, gluten de trigo, mie Energiakcal) Proteinas (g) Grasa tolal (g) Grasa urada (g) Grasonoinsaturada Grasainsaturada (g Grasa trans (9) Colesterol (mg) H.de C. disp. (9) Azúcares totales (g) Fibra dietética total (g) Fibra soluble (g) Fibra insoluble (g) Sodio (mg) 5 dia, almidón de papa modificado, ácido láctico, 0,5 mono 0,6 45 estearoil lactilato de sodio, ácido sorbico, goma de calcio, almidón de maiz, ésteres de glicero de ácidos grasos y ácido diacetil tartánco, fibra diglicéridas de ácides grasos, carbonai 0,0 42.5 00 Megetal, fostato monocálcico y ácido ascórbico. 0 Contiene gluten. Elaborado en lineas que 0,0 21,3 también procesan leche y sus derivados, 21,3 tambien 2,0 derivados. 7,2 1,9 5,3 366 Atención a Consumidores: 3,6 26 183 Santiago, Chile. Huechuraba, 0250, 56 2 24998830 Chilena. www.castano.cl Conservar en lugar limpio, tresco y seco (). PP Producto congelable (). sto para congetar en casa. Congete - 19C estando fresco y consuma dentro de 3 m Una vez descongelado consumia do inmediato. 803468001762 శిశిష్లావార్కా శి్జి",
+      "sistema": {
+        "alergenos": [
+          "gluten",
+          "sesamo",
+          "altramuces"
+        ],
+        "trazas": [
+          "lacteos"
+        ],
+        "alergenos_posibles": [],
+        "solo_en_el_texto": [
+          "altramuces",
+          "lacteos"
+        ],
+        "etiquetas_dieta": [],
+        "alergenos_no_reconocidos": false,
+        "completitud": 1.0
+      },
+      "manual": {
+        "alergenos": null,
+        "trazas": null,
+        "notas": ""
+      }
+    },
+    {
+      "codigo_barras": "7803908005275",
+      "nombre": "Limonada Maracuyá",
+      "marca": "Guallarauco",
+      "url_fuente": "https://world.openfoodfacts.org/product/7803908005275",
+      "motivo_seleccion": "El sistema no detecta ningún alérgeno ni traza",
+      "ingredientes_texto": "INGREDENTES: AGUA, JUGO DE LIMÓN, JUGO CONCENTRADO DE LIMÓN, MARACUYĂ (22% SABORIZANTE NATURAL, mim), CARBOXIMETIL CELULOSA SÓDICA (CMC), BENZOATO DE SODIO, SUCRALOSA SORBATO DE POTASIÓ Y ESTEVIA",
+      "sistema": {
+        "alergenos": [],
+        "trazas": [],
+        "alergenos_posibles": [],
+        "solo_en_el_texto": [],
+        "etiquetas_dieta": [],
+        "alergenos_no_reconocidos": false,
+        "completitud": 0.83
+      },
+      "manual": {
+        "alergenos": null,
+        "trazas": null,
+        "notas": ""
+      }
+    },
+    {
+      "codigo_barras": "7804659650066",
+      "nombre": "not milk",
+      "marca": "NotCo",
+      "url_fuente": "https://world.openfoodfacts.org/product/7804659650066",
+      "motivo_seleccion": "Nombre engañoso: 'not milk' (bebida vegetal) con trazas declaradas",
+      "ingredientes_texto": "Agua, Proteína de arveja, Fibra de achicoria, Azúcar, Concentrado de piña, Manteca de coco, Fosfato dipotásico, Fosfato de calcio, Aceite de maravilla, Goma de acacia, Goma gelán, Sal, Saborizantes naturales, EDTA disódico cálcico, Vitamina D2, Concentrado de repollo, Vitamina B12",
+      "sistema": {
+        "alergenos": [],
+        "trazas": [
+          "frutos_secos",
+          "mani",
+          "soya"
+        ],
+        "alergenos_posibles": [],
+        "solo_en_el_texto": [],
+        "etiquetas_dieta": [],
+        "alergenos_no_reconocidos": false,
+        "completitud": 1.0
+      },
+      "manual": {
+        "alergenos": null,
+        "trazas": null,
+        "notas": ""
+      }
+    },
+    {
+      "codigo_barras": "7804659650998",
+      "nombre": "Not Milk Zero Sugar - NotCo - NotCo - NotCo - NotCo - NotCo",
+      "marca": "NotCo",
+      "url_fuente": "https://world.openfoodfacts.org/product/7804659650998",
+      "motivo_seleccion": "Nombre engañoso: 'Not Milk', pero Open Food Facts lo etiqueta con leche",
+      "ingredientes_texto": "Agua, proteína de arveja, fibra de achicoria, jugo concentrado de piña, fosfato dipotásico (regulador de acidez), A carbonato de calcio (regulador de acidez), sabor leche y crema (saborizantes naturales), manteca de coco, aceite de girasol, sal, goma xantán (espesante), goma gelán (espesante), jugo concentrado de repollo, vitamina Dy vitamina B12 (nutrientes).",
+      "sistema": {
+        "alergenos": [
+          "lacteos"
+        ],
+        "trazas": [],
+        "alergenos_posibles": [],
+        "solo_en_el_texto": [],
+        "etiquetas_dieta": [],
+        "alergenos_no_reconocidos": false,
+        "completitud": 1.0
+      },
+      "manual": {
+        "alergenos": null,
+        "trazas": null,
+        "notas": ""
+      }
+    },
+    {
+      "codigo_barras": "7807910045038",
+      "nombre": "Molde Integral Libre de Gluten",
+      "marca": "Cuisine & Co",
+      "url_fuente": "https://world.openfoodfacts.org/product/7807910045038",
+      "motivo_seleccion": "Nombre engañoso: 'Libre de Gluten'",
+      "ingredientes_texto": "Agua, almidones (maíz, papa, mandioca), aceite vegetal (soya, girasol), harina de arroz, azúcar, linaza, psyllium, fibra de bambú, azúcar, almidón modificado, levadura seca (Saccharomyces cerevisiae), monoestearato de sorbitán, goma xantana, celulosa, hidroxipropilmetilcelulosa, vinagre, sorbato, propionato de calcio.",
+      "sistema": {
+        "alergenos": [
+          "huevo",
+          "soya"
+        ],
+        "trazas": [
+          "lacteos"
+        ],
+        "alergenos_posibles": [],
+        "solo_en_el_texto": [],
+        "etiquetas_dieta": [],
+        "alergenos_no_reconocidos": false,
+        "completitud": 1.0
+      },
+      "manual": {
+        "alergenos": null,
+        "trazas": null,
+        "notas": ""
+      }
+    },
+    {
+      "codigo_barras": "7898994939719",
+      "nombre": "Leche de avena Nude Barista",
+      "marca": "Nude",
+      "url_fuente": "https://world.openfoodfacts.org/product/7898994939719",
+      "motivo_seleccion": "Nombre engañoso: 'Leche de avena' (no es leche; ¿la avena tiene gluten?)",
+      "ingredientes_texto": "Agua, avena, aceite de canola, fosfato dipotásito, carbonato de calcio, sal marina, vitaminas B2, D2 y B12.",
+      "sistema": {
+        "alergenos": [
+          "gluten"
+        ],
+        "trazas": [],
+        "alergenos_posibles": [],
+        "solo_en_el_texto": [],
+        "etiquetas_dieta": [
+          "vegetariano",
+          "sin_gluten",
+          "vegano"
+        ],
+        "alergenos_no_reconocidos": false,
+        "completitud": 1.0
+      },
+      "manual": {
+        "alergenos": null,
+        "trazas": null,
+        "notas": ""
+      }
+    },
+    {
+      "codigo_barras": "8411414012275",
+      "nombre": "Wafers chocolate 0% azúcares",
+      "marca": "LA FLOR BURGALESA S.L.",
+      "url_fuente": "https://world.openfoodfacts.org/product/8411414012275",
+      "motivo_seleccion": "Trazas declaradas por Open Food Facts",
+      "ingredientes_texto": "Harina de trigo, grasa vegetal de palma, edulcorante maltitol, cacao desgrasado en polvo (3,2%), harina de arroz, fibra vegetal, aromas, gasificantes bicarbonato de sodio, carbonato de calcio y carbonato de magnesio y colorante carotenos,",
+      "sistema": {
+        "alergenos": [
+          "gluten"
+        ],
+        "trazas": [
+          "lacteos",
+          "frutos_secos"
+        ],
+        "alergenos_posibles": [],
+        "solo_en_el_texto": [],
+        "etiquetas_dieta": [],
+        "alergenos_no_reconocidos": false,
+        "completitud": 1.0
+      },
+      "manual": {
+        "alergenos": null,
+        "trazas": null,
+        "notas": ""
+      }
+    },
+    {
+      "codigo_barras": "8412170011434",
+      "nombre": "Galletas Sin Gluten María",
+      "marca": "Noglut, Santiveri",
+      "url_fuente": "https://world.openfoodfacts.org/product/8412170011434",
+      "motivo_seleccion": "Nombre engañoso: 'Sin Gluten'",
+      "ingredientes_texto": "Almidón de maíz, harina de arroz, azúcar, aceite de girasol, fibra de manzana, jarabe de glucosa, gasificantes (bicarbonato de amonio, bicarbonato de sodio), sal, emulsionante (lecitina de soja), aroma natural.",
+      "sistema": {
+        "alergenos": [
+          "soya"
+        ],
+        "trazas": [],
+        "alergenos_posibles": [],
+        "solo_en_el_texto": [],
+        "etiquetas_dieta": [
+          "vegetariano",
+          "sin_gluten",
+          "vegano",
+          "sin_lactosa"
+        ],
+        "alergenos_no_reconocidos": false,
+        "completitud": 1.0
+      },
+      "manual": {
+        "alergenos": null,
+        "trazas": null,
+        "notas": ""
+      }
+    },
+    {
+      "codigo_barras": "8436551192291",
+      "nombre": "PAN con ROMERO",
+      "marca": "Valentina Snacks",
+      "url_fuente": "https://world.openfoodfacts.org/product/8436551192291",
+      "motivo_seleccion": "Trazas declaradas por Open Food Facts",
+      "ingredientes_texto": "Harina de trigo, aceite de maravilla alto oleico (30%), salvado de trigo (5%), levadura, sal, romero (1,1%), romero, azúcar.",
+      "sistema": {
+        "alergenos": [
+          "gluten"
+        ],
+        "trazas": [
+          "gluten",
+          "lacteos",
+          "soya"
+        ],
+        "alergenos_posibles": [],
+        "solo_en_el_texto": [],
+        "etiquetas_dieta": [
+          "vegetariano",
+          "vegano"
+        ],
+        "alergenos_no_reconocidos": false,
+        "completitud": 1.0
+      },
+      "manual": {
+        "alergenos": null,
+        "trazas": null,
+        "notas": ""
+      }
+    },
+    {
+      "codigo_barras": "8445291736245",
+      "nombre": "Triton",
+      "marca": "Nestlé",
+      "url_fuente": "https://world.openfoodfacts.org/product/8445291736245",
+      "motivo_seleccion": "Trazas declaradas por Open Food Facts",
+      "ingredientes_texto": "Harina de Trigo, Azúcar, Aceite de Soya (con Antioxidantes TBHQ y Ácido Cítrico), Cacao, Almidón de Maíz, Mezcla de Grasas Vegetales (Aceite de Soya, Manteca de Palmiste y Palma Hidrogenada e Interestificada con antioxidante: BHT) Colorante Caramelo, Leudantes (Bicarbonato de Amonio, Bicarbonato de sodio y Fosfato Monocálcico), Sal Emulsionante (Lecitina de Soya) y Saborizantes (Artificial e Idéntico a Natural). Contiene: Gluten, Soya y Sulfitos. Puede contener: Leche y Huevo.",
+      "sistema": {
+        "alergenos": [
+          "gluten",
+          "soya",
+          "sulfitos",
+          "lacteos"
+        ],
+        "trazas": [
+          "huevo",
+          "lacteos"
+        ],
+        "alergenos_posibles": [],
+        "solo_en_el_texto": [
+          "lacteos"
+        ],
+        "etiquetas_dieta": [],
+        "alergenos_no_reconocidos": false,
+        "completitud": 1.0
+      },
+      "manual": {
+        "alergenos": null,
+        "trazas": null,
+        "notas": ""
+      }
+    }
+  ]
+}
