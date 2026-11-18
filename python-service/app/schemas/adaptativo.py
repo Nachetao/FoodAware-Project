@@ -253,7 +253,7 @@ class SalidaTop(BaseModel):
     posicion: Optional[int] = Field(
         None, ge=1,
         description="Posición en el ranking personalizado; nulo si quedó "
-        "oculto.",
+        "oculto o si no coincide con la consulta sin sus restricciones.",
         examples=[None],
     )
     veredicto: ValorVeredicto = Field(examples=["no_apto"])

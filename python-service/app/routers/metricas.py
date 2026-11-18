@@ -6,7 +6,11 @@ from app.core.dependencias import obtener_metricas
 from app.core.clave_servicio import exigir_clave_servicio
 from app.core.errores import respuestas_error
 from app.core.simulacion import simular_error
-from app.schemas.metricas import MetricasCalidad, MetricasEvaluacion
+from app.schemas.metricas import (
+    MetricasCalidad,
+    MetricasEvaluacion,
+    MetricasEvaluacionAdaptativa,
+)
 from app.services.metricas import ServicioMetricas
 
 # La clave va antes de la simulación: sin ella no se puede forzar un
@@ -39,3 +43,19 @@ async def metricas_calidad(metricas: Metricas):
 )
 def metricas_evaluacion(metricas: Metricas):
     return metricas.evaluacion()
+
+
+@router.get(
+    "/metrics/evaluation/adaptive",
+    response_model=MetricasEvaluacionAdaptativa,
+    tags=["metricas"],
+    summary="Evaluación de la capacidad adaptativa contra la versión base",
+    description="Veredictos contra el etiquetado manual (falsos apto y no "
+                "apto por perfil de prueba y modo), detección de alérgenos "
+                "contra el etiquetado y GET /search contra POST "
+                "/search/personalized en las consultas con restricción. Se "
+                "calcula al reconstruir el índice.",
+    responses=respuestas_error(403),
+)
+def metricas_evaluacion_adaptativa(metricas: Metricas):
+    return metricas.evaluacion_adaptativa()

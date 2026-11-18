@@ -541,6 +541,203 @@ restricción y su P@5 de 0,20 son la línea de comparación. Si la capacidad
 adaptativa funciona, ese número tiene que subir sin que bajen las 12 de
 producto.
 
+## 8. Evaluación de la capacidad adaptativa
+
+La capacidad adaptativa clasifica cada producto como `apto`,
+`apto_con_advertencia` o `no_apto` según el perfil de la persona, y la búsqueda
+personalizada usa esa clasificación (las reglas están en el
+[contrato](contratos/README.md#capacidad-adaptativa)). Aquí medimos si eso
+funciona y si mejora la búsqueda base.
+
+### El problema de evaluarla con sus propios datos
+
+La forma fácil de evaluarla sería usar las reglas de relevancia de la sección
+anterior: "galletas sin gluten" son las galletas sin gluten en `alergenos` ni
+en `trazas`. Pero esos campos los llena la misma detección que usa el
+veredicto. Si la detección se equivoca y no ve el gluten de una galleta, el
+veredicto dice "apto" y la regla dice "relevante": la evaluación sale perfecta
+justo cuando el sistema falla de la peor forma. Es una evaluación circular.
+
+Por eso la separamos en tres partes:
+
+1. **Veredictos contra un etiquetado manual**, hecho sin mirar la detección
+   del sistema. Mide lo que más importa: los falsos "apto".
+2. **Detección de alérgenos contra el mismo etiquetado**: dónde se equivoca
+   la detección y hacia qué lado.
+3. **Búsqueda base contra personalizada** en las 8 consultas con restricción.
+   Esta parte sí usa las reglas de la sección anterior, así que mide el
+   ranking dada la detección; la seguridad de la detección la miden las dos
+   primeras.
+
+### El etiquetado manual
+
+Está en
+[`etiquetado_manual.json`](../python-service/app/evaluacion/etiquetado_manual.json):
+30 productos reales del corpus, con sus alérgenos y trazas revisados a mano a
+partir del texto de ingredientes. Hay que decir tres cosas sobre cómo se hizo:
+
+- **Lo propuso un asistente de IA y lo revisó el equipo.** El asistente leyó
+  solo `ingredientes_texto` y propuso los alérgenos, las trazas y una nota por
+  producto. Después una sola persona del equipo revisó los 30 productos,
+  corrigió 4 (Pocky, Trencito, Pan Integral Multigrano y Crackers Sin Sal) y
+  marcó cada uno con `revisado_por_equipo: true`. Solo cuentan los revisados.
+- **El asistente vio parcialmente los resultados del sistema en un paso
+  previo.** Al armar el archivo imprimió una tabla de control con los
+  alérgenos y trazas que detecta el sistema para estos productos. Después
+  etiquetó leyendo solo el texto, pero no podemos asegurar que esa tabla no
+  haya influido.
+- **La muestra no es al azar.** Elegimos los productos por ser difíciles: 9
+  con nombres que engañan (Not Milk, Crackers Sin Sal, "Sin Gluten", Zero
+  Lacto...), 7 con alérgenos que solo aparecen en el texto, 5 en que el
+  sistema no detecta nada, 5 con trazas, 3 con datos difíciles y el único
+  producto del corpus con un indicio de lecitina. No hay productos sin
+  ingredientes porque la ingesta los descarta. Las tasas de esta muestra no
+  son las del corpus completo: los productos difíciles deberían fallar más.
+
+Criterios del etiquetado: una traza que ya es ingrediente no se repite en
+`trazas`; lo ambiguo ("lecitina" sin origen, "harina" sin tipo, aromas como
+"sabor leche", aceite de soya refinado) va a las notas y no a la lista; y
+`null` significa que no se pudo decidir. Solo las trazas de Pocky quedaron en
+`null`, por el OCR ilegible.
+
+### Método
+
+Para cada producto revisado, el **veredicto esperado** sale del etiquetado con
+las mismas reglas del veredicto, pero sin mirar la detección: `no_apto` si
+contiene algo que el perfil evita (sus alergias o los alérgenos que prohíben
+sus dietas); si no y tiene una traza de algo que evita, `apto_con_advertencia`
+(`no_apto` en modo estricto); si no, `apto`. Lo comparamos con el veredicto
+del sistema para 6 perfiles de prueba (alergia a lácteos, al gluten, al maní, a
+la soya y a frutos secos, y dieta vegana), en modo normal y estricto:
+
+| Medida | Definición |
+|---|---|
+| Falso "apto" | El sistema dice `apto` y el producto contiene algo que el perfil evita. Tasa = falsos apto / productos que lo contienen |
+| Falso "apto" por traza | El sistema dice `apto`, el producto no lo contiene, pero el etiquetado tiene una traza |
+| Falso "no apto" | El sistema dice `no_apto` y el esperado no lo es. Tasa = falsos no apto / productos cuyo esperado no es `no_apto` |
+| Matriz de confusión | Veredicto esperado contra el del sistema |
+| Precisión y exhaustividad de la detección | Contando pares producto-alérgeno, en `alergenos` y en `trazas` (las del sistema que no son ya ingrediente) |
+
+Un campo en `null` deja fuera al producto solo de los cálculos que lo
+necesitan: las trazas de Pocky no impiden contar sus alérgenos. Que el sistema
+diga `apto_con_advertencia` cuando se esperaba `apto` no cuenta como error: es
+la regla de "ante la duda, advertir".
+
+### Resultados
+
+Medidos el 18 de noviembre de 2026 sobre la semilla del corpus (385 productos,
+el mismo corpus de staging), con `scripts/evaluar_adaptativo.py --semilla`.
+
+**Veredictos.** Ningún perfil tuvo falsos "apto", ni por ingrediente ni por
+traza:
+
+| Perfil | Modo | Contienen | Falsos apto | Falsos no apto | Coinciden con el esperado |
+|---|---|---:|---:|---|---:|
+| Alergia a lácteos | normal | 5 | 0 | 5 de 25 (0,20) | 20 de 30 |
+| Alergia a lácteos | estricto | 5 | 0 | 7 de 19 (0,37) | 23 de 30 |
+| Alergia al gluten | normal | 14 | 0 | 1 de 16 (0,06) | 26 de 30 |
+| Alergia al gluten | estricto | 14 | 0 | 3 de 14 (0,21) | 27 de 30 |
+| Alergia al maní | normal | 1 | 0 | 2 de 28 (0,07) | 22 de 29 |
+| Alergia al maní | estricto | 1 | 0 | 5 de 26 (0,19) | 24 de 29 |
+| Alergia a la soya | normal | 7 | 0 | 3 de 22 (0,14) | 21 de 29 |
+| Alergia a la soya | estricto | 7 | 0 | 6 de 19 (0,32) | 23 de 29 |
+| Alergia a frutos secos | normal | 3 | 0 | 3 de 26 (0,12) | 22 de 29 |
+| Alergia a frutos secos | estricto | 3 | 0 | 4 de 21 (0,19) | 25 de 29 |
+| Dieta vegana | normal | 5 | 0 | 6 de 25 (0,24) | 11 de 30 |
+| Dieta vegana | estricto | 5 | 0 | 7 de 19 (0,37) | 14 de 30 |
+
+Cero falsos "apto" no es lo mismo que demostrar que no existen. Con 0 errores
+en n casos, la cota superior aproximada de la tasa real al 95 % es 3/n (la
+"regla de tres"): con los 14 productos con gluten la tasa podría llegar a cerca
+de 21 %, con los 5 con lácteos a 60 %, y con un solo producto con maní el
+resultado casi no dice nada. Lo que sí muestra es que en los casos difíciles
+que elegimos el sistema se equivoca hacia el lado seguro.
+
+En la dieta vegana coinciden pocos (11 de 30) porque 13 productos que el
+etiquetado deja como `apto` el sistema los deja en `apto_con_advertencia`: no
+tienen la etiqueta vegana que lo confirme, y el veredicto solo da `apto` con
+esa etiqueta. Es lo esperado (ver [limitaciones.md](limitaciones.md)).
+
+**Detección de alérgenos:**
+
+| Campo | Productos | Correctos | De más | Faltantes | Precisión | Exhaustividad |
+|---|---:|---:|---:|---:|---:|---:|
+| Alérgenos | 30 | 35 | 22 | 0 | 0,61 | 1,00 |
+| Trazas | 29 | 11 | 10 | 15 | 0,52 | 0,42 |
+
+La detección no dejó pasar ningún alérgeno del etiquetado (exhaustividad 1,00),
+pero marca de más. Al mirar los 22 marcados de más encontramos que 15 son
+trazas leídas como ingrediente: son exactamente las 15 trazas que faltan. Pasa
+con frases como "Elaborado en líneas que también procesan huevos y frutos
+secos", "Puede contener huevo y leche" o la declaración de trazas en alemán del
+Fitnessbrot. Los 7 restantes son casos que el etiquetado dejó a propósito como
+ambiguos o descartó: el aroma de manteca de los Crackers, "sabor leche y
+crema" del Not Milk, el lupino que solo aparece en el texto descriptivo del Pan
+Integral, el aceite de soya del Molde Integral y lo ilegible del Pocky. Las 10
+trazas de más no aparecen en el texto que leímos; pueden venir de la etiqueta
+de Open Food Facts, que el etiquetado no revisó, y sin ver la foto no sabemos
+cuál tiene razón.
+
+Por eso los falsos "no apto" vienen casi todos de la detección y no de las
+reglas del veredicto: con alergia a lácteos en modo normal, los 5 son productos
+con "puede contener leche" leído como ingrediente o con un aroma de manteca o
+de leche. En modo estricto se suman los productos con trazas que el etiquetado
+no encontró en el texto (Wafers chocolate 0 %, Pan con Romero y Molde
+Integral) y los que tienen datos insuficientes porque Open Food Facts declara
+alérgenos que no reconocemos.
+
+**Búsqueda base contra personalizada.** `GET /search` contra `POST
+/search/personalized` con perfil vacío (la restricción sale de la consulta) y
+modo `filtrar`:
+
+| Consulta | Relevantes | P@5 base | P@5 personalizada | No aptos en el top 5 base | No aptos personalizada |
+|---|---:|---:|---:|---:|---:|
+| galletas sin gluten | 8 | 0,20 | 1,00 | 2 | 0 |
+| chocolate sin leche | 6 | 0,00 | 0,60 | 5 | 0 |
+| snack sin maní | 46 | 0,00 | 1,00 | 5 | 0 |
+| leche sin lactosa | 2 | 0,40 | 0,20 | 0 | 0 |
+| pan sin gluten | 6 | 0,60 | 1,00 | 1 | 0 |
+| cereal sin gluten | 7 | 0,00 | 0,80 | 2 | 0 |
+| bebida vegetal sin soya | 22 | 0,00 | 1,00 | 5 | 0 |
+| galletas sin huevo | 36 | 0,40 | 1,00 | 3 | 0 |
+| Promedio | | 0,20 | 0,83 | 23 | 0 |
+
+La Precision@5 de las consultas con restricción sube de 0,20 a 0,83, y de 23
+productos no aptos en los top 5 de la búsqueda base no queda ninguno. Ese 0 es
+por construcción (el modo `filtrar` oculta los `no_apto`); lo que importa es
+cuántos había en la base. La única consulta que empeora es "leche sin
+lactosa". "Sin lactosa" se interpreta como la dieta `sin_lactosa`, que solo se
+confirma con la etiqueta de Open Food Facts: suben primero los productos que
+la tienen (kéfir, yogur), aunque no sean los que la regla busca, y la Leche
+Descremada Zero Lacto, que no tiene esa etiqueta, queda en
+`apto_con_advertencia` y baja del puesto 1 al 46. Además, al sacar "sin
+lactosa" del texto que busca BM25, el nombre del producto deja de ayudar.
+
+### Limitaciones de esta evaluación
+
+- El etiquetado lo propuso un asistente de IA y lo revisó una sola persona del
+  equipo. No medimos el acuerdo entre dos revisores.
+- El asistente vio parcialmente la salida del sistema antes de etiquetar, así
+  que el etiquetado no es del todo independiente.
+- 30 productos elegidos por ser difíciles: sirve para encontrar errores, no
+  para estimar la tasa real en el corpus. Hay pocos casos positivos por
+  alérgeno (uno solo con maní).
+- Se etiquetó desde el texto de ingredientes, sin las fotos de la etiqueta.
+  Lo que la etiqueta declara y el texto no trae no está en el etiquetado.
+- La comparación de la búsqueda usa las reglas de relevancia, que dependen de
+  la detección del sistema (la circularidad de arriba).
+- La dieta vegana se evalúa solo por alérgenos, igual que la revisa el
+  sistema: la carne, la miel o la gelatina no son alérgenos.
+
+### Cómo se calcula en el servicio
+
+`GET /metrics/evaluation/adaptive` devuelve estos resultados (detalle de los
+campos en el [contrato](contratos/README.md#get-metricsevaluationadaptive)).
+Igual que la evaluación de la búsqueda, se calcula al reconstruir el índice y
+no en cada petición, sobre el corpus que está respondiendo. Además, una prueba
+del CI corre la evaluación sobre la semilla y falla si algún perfil de prueba
+tiene un falso "apto" en el etiquetado revisado.
+
 ## Cómo reproducir los números
 
 Sobre la caché del contenedor, con Docker Compose levantado:
@@ -549,13 +746,24 @@ Sobre la caché del contenedor, con Docker Compose levantado:
 docker compose exec python-service python scripts/estadisticas_corpus.py
 docker compose exec python-service python scripts/evaluar_busqueda.py
 docker compose exec python-service python scripts/evaluar_busqueda.py --markdown /tmp/reporte.md
+docker compose exec python-service python scripts/evaluar_adaptativo.py
 ```
 
-O por HTTP, con el servicio en `http://localhost:8000`:
+La evaluación adaptativa de la sección 8 se midió sobre la semilla del corpus
+(el corpus de staging). Para repetirla igual, sin depender de la caché local:
+
+```powershell
+docker compose exec python-service python scripts/evaluar_adaptativo.py --semilla --markdown /tmp/reporte_adaptativo.md
+```
+
+O por HTTP, con el servicio en `http://localhost:8000`. Estos endpoints exigen
+`X-Clave-Servicio` cuando `CLAVE_SERVICIO_OBLIGATORIA` es `true`; en local
+está en `false` por defecto:
 
 ```powershell
 Invoke-RestMethod http://localhost:8000/metrics/quality
 Invoke-RestMethod http://localhost:8000/metrics/evaluation
+Invoke-RestMethod http://localhost:8000/metrics/evaluation/adaptive
 Invoke-RestMethod "http://localhost:8000/search?q=galletas%20de%20avena&limit=5"
 ```
 

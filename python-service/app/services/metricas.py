@@ -1,4 +1,5 @@
-"""GET /metrics/quality y GET /metrics/evaluation.
+"""GET /metrics/quality, GET /metrics/evaluation y
+GET /metrics/evaluation/adaptive.
 
 Las definiciones están en app.metricas.calidad y app.metricas.evaluacion.
 """
@@ -7,9 +8,16 @@ from datetime import datetime, timezone
 from typing import Callable
 
 from app.metricas.calidad import calcular_metricas_calidad
-from app.metricas.evaluacion import metricas_evaluacion
+from app.metricas.evaluacion import (
+    metricas_evaluacion,
+    metricas_evaluacion_adaptativa,
+)
 from app.repositories.cache import RepositorioCache
-from app.schemas.metricas import MetricasCalidad, MetricasEvaluacion
+from app.schemas.metricas import (
+    MetricasCalidad,
+    MetricasEvaluacion,
+    MetricasEvaluacionAdaptativa,
+)
 from app.services.busqueda import ServicioBusqueda
 
 
@@ -37,3 +45,8 @@ class ServicioMetricas:
     def evaluacion(self) -> MetricasEvaluacion:
         """La evaluación ya calculada al reconstruir el índice."""
         return metricas_evaluacion(self._busqueda.evaluacion)
+
+    def evaluacion_adaptativa(self) -> MetricasEvaluacionAdaptativa:
+        """La evaluación adaptativa ya calculada al reconstruir el índice."""
+        return metricas_evaluacion_adaptativa(
+            self._busqueda.evaluacion_adaptativa)

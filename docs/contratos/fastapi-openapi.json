@@ -681,6 +681,78 @@
         }
       }
     },
+    "/metrics/evaluation/adaptive": {
+      "get": {
+        "tags": [
+          "metricas"
+        ],
+        "summary": "Evaluación de la capacidad adaptativa contra la versión base",
+        "description": "Veredictos contra el etiquetado manual (falsos apto y no apto por perfil de prueba y modo), detección de alérgenos contra el etiquetado y GET /search contra POST /search/personalized en las consultas con restricción. Se calcula al reconstruir el índice.",
+        "operationId": "metricas_evaluacion_adaptativa_metrics_evaluation_adaptive_get",
+        "parameters": [
+          {
+            "name": "X-Clave-Servicio",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Clave compartida con NestJS (variable CLAVE_SERVICIO del servicio).",
+              "title": "X-Clave-Servicio"
+            },
+            "description": "Clave compartida con NestJS (variable CLAVE_SERVICIO del servicio)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetricasEvaluacionAdaptativa"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Falta la clave interna o no es válida (FORBIDDEN).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error interno (INTERNAL_ERROR).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/products/{codigo_barras}/compatibility": {
       "post": {
         "tags": [
@@ -966,6 +1038,77 @@
         ],
         "title": "CodigoError",
         "description": "Códigos de error uniformes del contrato."
+      },
+      "ComparacionConsultaRestriccion": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "examples": [
+              "chocolate-sin-leche"
+            ]
+          },
+          "consulta": {
+            "type": "string",
+            "title": "Consulta",
+            "examples": [
+              "chocolate sin leche"
+            ]
+          },
+          "relevantes": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Relevantes",
+            "examples": [
+              6
+            ]
+          },
+          "precision_base": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Precision Base",
+            "examples": [
+              0.0
+            ]
+          },
+          "precision_personalizada": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Precision Personalizada",
+            "examples": [
+              0.6
+            ]
+          },
+          "no_aptos_top_base": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "No Aptos Top Base",
+            "examples": [
+              5
+            ]
+          },
+          "no_aptos_top_personalizado": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "No Aptos Top Personalizado",
+            "examples": [
+              0
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "consulta",
+          "relevantes",
+          "precision_base",
+          "precision_personalizada",
+          "no_aptos_top_base",
+          "no_aptos_top_personalizado"
+        ],
+        "title": "ComparacionConsultaRestriccion"
       },
       "ComparacionRanking": {
         "properties": {
@@ -1293,6 +1436,84 @@
         ],
         "title": "DetalleSalud"
       },
+      "DeteccionAlergenos": {
+        "properties": {
+          "productos": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Productos",
+            "examples": [
+              30
+            ]
+          },
+          "verdaderos_positivos": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Verdaderos Positivos",
+            "examples": [
+              52
+            ]
+          },
+          "falsos_positivos": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Falsos Positivos",
+            "examples": [
+              4
+            ]
+          },
+          "falsos_negativos": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Falsos Negativos",
+            "examples": [
+              3
+            ]
+          },
+          "precision": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Precision",
+            "description": "Marcados por el sistema que son correctos.",
+            "examples": [
+              0.93
+            ]
+          },
+          "exhaustividad": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exhaustividad",
+            "description": "Alérgenos reales que el sistema marca.",
+            "examples": [
+              0.95
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "productos",
+          "verdaderos_positivos",
+          "falsos_positivos",
+          "falsos_negativos"
+        ],
+        "title": "DeteccionAlergenos"
+      },
       "DietLabel": {
         "type": "string",
         "enum": [
@@ -1303,6 +1524,258 @@
         ],
         "title": "DietLabel",
         "description": "Etiquetas de dieta que el servicio puede inferir de un producto."
+      },
+      "EvaluacionBusquedaAdaptativa": {
+        "properties": {
+          "k": {
+            "type": "integer",
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "K",
+            "examples": [
+              5
+            ]
+          },
+          "consultas_evaluadas": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Consultas Evaluadas",
+            "description": "Consultas con restricción con al menos un relevante; entran en los promedios.",
+            "examples": [
+              8
+            ]
+          },
+          "precision_base": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Precision Base",
+            "description": "Promedio macro de Precision@K de GET /search.",
+            "examples": [
+              0.2
+            ]
+          },
+          "precision_personalizada": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Precision Personalizada",
+            "description": "Promedio macro de Precision@K de POST /search/personalized (perfil vacío, modo filtrar).",
+            "examples": [
+              0.6
+            ]
+          },
+          "no_aptos_top_base": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "No Aptos Top Base",
+            "description": "Productos no_apto en el top K, sumando las consultas.",
+            "examples": [
+              25
+            ]
+          },
+          "no_aptos_top_personalizado": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "No Aptos Top Personalizado",
+            "examples": [
+              0
+            ]
+          },
+          "consultas": {
+            "items": {
+              "$ref": "#/components/schemas/ComparacionConsultaRestriccion"
+            },
+            "type": "array",
+            "title": "Consultas"
+          }
+        },
+        "type": "object",
+        "required": [
+          "k",
+          "consultas_evaluadas",
+          "precision_base",
+          "precision_personalizada",
+          "no_aptos_top_base",
+          "no_aptos_top_personalizado",
+          "consultas"
+        ],
+        "title": "EvaluacionBusquedaAdaptativa"
+      },
+      "EvaluacionDeteccion": {
+        "properties": {
+          "alergenos": {
+            "$ref": "#/components/schemas/DeteccionAlergenos"
+          },
+          "trazas": {
+            "$ref": "#/components/schemas/DeteccionAlergenos",
+            "description": "Trazas del sistema sin las que ya son ingrediente."
+          }
+        },
+        "type": "object",
+        "required": [
+          "alergenos",
+          "trazas"
+        ],
+        "title": "EvaluacionDeteccion"
+      },
+      "EvaluacionPerfilPrueba": {
+        "properties": {
+          "perfil": {
+            "type": "string",
+            "title": "Perfil",
+            "examples": [
+              "alergia a lácteos"
+            ]
+          },
+          "modo": {
+            "type": "string",
+            "enum": [
+              "normal",
+              "estricto"
+            ],
+            "title": "Modo",
+            "examples": [
+              "normal"
+            ]
+          },
+          "productos": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Productos",
+            "description": "Con alérgenos etiquetados.",
+            "examples": [
+              30
+            ]
+          },
+          "contienen": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Contienen",
+            "description": "Contienen algo que el perfil evita.",
+            "examples": [
+              11
+            ]
+          },
+          "falsos_apto": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Falsos Apto",
+            "description": "El sistema dice apto y el producto contiene algo que el perfil evita.",
+            "examples": [
+              0
+            ]
+          },
+          "tasa_falsos_apto": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tasa Falsos Apto",
+            "description": "falsos_apto / contienen.",
+            "examples": [
+              0.0
+            ]
+          },
+          "falsos_apto_por_traza": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Falsos Apto Por Traza",
+            "description": "El sistema dice apto y el etiquetado tiene una traza de algo que el perfil evita.",
+            "examples": [
+              0
+            ]
+          },
+          "productos_completos": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Productos Completos",
+            "description": "Con veredicto esperado conocido.",
+            "examples": [
+              29
+            ]
+          },
+          "falsos_no_apto": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Falsos No Apto",
+            "description": "El sistema dice no_apto y el esperado no lo es.",
+            "examples": [
+              1
+            ]
+          },
+          "tasa_falsos_no_apto": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tasa Falsos No Apto",
+            "description": "falsos_no_apto / productos cuyo esperado no es no_apto.",
+            "examples": [
+              0.05
+            ]
+          },
+          "coincidencias": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Coincidencias",
+            "description": "Veredicto del sistema igual al esperado.",
+            "examples": [
+              24
+            ]
+          },
+          "matriz": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "propertyNames": {
+                "enum": [
+                  "apto",
+                  "apto_con_advertencia",
+                  "no_apto"
+                ]
+              },
+              "type": "object"
+            },
+            "propertyNames": {
+              "enum": [
+                "apto",
+                "apto_con_advertencia",
+                "no_apto"
+              ]
+            },
+            "type": "object",
+            "title": "Matriz",
+            "description": "Veredicto esperado (filas) contra el del sistema (columnas)."
+          }
+        },
+        "type": "object",
+        "required": [
+          "perfil",
+          "modo",
+          "productos",
+          "contienen",
+          "falsos_apto",
+          "falsos_apto_por_traza",
+          "productos_completos",
+          "falsos_no_apto",
+          "coincidencias",
+          "matriz"
+        ],
+        "title": "EvaluacionPerfilPrueba"
       },
       "HTTPValidationError": {
         "properties": {
@@ -1475,6 +1948,34 @@
           "tiempo_promedio_ms"
         ],
         "title": "MetricasEvaluacion"
+      },
+      "MetricasEvaluacionAdaptativa": {
+        "properties": {
+          "etiquetado": {
+            "$ref": "#/components/schemas/ResumenEtiquetado"
+          },
+          "deteccion": {
+            "$ref": "#/components/schemas/EvaluacionDeteccion"
+          },
+          "veredictos": {
+            "items": {
+              "$ref": "#/components/schemas/EvaluacionPerfilPrueba"
+            },
+            "type": "array",
+            "title": "Veredictos"
+          },
+          "busqueda": {
+            "$ref": "#/components/schemas/EvaluacionBusquedaAdaptativa"
+          }
+        },
+        "type": "object",
+        "required": [
+          "etiquetado",
+          "deteccion",
+          "veredictos",
+          "busqueda"
+        ],
+        "title": "MetricasEvaluacionAdaptativa"
       },
       "MotivoNoApto": {
         "properties": {
@@ -2233,6 +2734,51 @@
         ],
         "title": "ResultadoPersonalizado"
       },
+      "ResumenEtiquetado": {
+        "properties": {
+          "productos_revisados": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Productos Revisados",
+            "description": "Productos del etiquetado manual con revisado_por_equipo en true.",
+            "examples": [
+              30
+            ]
+          },
+          "productos_evaluados": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Productos Evaluados",
+            "description": "Revisados que están en el índice.",
+            "examples": [
+              30
+            ]
+          },
+          "no_encontrados": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "No Encontrados",
+            "description": "Revisados que no están en el índice (no se evalúan)."
+          },
+          "origen": {
+            "type": "string",
+            "title": "Origen",
+            "description": "Cómo se hizo el etiquetado.",
+            "examples": [
+              "Propuesto con asistencia de IA leyendo solo los ingredientes y revisado por el equipo; ver docs/recuperacion-y-evaluacion.md."
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "productos_revisados",
+          "productos_evaluados",
+          "origen"
+        ],
+        "title": "ResumenEtiquetado"
+      },
       "ResumenIngesta": {
         "properties": {
           "run_id": {
@@ -2438,7 +2984,7 @@
               }
             ],
             "title": "Posicion",
-            "description": "Posición en el ranking personalizado; nulo si quedó oculto.",
+            "description": "Posición en el ranking personalizado; nulo si quedó oculto o si no coincide con la consulta sin sus restricciones.",
             "examples": [
               null
             ]
