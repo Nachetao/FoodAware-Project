@@ -231,6 +231,7 @@ semilla del corpus (ver [Estrategia de actualización](#estrategia-de-actualizac
   "estado": "degradado",
   "servicio": "python-service",
   "version": "0.1.0",
+  "commit": "55a40763d1e8c0f2b9a7e5d4c3b2a1f0e9d8c7b6",
   "verificado_en": "2026-10-21T21:40:00Z",
   "dependencias": {"cache": "ok", "indice": "ok", "openfoodfacts": "degradado"},
   "detalle": {
@@ -258,6 +259,11 @@ estado sale de la última ingesta terminada y del registro de fallas de la
 fuente. Las fallas que una ingesta recuperó en su reintento son anteriores a su
 fin y no la degradan. Las ingestas importadas con la semilla y sus fallas no
 cuentan: con solo la semilla, `openfoodfacts` queda `no_verificado`.
+
+`commit` es el commit del repositorio que se está ejecutando: lo toma de
+`RENDER_GIT_COMMIT` (Render la define en cada despliegue) o de `GIT_COMMIT`, y
+vale `null` si no hay ninguna. El CD lo compara con el commit que acaba de
+desplegar (ver [despliegue-staging.md](../despliegue-staging.md#versión-desplegada-y-rollback)).
 
 **Estado global y código HTTP:**
 

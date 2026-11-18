@@ -1,5 +1,14 @@
 name: Terraform CI
 
+# terraform/ administra la configuración de GitHub del repositorio
+# (ruleset de main y el Environment staging con sus variables).
+# Detalles en docs/pipeline-devsecops.md ("Terraform").
+#
+# - Formato y validación: en todo push y PR, sin secretos.
+# - Plan: en main y en PR desde este mismo repositorio, con un token de
+#   GitHub de SOLO LECTURA y el estado en HCP Terraform. Muestra lo que
+#   cambiaría y avisa de diferencias, pero no aplica nada.
+# - Apply: nunca en CI; solo en local, con un token con escritura.
 on:
   push:
     branches:
@@ -22,11 +31,14 @@ env:
 
 jobs:
   terraform:
+    # Check requerido por el ruleset de main: no cambiar el nombre.
     name: Terraform Validate & Plan
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     defaults:
       run:
+        shell: bash
         working-directory: ./terraform
 
     steps:
@@ -37,15 +49,84 @@ jobs:
         uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
-
-      - name: Terraform Init
-        run: terraform init -input=false
+          # Salida de terraform sin envoltorio (se lee con jq abajo).
+          terraform_wrapper: false
 
       - name: Terraform Format Check
         run: terraform fmt -check -recursive
 
+      - name: Terraform Init (sin estado remoto)
+        run: terraform init -backend=false -input=false
+
       - name: Terraform Validate
         run: terraform validate
 
-      - name: Terraform Plan
-        run: terraform plan -input=false -lock=false
+      # Los secretos no llegan a PR desde forks ni de Dependabot, y hasta
+      # que se configure HCP Terraform no existen: en esos casos el plan
+      # se omite con un aviso, sin fallar el check.
+      - name: Decidir si corre el plan
+        id: plan
+        env:
+          EVENTO: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          REPO_PR: ${{ github.event.pull_request.head.repo.full_name }}
+          HAY_TOKEN_HCP: ${{ secrets.TF_API_TOKEN != '' }}
+          HAY_TOKEN_GITHUB: ${{ secrets.TF_GITHUB_TOKEN_LECTURA != '' }}
+          ORGANIZACION: ${{ vars.TF_CLOUD_ORGANIZATION }}
+        run: |
+          omitir() {
+            echo "::notice::Plan omitido: $1"
+            echo "Plan de Terraform omitido: $1." >> "$GITHUB_STEP_SUMMARY"
+            echo "correr=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          }
+          if [[ "$EVENTO" == push && "$REF" != refs/heads/main ]]; then
+            omitir "solo corre en main y en pull requests"
+          fi
+          if [[ "$EVENTO" == pull_request && "$REPO_PR" != "$GITHUB_REPOSITORY" ]]; then
+            omitir "pull request desde otro repositorio"
+          fi
+          if [[ "$HAY_TOKEN_HCP" != true || "$HAY_TOKEN_GITHUB" != true || -z "$ORGANIZACION" ]]; then
+            omitir "faltan TF_API_TOKEN, TF_GITHUB_TOKEN_LECTURA o la variable TF_CLOUD_ORGANIZATION"
+          fi
+          echo "correr=true" >> "$GITHUB_OUTPUT"
+
+      - name: Terraform Plan (solo lectura)
+        if: steps.plan.outputs.correr == 'true'
+        env:
+          TF_CLOUD_ORGANIZATION: ${{ vars.TF_CLOUD_ORGANIZATION }}
+          TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.TF_GITHUB_TOKEN_LECTURA }}
+        run: |
+          terraform init -input=false
+          # -lock=false: el plan de CI no bloquea el estado (el apply local
+          # sí lo hace).
+          terraform plan -input=false -lock=false -no-color -out=plan.tfplan
+
+          terraform show -json plan.tfplan > plan.json
+          contar() {
+            jq --arg a "$1" '[.resource_changes[]? | select(.change.actions | index($a))] | length' plan.json
+          }
+          importar=$(jq '[.resource_changes[]? | select(.change.importing != null)] | length' plan.json)
+          crear=$(contar create)
+          cambiar=$(contar update)
+          destruir=$(contar delete)
+          {
+            echo "### Plan de Terraform"
+            echo
+            echo "| Importar | Crear | Cambiar | Destruir |"
+            echo "|---|---|---|---|"
+            echo "| $importar | $crear | $cambiar | $destruir |"
+            echo
+            if (( importar + crear + cambiar + destruir == 0 )); then
+              echo "GitHub coincide con terraform/: no hay nada que aplicar."
+            else
+              echo "Hay diferencias: se aplican en local (docs/pipeline-devsecops.md, \"Terraform\")."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if (( destruir > 0 )); then
+            echo "::warning::El plan propone destruir $destruir recurso(s). Revisarlo antes de aplicar en local."
+          elif (( importar + crear + cambiar > 0 )); then
+            echo "::notice::Hay cambios pendientes de aplicar en local ($importar importar, $crear crear, $cambiar cambiar)."
+          fi

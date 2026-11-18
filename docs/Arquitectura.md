@@ -206,8 +206,10 @@ arranca vacío. El costo es que en staging los datos no se actualizan solos.
 
 **Blueprint de Render en vez de Terraform:** el proveedor de Terraform para
 Render no permite crear ni modificar web services del plan gratuito, así que
-la infraestructura de staging quedó en `render.yaml`. La carpeta `terraform/`
-se mantiene y CI la valida, pero no despliega nada. Ver
+la infraestructura de staging quedó en `render.yaml`. `terraform/` administra
+la configuración de GitHub de la que depende el despliegue (el ruleset de
+`main` y el Environment `staging`), con el estado en HCP Terraform y el `apply` solo en
+local. Ver
 [despliegue-staging.md](despliegue-staging.md#por-qué-blueprint-y-no-terraform).
 
 **Análisis de seguridad en el pipeline:** agregamos SAST con Bandit y CodeQL y

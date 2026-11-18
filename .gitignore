@@ -141,4 +141,11 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Terraform: el estado vive en HCP Terraform y nunca en el repositorio;
+# los planes guardados y los tfvars pueden tener valores de la cuenta.
 .terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfplan

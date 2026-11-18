@@ -72,6 +72,7 @@ def evaluar_salud(
     busqueda: ServicioBusqueda,
     version: str,
     ahora: Optional[datetime] = None,
+    commit: Optional[str] = None,
 ) -> RespuestaSalud:
     """Síncrona (lee SQLite): desde el endpoint se llama en un hilo."""
     ahora = ahora or datetime.now(timezone.utc)
@@ -111,6 +112,7 @@ def evaluar_salud(
         # El mismo nombre que el campo service de los logs.
         servicio=SERVICIO,
         version=version,
+        commit=commit,
         verificado_en=ahora,
         dependencias=dependencias,
         detalle=DetalleSalud(cache=cache, indice=indice,

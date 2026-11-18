@@ -47,6 +47,14 @@ class RespuestaSalud(BaseModel):
     estado: Literal["ok", "degradado", "error"] = Field(examples=["ok"])
     servicio: str = Field(examples=["python-service"])
     version: str = Field(examples=["1.0.0"])
+    commit: Optional[str] = Field(
+        None,
+        max_length=64,
+        description="Commit del repositorio que se está ejecutando "
+        "(RENDER_GIT_COMMIT en Render); null si no se conoce. El CD lo "
+        "compara con el commit que acaba de desplegar.",
+        examples=["55a40763d1e8c0f2b9a7e5d4c3b2a1f0e9d8c7b6"],
+    )
     verificado_en: FechaUTC = Field(examples=["2026-10-20T14:30:00Z"])
     dependencias: Dict[str, EstadoDependencia] = Field(
         default_factory=dict,

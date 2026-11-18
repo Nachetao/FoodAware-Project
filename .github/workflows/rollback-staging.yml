@@ -1,0 +1,177 @@
+name: Rollback staging
+
+# Vuelve staging a la última versión que pasó todas las pruebas de salud
+# (tags staging-verificado-<commit>, que crea CD Staging) y la prueba igual
+# que el CD. Es manual: la estrategia y cuándo usarlo están en
+# docs/despliegue-staging.md ("Versión desplegada y rollback").
+on:
+  workflow_dispatch:
+    inputs:
+      motivo:
+        description: Por qué se vuelve atrás (queda en el resumen)
+        required: true
+        type: string
+      commit:
+        description: >-
+          Commit verificado al que volver. Vacío: el último verificado
+          anterior al que está desplegado.
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+# El mismo grupo que CD Staging: un rollback nunca se cruza con un
+# despliegue.
+concurrency:
+  group: cd-staging
+  cancel-in-progress: false
+
+jobs:
+  desplegar:
+    name: Volver a la versión verificada
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    environment:
+      name: staging
+      url: ${{ vars.STAGING_URL_FRONTEND }}
+
+    defaults:
+      run:
+        shell: bash
+
+    outputs:
+      sha: ${{ steps.objetivo.outputs.sha }}
+      url_python: ${{ vars.STAGING_URL_PYTHON }}
+      url_backend: ${{ vars.STAGING_URL_BACKEND }}
+      url_frontend: ${{ vars.STAGING_URL_FRONTEND }}
+
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v7
+
+      - name: Elegir el commit
+        id: objetivo
+        env:
+          GH_TOKEN: ${{ github.token }}
+          URL_PYTHON: ${{ vars.STAGING_URL_PYTHON }}
+          PEDIDO: ${{ inputs.commit }}
+          MOTIVO: ${{ inputs.motivo }}
+        run: |
+          error() {
+            echo "::error::$1"
+            exit 1
+          }
+          if [[ "$GITHUB_REF" != refs/heads/main ]]; then
+            error "El rollback solo se corre desde main (se eligió $GITHUB_REF)"
+          fi
+
+          verificados=$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/staging-verificado-" \
+            --jq '.[].object.sha' | sort -u)
+          if [[ -z "$verificados" ]]; then
+            error "Todavía no hay versiones verificadas (tags staging-verificado-*)"
+          fi
+          fecha() {
+            gh api "repos/$GITHUB_REPOSITORY/commits/$1" --jq .commit.committer.date
+          }
+
+          # Lo que está desplegado ahora, según /health de python-service
+          # (puede estar dormido: hasta 5 minutos).
+          actual=""
+          for _ in $(seq 1 20); do
+            if cuerpo=$(curl -sS --fail --max-time 60 "$URL_PYTHON/health"); then
+              actual=$(jq -r '.commit // ""' <<< "$cuerpo")
+              break
+            fi
+            sleep 15
+          done
+
+          if [[ -n "$PEDIDO" ]]; then
+            objetivo=$(gh api "repos/$GITHUB_REPOSITORY/commits/$PEDIDO" --jq .sha) \
+              || error "No existe el commit $PEDIDO"
+            grep -qx "$objetivo" <<< "$verificados" \
+              || error "El commit ${objetivo:0:7} no pasó las pruebas de salud (no tiene tag staging-verificado-)"
+            como="el commit pedido"
+          else
+            # El verificado más reciente que sea anterior al desplegado. Si
+            # no se sabe qué está desplegado, el verificado más reciente.
+            limite=""
+            if [[ -n "$actual" ]]; then
+              limite=$(fecha "$actual")
+            fi
+            objetivo="" mejor=""
+            while read -r sha; do
+              [[ "$sha" == "$actual" ]] && continue
+              cuando=$(fecha "$sha")
+              if [[ -n "$limite" && ! "$cuando" < "$limite" ]]; then
+                continue
+              fi
+              if [[ -z "$mejor" || "$cuando" > "$mejor" ]]; then
+                mejor=$cuando objetivo=$sha
+              fi
+            done <<< "$verificados"
+            [[ -n "$objetivo" ]] \
+              || error "No hay una versión verificada anterior a la desplegada"
+            como="el último verificado anterior al desplegado"
+          fi
+
+          {
+            echo "### Rollback de staging"
+            echo
+            echo "- Motivo: $MOTIVO"
+            echo "- Desplegado antes: \`${actual:-desconocido}\`"
+            echo "- Se vuelve a: \`$objetivo\` ($como)"
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "sha=$objetivo" >> "$GITHUB_OUTPUT"
+
+      - name: Desplegar la versión verificada
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          SHA: ${{ steps.objetivo.outputs.sha }}
+          ID_PYTHON: ${{ vars.RENDER_SERVICE_ID_PYTHON }}
+          ID_BACKEND: ${{ vars.RENDER_SERVICE_ID_BACKEND }}
+          ID_FRONTEND: ${{ vars.RENDER_SERVICE_ID_FRONTEND }}
+          TITULO: Rollback
+        run: bash .github/scripts/desplegar-render.sh
+
+      - name: Si el rollback falla
+        if: failure()
+        run: |
+          {
+            echo
+            echo "El rollback no terminó. Revisa el paso que falló y los logs del"
+            echo "Dashboard de Render; se puede volver a correr con otro commit"
+            echo "verificado en el campo \"commit\"."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  pruebas:
+    name: Pruebas de salud del staging
+    needs: desplegar
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v7
+
+      - name: Probar las URL públicas
+        env:
+          URL_PYTHON: ${{ needs.desplegar.outputs.url_python }}
+          URL_BACKEND: ${{ needs.desplegar.outputs.url_backend }}
+          URL_FRONTEND: ${{ needs.desplegar.outputs.url_frontend }}
+          COMMIT_ESPERADO: ${{ needs.desplegar.outputs.sha }}
+          # Clave entre servicios para el recorrido funcional contra FastAPI.
+          CLAVE_SERVICIO: ${{ secrets.CLAVE_SERVICIO_STAGING }}
+        run: bash .github/scripts/pruebas-staging.sh
+
+      - name: Si las pruebas fallan
+        if: failure()
+        env:
+          SHA: ${{ needs.desplegar.outputs.sha }}
+        run: bash .github/scripts/aviso-rollback.sh

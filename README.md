@@ -260,7 +260,8 @@ y 75,31 % de cobertura de ingredientes. Antes de empezar conviene correr
 ## Pipeline DevSecOps
 
 Cada push a cualquier rama y cada pull request a `main` corre 7 workflows de
-CI en GitHub Actions, y un octavo despliega `main` en staging:
+CI en GitHub Actions; un octavo despliega `main` en staging y un noveno hace
+rollback a mano:
 
 | Workflow | Qué revisa |
 |---|---|
@@ -270,8 +271,9 @@ CI en GitHub Actions, y un octavo despliega `main` en staging:
 | CI Integración | La app completa con Docker Compose y 5 pruebas entre NestJS y FastAPI |
 | CI Seguridad | Gitleaks, Bandit, CodeQL (Python y TypeScript) y Trivy sobre las 3 imágenes |
 | CI Render Blueprint | `render.yaml` contra el esquema oficial y contra la API de Render |
-| Terraform CI | `fmt`, `validate` y `plan` de `terraform/` |
-| CD Staging (Render) | Cuando los 7 anteriores pasan en un commit de `main`: lo despliega en Render (python-service, backend y frontend, en ese orden) y corre 5 pruebas de salud contra las URL públicas |
+| Terraform CI | `fmt` y `validate` de `terraform/` (la configuración de GitHub: ruleset de `main` y Environment `staging`), y `plan` de solo lectura contra GitHub; el `apply` es solo local |
+| CD Staging (Render) | Cuando los 7 anteriores pasan en un commit de `main`: lo despliega en Render (python-service, backend y frontend, en ese orden), comprueba que python-service informe ese commit y corre las pruebas posteriores al despliegue (salud y un recorrido funcional que no escribe datos). Si pasan, marca el commit como versión verificada |
+| Rollback staging | A mano: vuelve staging a la última versión verificada y corre las mismas pruebas |
 
 Qué hace fallar a cada uno, cómo correr las pruebas y las Variables y
 Secrets que usan están en

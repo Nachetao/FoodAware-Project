@@ -1,8 +1,11 @@
 name: CD Staging (Render)
 
 # Despliega en Render el commit de main cuando pasa todo su CI, y después
-# prueba el staging por sus URL públicas. Detalles en
-# docs/despliegue-staging.md ("Despliegue automático").
+# prueba el staging por sus URL públicas (incluido que python-service
+# informe el commit desplegado). Si todo pasa, marca el commit con el tag
+# staging-verificado-<commit>, que es a donde vuelve "Rollback staging".
+# Detalles en docs/despliegue-staging.md ("Despliegue automático" y
+# "Versión desplegada y rollback").
 #
 # workflow_run se dispara cada vez que termina uno de estos workflows; el
 # job "verificar" solo deja seguir cuando todos terminaron bien para el
@@ -158,6 +161,9 @@ jobs:
       url_frontend: ${{ vars.STAGING_URL_FRONTEND }}
 
     steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v7
+
       - name: Desplegar python-service, backend y frontend (en ese orden)
         env:
           RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
@@ -165,196 +171,61 @@ jobs:
           ID_PYTHON: ${{ vars.RENDER_SERVICE_ID_PYTHON }}
           ID_BACKEND: ${{ vars.RENDER_SERVICE_ID_BACKEND }}
           ID_FRONTEND: ${{ vars.RENDER_SERVICE_ID_FRONTEND }}
-          # Tope por servicio; un build Docker en el plan gratuito tarda
-          # entre 5 y 15 minutos.
-          ESPERA_MAX_SEGUNDOS: 1500
-          PAUSA_SEGUNDOS: 15
-        run: |
-          if [[ -z "$RENDER_API_KEY" ]]; then
-            echo "::error::Falta el Secret RENDER_API_KEY"
-            exit 1
-          fi
-          for variable in ID_PYTHON ID_BACKEND ID_FRONTEND; do
-            if [[ -z "${!variable}" ]]; then
-              echo "::error::Falta la Variable RENDER_SERVICE_$variable del Environment staging (docs/despliegue-staging.md, paso 8)"
-              exit 1
-            fi
-          done
+        run: bash .github/scripts/desplegar-render.sh
 
-          api() {
-            curl -sS --fail-with-body --max-time 60 \
-              -H "Authorization: Bearer $RENDER_API_KEY" -H "Accept: application/json" "$@"
-          }
-          # Las consultas sí se reintentan; el POST no, para no crear dos
-          # deploys si se corta la conexión después de crearlo.
-          consultar() {
-            api --retry 3 --retry-all-errors "$@"
-          }
-
-          {
-            echo "### Despliegue de \`${SHA:0:7}\`"
-            echo
-            echo "| Servicio | Deploy | Estado | Duración |"
-            echo "|---|---|---|---|"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-          # El backend necesita a python-service vivo para su health check y
-          # el frontend apunta al backend: por eso este orden.
-          for servicio in "python-service:$ID_PYTHON" "backend:$ID_BACKEND" "frontend:$ID_FRONTEND"; do
-            nombre=${servicio%%:*} id=${servicio#*:}
-            echo "::group::$nombre ($id)"
-            inicio=$SECONDS
-            respuesta=$(api -X POST "https://api.render.com/v1/services/$id/deploys" \
-              -H "Content-Type: application/json" \
-              -d "{\"commitId\": \"$SHA\", \"clearCache\": \"do_not_clear\"}")
-            deploy=$(jq -r '.id // empty' <<< "$respuesta")
-            if [[ -z "$deploy" ]]; then
-              echo "::error::Render no devolvió el deploy de $nombre"
-              jq . <<< "$respuesta" || echo "$respuesta"
-              exit 1
-            fi
-            echo "Deploy $deploy creado para el commit $(jq -r '.commit.id // "?"' <<< "$respuesta")"
-
-            anterior=""
-            while true; do
-              estado=$(consultar "https://api.render.com/v1/services/$id/deploys/$deploy" | jq -r .status)
-              if [[ "$estado" != "$anterior" ]]; then
-                echo "$(( SECONDS - inicio )) s: $estado"
-                anterior=$estado
-              fi
-              case "$estado" in
-                live) break ;;
-                build_failed | update_failed | canceled | pre_deploy_failed | deactivated)
-                  echo "| $nombre | \`$deploy\` | $estado | $(( (SECONDS - inicio) / 60 )) min |" >> "$GITHUB_STEP_SUMMARY"
-                  echo "::error::El deploy de $nombre terminó en $estado (revisa sus logs en el Dashboard de Render)"
-                  exit 1 ;;
-              esac
-              if (( SECONDS - inicio > ESPERA_MAX_SEGUNDOS )); then
-                echo "::error::$nombre sigue en $estado tras $(( ESPERA_MAX_SEGUNDOS / 60 )) min"
-                exit 1
-              fi
-              sleep "$PAUSA_SEGUNDOS"
-            done
-            echo "| $nombre | \`$deploy\` | live | $(( (SECONDS - inicio) / 60 )) min |" >> "$GITHUB_STEP_SUMMARY"
-            echo "::endgroup::"
-          done
+      - name: Cómo volver a la última versión verificada
+        if: failure()
+        env:
+          SHA: ${{ needs.verificar.outputs.sha }}
+        run: bash .github/scripts/aviso-rollback.sh
 
   pruebas:
     name: Pruebas de salud del staging
-    needs: desplegar
+    needs: [verificar, desplegar]
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
+    permissions:
+      # Crea el tag staging-verificado-<commit> cuando todo pasa.
+      contents: write
 
     defaults:
       run:
         shell: bash
 
     steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v7
+
       - name: Probar las URL públicas
         env:
           URL_PYTHON: ${{ needs.desplegar.outputs.url_python }}
           URL_BACKEND: ${{ needs.desplegar.outputs.url_backend }}
           URL_FRONTEND: ${{ needs.desplegar.outputs.url_frontend }}
-          # Un servicio dormido tarda cerca de un minuto en despertar; el
-          # plazo de cada prueba deja margen para eso y para reinicios.
-          PLAZO_SEGUNDOS: 300
-          PAUSA_SEGUNDOS: 15
-          CONSULTA: galletas
+          COMMIT_ESPERADO: ${{ needs.verificar.outputs.sha }}
+          # Clave entre servicios para el recorrido funcional contra FastAPI.
+          CLAVE_SERVICIO: ${{ secrets.CLAVE_SERVICIO_STAGING }}
+        run: bash .github/scripts/pruebas-staging.sh
+
+      # El rollback vuelve a estos commits: los que pasaron todas las
+      # pruebas de salud en staging.
+      - name: Marcar el commit como verificado
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ needs.verificar.outputs.sha }}
         run: |
-          for variable in URL_PYTHON URL_BACKEND URL_FRONTEND; do
-            if [[ -z "${!variable}" ]]; then
-              echo "::error::Falta la Variable STAGING_${variable} del Environment staging"
-              exit 1
-            fi
-          done
-
-          # Cada prueba imprime una línea con lo que vio y sale con 0 si pasó.
-          salud_python() {
-            local cuerpo estado
-            cuerpo=$(curl -sS --fail-with-body --max-time 60 "$URL_PYTHON/health") || return 1
-            estado=$(jq -r .estado <<< "$cuerpo")
-            echo "estado $estado, $(jq -r .detalle.cache.productos <<< "$cuerpo") productos en caché"
-            [[ "$estado" == ok || "$estado" == degradado ]]
-          }
-          salud_backend() {
-            local cuerpo
-            cuerpo=$(curl -sS --fail-with-body --max-time 60 "$URL_BACKEND/api/health") || return 1
-            jq -r '"postgresql \(.dependencias.postgresql), fastapi \(.dependencias.fastapi)"' <<< "$cuerpo"
-            jq -e '.dependencias.postgresql == "ok" and .dependencias.fastapi == "ok"' <<< "$cuerpo" > /dev/null
-          }
-          busqueda() {
-            local fuente total
-            curl -sS --fail-with-body --max-time 60 -D cabeceras.txt -o busqueda.json \
-              "$URL_BACKEND/api/products/search?q=$CONSULTA&limit=5" || return 1
-            fuente=$(grep -i '^x-fuente-datos:' cabeceras.txt | cut -d: -f2- | tr -d ' \r')
-            total=$(jq '.resultados | length' busqueda.json)
-            echo "$total productos desde ${fuente:-(sin header)}; el primero: $(jq -r '.resultados[0].producto.nombre // "-"' busqueda.json)"
-            # "respaldo" significaría que NestJS no llegó a FastAPI.
-            (( total > 0 )) && [[ "$fuente" == fastapi ]]
-          }
-          metricas() {
-            local cuerpo
-            cuerpo=$(curl -sS --fail-with-body --max-time 60 "$URL_BACKEND/api/metricas/calidad") || return 1
-            jq -r '"válidos \(.porcentaje_validos) %, duplicados \(.porcentaje_duplicados) %, cobertura \(.cobertura_ingredientes) %"' <<< "$cuerpo"
-            jq -e '.porcentaje_validos > 0' <<< "$cuerpo" > /dev/null
-          }
-          frontend() {
-            local respuesta
-            respuesta=$(curl -sS --max-time 60 -o index.html -w '%{http_code} %{content_type}' "$URL_FRONTEND/") || return 1
-            echo "HTTP $respuesta"
-            [[ "$respuesta" == "200 text/html"* ]] && grep -q '<app-root' index.html
-          }
-
-          # reintentar <prueba>: la repite hasta que pase o se cumpla el plazo.
-          reintentar() {
-            local inicio=$SECONDS intento=0 salida
-            while true; do
-              intento=$(( intento + 1 ))
-              if salida=$("$1" 2>&1); then
-                DETALLE="$(tail -n 1 <<< "$salida") (intento $intento, $(( SECONDS - inicio )) s)"
-                echo "$DETALLE"
-                return 0
-              fi
-              echo "Intento $intento: $(tail -n 1 <<< "$salida")"
-              if (( SECONDS - inicio >= PLAZO_SEGUNDOS )); then
-                DETALLE="$(tail -n 1 <<< "$salida") ($intento intentos, $(( SECONDS - inicio )) s)"
-                return 1
-              fi
-              sleep "$PAUSA_SEGUNDOS"
-            done
-          }
-
-          pruebas=(
-            "salud_python|python-service: GET /health"
-            "salud_backend|backend: GET /api/health (PostgreSQL y FastAPI ok)"
-            "busqueda|backend: búsqueda \"$CONSULTA\" a través de FastAPI"
-            "metricas|backend: GET /api/metricas/calidad (válidos > 0)"
-            "frontend|frontend: HTML de la aplicación"
-          )
-          {
-            echo "### Pruebas de salud del staging"
-            echo
-            echo "| Prueba | Resultado | Detalle |"
-            echo "|---|---|---|"
-          } >> "$GITHUB_STEP_SUMMARY"
-          fallidas=0
-          for prueba in "${pruebas[@]}"; do
-            funcion=${prueba%%|*} titulo=${prueba#*|}
-            echo "::group::$titulo"
-            if reintentar "$funcion"; then
-              resultado="Pasó"
-            else
-              resultado="Falló"
-              fallidas=$(( fallidas + 1 ))
-              echo "::error::$titulo: $DETALLE"
-            fi
-            echo "::endgroup::"
-            # Un "|" en el detalle (p. ej. en un nombre) rompería la tabla.
-            echo "| $titulo | $resultado | ${DETALLE//|//} |" >> "$GITHUB_STEP_SUMMARY"
-          done
-
-          if (( fallidas )); then
-            echo "::error::$fallidas de ${#pruebas[@]} pruebas fallaron"
+          etiqueta="staging-verificado-${SHA:0:7}"
+          if gh api "repos/$GITHUB_REPOSITORY/git/refs" \
+              -f "ref=refs/tags/$etiqueta" -f "sha=$SHA" > /dev/null 2> error.txt; then
+            echo "Versión verificada: \`$etiqueta\`" >> "$GITHUB_STEP_SUMMARY"
+          elif grep -q "Reference already exists" error.txt; then
+            echo "Versión verificada: \`$etiqueta\` (ya estaba marcada)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            cat error.txt
             exit 1
           fi
-          echo "Las ${#pruebas[@]} pruebas pasaron."
+
+      - name: Cómo volver a la última versión verificada
+        if: failure()
+        env:
+          SHA: ${{ needs.verificar.outputs.sha }}
+        run: bash .github/scripts/aviso-rollback.sh
