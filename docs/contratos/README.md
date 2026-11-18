@@ -118,9 +118,40 @@ Open Food Facts. Exige el header `X-Clave-Ingesta` con el valor de la variable
 `INGESTA_CLAVE` del servicio, y la compara en tiempo constante. Está cerrado por
 defecto: si `INGESTA_CLAVE` no está definida o está vacía, responde 403 siempre.
 Sin la clave correcta responde 403 `FORBIDDEN` antes de validar el cuerpo, y con
-el mismo mensaje haya o no una clave configurada. `GET /ingest/runs/latest` y los
-demás endpoints siguen públicos. NestJS no llama a este endpoint; las ingestas
-automáticas del servicio no pasan por HTTP y no necesitan la clave.
+el mismo mensaje haya o no una clave configurada. NestJS no llama a este
+endpoint, así que no exige `X-Clave-Servicio`; las ingestas automáticas del
+servicio no pasan por HTTP y no necesitan ninguna clave.
+
+**Clave entre servicios (`X-Clave-Servicio`).** Los endpoints que consume
+NestJS exigen el header `X-Clave-Servicio` con el valor de la variable
+`CLAVE_SERVICIO`, que comparten los dos servicios:
+
+| Exigen la clave | No la exigen |
+|---|---|
+| `GET /search`, `GET /products/{codigo_barras}`, `GET /metrics/quality`, `GET /metrics/evaluation`, `GET /ingest/runs/latest`, `POST /analizar`, `POST /products/{codigo_barras}/compatibility`, `POST /search/personalized` | `GET /health` (lo usan Render y Docker como health check), `GET /`, `/docs`, `/openapi.json` y `POST /ingest/runs` (tiene su propia clave) |
+
+Funciona igual que la clave de ingesta: se compara en tiempo constante (los
+SHA-256 de las dos claves con `hmac.compare_digest`, así tampoco se filtra el
+largo), se revisa antes de validar el cuerpo y de la simulación de errores, y
+el rechazo es siempre 403 `FORBIDDEN` con el mismo mensaje ("Se requiere una
+clave de servicio válida"), sea que falte el header, que no coincida o que no
+haya clave configurada. El log registra la ruta del rechazo, nunca la clave.
+En `/analizar` el 403 usa el formato de error del contrato, aunque sus demás
+errores siguen siendo los nativos de FastAPI.
+
+`CLAVE_SERVICIO_OBLIGATORIA` controla qué pasa cuando no llega el header:
+
+| `CLAVE_SERVICIO_OBLIGATORIA` | Sin header (o vacío) | Clave incorrecta | Clave correcta |
+|---|---|---|---|
+| `true` (por defecto en el código) | 403 | 403 | se atiende |
+| `false` (transición) | se atiende y queda una advertencia en el log (`evento: clave_servicio_ausente`) | 403 | se atiende |
+
+Con `true` y sin `CLAVE_SERVICIO` definida, todo lo protegido responde 403:
+está cerrado por defecto. `false` existe para la transición: hoy el backend
+todavía no envía el header, y en `docker-compose.yml` y `render.yaml` la
+variable está en `false` para que siga funcionando. Cuando NestJS envíe la
+clave en todas sus llamadas, se cambia a `true` (ver
+[despliegue-staging.md](../despliegue-staging.md#activar-la-clave-entre-servicios)).
 
 `/search` declara 503 y 504 en OpenAPI, pero hoy no los produce porque no
 consulta la fuente. `estado_fuente` vale `"online"` si la última ingesta
@@ -467,8 +498,9 @@ consulta original.
 - `GET /metrics/evaluation/adaptive`: Precision@5 y tasa de falsos "apto" de
   la versión adaptativa contra la base, sobre un conjunto de productos
   etiquetados a mano. Se define junto con la búsqueda personalizada completa.
-- Autenticación entre servicios: estos endpoints, y los demás que consume
-  NestJS salvo `/health`, van a exigir el header `X-Clave-Servicio`.
+
+Estos dos endpoints exigen `X-Clave-Servicio`, como todos los que consume
+NestJS (ver [Endpoints](#endpoints)).
 
 ## Errores
 
@@ -481,14 +513,15 @@ Los endpoints del contrato responden siempre con esta forma:
 | Código | HTTP | Cuándo |
 |---|---|---|
 | `VALIDATION_ERROR` | 422 | Parámetros o cuerpo inválidos |
-| `FORBIDDEN` | 403 | `POST /ingest/runs` sin la clave interna correcta |
+| `FORBIDDEN` | 403 | `POST /ingest/runs` sin la clave interna correcta, o un endpoint que consume NestJS sin `X-Clave-Servicio` válida |
 | `NOT_FOUND` | 404 | Producto, ejecución o ruta inexistente |
 | `SOURCE_UNAVAILABLE` | 503 | Open Food Facts no responde |
 | `SOURCE_TIMEOUT` | 504 | Open Food Facts excede el timeout |
 | `INTERNAL_ERROR` | 500 | Error no controlado (sin detalles internos) |
 
 `/`, `/health` y `/analizar` conservan los errores nativos de FastAPI (`{"detail": ...}`)
-porque NestJS ya los consume.
+porque NestJS ya los consume. La excepción es el 403 de `X-Clave-Servicio` en
+`/analizar`, que usa la forma de arriba.
 
 ## Headers
 
@@ -497,6 +530,7 @@ porque NestJS ya los consume.
 | `X-Request-ID` | petición y respuesta | Si NestJS lo envía, se devuelve igual (letras, números, `.`, `_`, `-`, máx. 128); si no, se genera un uuid4. También va en `error.request_id`. |
 | `X-Response-Time-ms` | respuesta | Milisegundos que tardó el servicio hasta enviar la respuesta (p. ej. `12.345`). Va en todas las respuestas, también en los errores. |
 | `X-Clave-Ingesta` | petición | Solo en `POST /ingest/runs`: clave interna igual a `INGESTA_CLAVE`. Sin ella, o si no coincide, responde 403 `FORBIDDEN`. |
+| `X-Clave-Servicio` | petición | En los endpoints que consume NestJS: clave igual a `CLAVE_SERVICIO`. Si no coincide, 403 `FORBIDDEN`; si falta, 403 o advertencia según `CLAVE_SERVICIO_OBLIGATORIA` (ver [Endpoints](#endpoints)). |
 | `X-Simular-Error` | petición | Solo con `SIMULAR_ERRORES_HABILITADO=true` en `.env`. Valores: `SOURCE_UNAVAILABLE` (503), `SOURCE_TIMEOUT` (504), `INTERNAL_ERROR` (500). Funciona en los endpoints del contrato (no en `/`, `/health` ni `/analizar`); no aparece en OpenAPI. |
 
 ## Códigos de alérgenos (`AllergenCode`)

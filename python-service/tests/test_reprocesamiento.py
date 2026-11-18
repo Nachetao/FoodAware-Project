@@ -14,6 +14,7 @@ from app.repositories.cache import RepositorioCache
 from app.schemas.producto import Calidad
 from app.services.mapeo_off import mapear_producto
 from app.services.reprocesamiento import reprocesar_cache
+from tests.conftest import HEADERS_SERVICIO
 from tests.payloads_off import GALLETAS, INCOMPLETO, LECHE
 
 pytestmark = pytest.mark.recuperacion
@@ -130,7 +131,7 @@ def test_al_iniciar_el_servicio_reprocesa_sin_llamar_a_off(
     # Sin User-Agent no existe cliente de OFF: no puede haber llamadas.
     monkeypatch.setattr(config.settings, "off_user_agent", None)
 
-    with TestClient(app) as cliente:
+    with TestClient(app, headers=HEADERS_SERVICIO) as cliente:
         datos = cliente.get(f"/products/{LECHE['code']}").json()
 
     assert datos["ingredientes"] == ["leche entera", "vitamina a",

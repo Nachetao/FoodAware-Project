@@ -4,6 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, BackgroundTasks, Depends
 
 from app.core.clave_ingesta import exigir_clave_ingesta
+from app.core.clave_servicio import exigir_clave_servicio
 from app.core.dependencias import obtener_ingesta, obtener_repositorio
 from app.core.errores import NoEncontrado, respuestas_error
 from app.core.simulacion import simular_error
@@ -42,7 +43,9 @@ async def iniciar_ingesta(
     response_model=ResumenIngesta,
     tags=["ingesta"],
     summary="Resumen de la última ejecución de ingesta",
-    responses=respuestas_error(404),
+    responses=respuestas_error(403, 404),
+    # Lo consume NestJS. POST /ingest/runs no: usa su propia clave.
+    dependencies=[Depends(exigir_clave_servicio)],
 )
 async def ultima_ingesta(
     repositorio: Annotated[RepositorioCache, Depends(obtener_repositorio)],

@@ -232,7 +232,8 @@ ningún workflow de otra rama puede leer sus Variables ni desplegar.
 
 Los Secrets que llegan a un `.env` se enmascaran con `::add-mask::`, así que
 si se imprimen por error en el log aparecen como `***`. Los secretos de
-staging (contraseña de la base, `JWT_SECRET`, `INGESTA_CLAVE`) no están en
+staging (contraseña de la base, `JWT_SECRET`, `INGESTA_CLAVE`,
+`CLAVE_SERVICIO`) no están en
 GitHub: los genera Render (ver
 [despliegue-staging.md](despliegue-staging.md#secretos-y-configuración)).
 

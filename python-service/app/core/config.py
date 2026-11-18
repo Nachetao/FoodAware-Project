@@ -46,6 +46,17 @@ class Settings(BaseSettings):
     ingesta_clave: Optional[SecretStr] = Field(
         None, validation_alias="INGESTA_CLAVE"
     )
+    # Clave compartida con NestJS (header X-Clave-Servicio) para los
+    # endpoints que consume el backend; /health sigue público.
+    clave_servicio: Optional[SecretStr] = Field(
+        None, validation_alias="CLAVE_SERVICIO"
+    )
+    # true: sin la clave, 403. false (transición mientras NestJS no la
+    # envía): sin header se acepta con una advertencia en el log, pero una
+    # clave incorrecta igual da 403.
+    clave_servicio_obligatoria: bool = Field(
+        True, validation_alias="CLAVE_SERVICIO_OBLIGATORIA"
+    )
     # Si la caché está vacía al iniciar, carga semilla/corpus-off.json.gz
     # antes de cualquier ingesta (en Render el disco se pierde al reiniciar).
     cargar_semilla_si_vacia: bool = Field(

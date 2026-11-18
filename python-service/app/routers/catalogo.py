@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Path, Query
 
 from app.core.dependencias import obtener_busqueda, obtener_catalogo
+from app.core.clave_servicio import exigir_clave_servicio
 from app.core.errores import respuestas_error
 from app.core.simulacion import simular_error
 from app.schemas.busqueda import RespuestaBusqueda
@@ -10,7 +11,11 @@ from app.schemas.producto import Producto
 from app.services.busqueda import ServicioBusqueda
 from app.services.catalogo import ServicioCatalogo
 
-router = APIRouter(dependencies=[Depends(simular_error)])
+# La clave va antes de la simulación: sin ella no se puede forzar un
+# error simulado.
+router = APIRouter(
+    dependencies=[Depends(exigir_clave_servicio), Depends(simular_error)]
+)
 
 Catalogo = Annotated[ServicioCatalogo, Depends(obtener_catalogo)]
 
@@ -20,7 +25,7 @@ Catalogo = Annotated[ServicioCatalogo, Depends(obtener_catalogo)]
     response_model=Producto,
     tags=["productos"],
     summary="Obtiene un producto por código de barras",
-    responses=respuestas_error(404, 422, 503, 504),
+    responses=respuestas_error(403, 404, 422, 503, 504),
 )
 async def obtener_producto(
     codigo_barras: Annotated[
@@ -37,7 +42,7 @@ async def obtener_producto(
     response_model=RespuestaBusqueda,
     tags=["busqueda"],
     summary="Busca productos por texto con ranking de relevancia",
-    responses=respuestas_error(422, 503, 504),
+    responses=respuestas_error(403, 422, 503, 504),
 )
 async def buscar(
     q: Annotated[

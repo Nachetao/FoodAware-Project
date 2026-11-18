@@ -3,12 +3,17 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 
 from app.core.dependencias import obtener_metricas
+from app.core.clave_servicio import exigir_clave_servicio
 from app.core.errores import respuestas_error
 from app.core.simulacion import simular_error
 from app.schemas.metricas import MetricasCalidad, MetricasEvaluacion
 from app.services.metricas import ServicioMetricas
 
-router = APIRouter(dependencies=[Depends(simular_error)])
+# La clave va antes de la simulación: sin ella no se puede forzar un
+# error simulado.
+router = APIRouter(
+    dependencies=[Depends(exigir_clave_servicio), Depends(simular_error)]
+)
 
 Metricas = Annotated[ServicioMetricas, Depends(obtener_metricas)]
 
@@ -18,7 +23,7 @@ Metricas = Annotated[ServicioMetricas, Depends(obtener_metricas)]
     response_model=MetricasCalidad,
     tags=["metricas"],
     summary="Métricas de calidad de los datos almacenados",
-    responses=respuestas_error(),
+    responses=respuestas_error(403),
 )
 async def metricas_calidad(metricas: Metricas):
     return await metricas.calidad()
@@ -30,7 +35,7 @@ async def metricas_calidad(metricas: Metricas):
     tags=["metricas"],
     summary="Métricas de evaluación de la búsqueda (Precision@K y "
     "Recall@K)",
-    responses=respuestas_error(),
+    responses=respuestas_error(403),
 )
 def metricas_evaluacion(metricas: Metricas):
     return metricas.evaluacion()

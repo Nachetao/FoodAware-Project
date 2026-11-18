@@ -43,6 +43,11 @@ services:
     environment:
       # La caché SQLite vive en el volumen para no perderse al reiniciar.
       CACHE_DB_PATH: ${CACHE_DB_PATH:-/data/foodaware-cache.sqlite3}
+      # X-Clave-Servicio: CLAVE_SERVICIO llega desde .env (la comparten
+      # python-service y backend). En transición hasta que el backend envíe
+      # la clave: un .env sin la variable (como el de CI Integración) no
+      # deja al backend sin acceso.
+      CLAVE_SERVICIO_OBLIGATORIA: ${CLAVE_SERVICIO_OBLIGATORIA:-false}
     volumes:
       - python_cache:/data
     ports:

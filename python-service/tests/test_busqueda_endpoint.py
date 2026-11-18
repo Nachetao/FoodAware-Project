@@ -13,6 +13,7 @@ from app.repositories.cache import RepositorioCache
 from app.schemas.busqueda import RespuestaBusqueda
 from app.services.busqueda import ServicioBusqueda
 from app.services.mapeo_off import mapear_producto
+from tests.conftest import HEADERS_SERVICIO
 from tests.payloads_off import payload
 
 pytestmark = pytest.mark.recuperacion
@@ -162,7 +163,7 @@ def test_al_iniciar_se_construye_desde_la_cache(tmp_path, monkeypatch):
     monkeypatch.setattr(config.settings, "cache_db_path", ruta)
     monkeypatch.setattr(config.settings, "off_user_agent", None)
 
-    with TestClient(app) as cliente:
+    with TestClient(app, headers=HEADERS_SERVICIO) as cliente:
         assert app.state.busqueda.instantanea.indice.n_documentos == 5
         datos = cliente.get("/search", params={"q": "yogur"}).json()
 

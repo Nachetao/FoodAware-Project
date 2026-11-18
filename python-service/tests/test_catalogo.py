@@ -184,7 +184,8 @@ def test_openapi_documenta_errores(client):
     busqueda = rutas["/search"]["get"]
     limit = next(p for p in busqueda["parameters"] if p["name"] == "limit")
     assert limit["schema"]["default"] == 10
-    assert set(busqueda["responses"]) == {"200", "422", "500", "503", "504"}
+    assert set(busqueda["responses"]) == {"200", "403", "422", "500", "503",
+                                          "504"}
     producto = rutas["/products/{codigo_barras}"]["get"]["responses"]
     assert producto["404"]["content"]["application/json"]["schema"] == {
         "$ref": "#/components/schemas/RespuestaError"

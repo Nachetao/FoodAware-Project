@@ -22,6 +22,7 @@ from app.schemas.ingesta import ResumenIngesta
 from app.schemas.producto import Calidad
 from app.services import semilla
 from app.services.mapeo_off import mapear_producto
+from tests.conftest import HEADERS_SERVICIO
 from tests.payloads_off import GALLETAS, INCOMPLETO, LECHE
 
 pytestmark = pytest.mark.recuperacion
@@ -351,7 +352,7 @@ def test_al_iniciar_carga_la_semilla_y_arma_el_indice_sin_llamar_a_off(
     monkeypatch.setattr(config.settings, "off_user_agent", None)
     monkeypatch.setattr(semilla, "RUTA_SEMILLA", archivo)
 
-    with TestClient(app) as cliente:
+    with TestClient(app, headers=HEADERS_SERVICIO) as cliente:
         busqueda = cliente.get("/search", params={"q": "leche"}).json()
         salud = cliente.get("/health").json()
         calidad = cliente.get("/metrics/quality").json()
@@ -384,7 +385,7 @@ def test_con_la_variable_desactivada_no_carga(archivo, tmp_path,
     monkeypatch.setattr(config.settings, "off_user_agent", None)
     monkeypatch.setattr(semilla, "RUTA_SEMILLA", archivo)
 
-    with TestClient(app) as cliente:
+    with TestClient(app, headers=HEADERS_SERVICIO) as cliente:
         salud = cliente.get("/health").json()
 
     assert salud["detalle"]["cache"]["productos"] == 0
