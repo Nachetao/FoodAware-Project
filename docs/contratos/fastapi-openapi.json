@@ -504,6 +504,154 @@
           }
         }
       }
+    },
+    "/products/{codigo_barras}/compatibility": {
+      "post": {
+        "tags": [
+          "adaptativo"
+        ],
+        "summary": "Veredicto de compatibilidad de un producto con un perfil",
+        "description": "El perfil va en el cuerpo (POST) para que no quede en URL ni en logs. El producto se obtiene igual que en GET /products/{codigo_barras}.",
+        "operationId": "compatibilidad_products__codigo_barras__compatibility_post",
+        "parameters": [
+          {
+            "name": "codigo_barras",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{8,14}$",
+              "description": "De 8 a 14 dígitos.",
+              "title": "Codigo Barras"
+            },
+            "description": "De 8 a 14 dígitos."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SolicitudCompatibilidad"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Veredicto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Recurso no encontrado (NOT_FOUND).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Parámetros o cuerpo inválidos (VALIDATION_ERROR).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error interno (INTERNAL_ERROR).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Open Food Facts no disponible (SOURCE_UNAVAILABLE).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Open Food Facts no respondió a tiempo (SOURCE_TIMEOUT).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/search/personalized": {
+      "post": {
+        "tags": [
+          "adaptativo"
+        ],
+        "summary": "Búsqueda BM25 personalizada según un perfil",
+        "description": "Ordena aptos, apto_con_advertencia y no_apto (ocultos en modo filtrar), informa cuántos no_apto hay y por qué, y compara el top con el ranking base de GET /search.",
+        "operationId": "buscar_personalizada_search_personalized_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SolicitudBusquedaPersonalizada"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaBusquedaPersonalizada"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Parámetros o cuerpo inválidos (VALIDATION_ERROR).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error interno (INTERNAL_ERROR).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -584,6 +732,172 @@
         ],
         "title": "CodigoError",
         "description": "Códigos de error uniformes del contrato."
+      },
+      "ComparacionRanking": {
+        "properties": {
+          "k": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "K",
+            "examples": [
+              5
+            ]
+          },
+          "top_base": {
+            "items": {
+              "type": "string",
+              "pattern": "^\\d{8,14}$",
+              "description": "Código de barras de 8 a 14 dígitos.",
+              "examples": [
+                "7802800716999"
+              ]
+            },
+            "type": "array",
+            "title": "Top Base",
+            "description": "Los k primeros del ranking base."
+          },
+          "top_personalizado": {
+            "items": {
+              "type": "string",
+              "pattern": "^\\d{8,14}$",
+              "description": "Código de barras de 8 a 14 dígitos.",
+              "examples": [
+                "7802800716999"
+              ]
+            },
+            "type": "array",
+            "title": "Top Personalizado",
+            "description": "Los k primeros del ranking personalizado."
+          },
+          "salieron_del_top": {
+            "items": {
+              "$ref": "#/components/schemas/SalidaTop"
+            },
+            "type": "array",
+            "title": "Salieron Del Top"
+          },
+          "entraron_al_top": {
+            "items": {
+              "type": "string",
+              "pattern": "^\\d{8,14}$",
+              "description": "Código de barras de 8 a 14 dígitos.",
+              "examples": [
+                "7802800716999"
+              ]
+            },
+            "type": "array",
+            "title": "Entraron Al Top"
+          }
+        },
+        "type": "object",
+        "required": [
+          "k",
+          "top_base",
+          "top_personalizado"
+        ],
+        "title": "ComparacionRanking"
+      },
+      "Conflicto": {
+        "properties": {
+          "codigo": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AllergenCode"
+              },
+              {
+                "$ref": "#/components/schemas/DietLabel"
+              }
+            ],
+            "title": "Codigo",
+            "description": "Alérgeno en conflicto, o dieta contradicha si tipo es 'dieta'.",
+            "examples": [
+              "lacteos"
+            ]
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "alergeno",
+              "traza",
+              "posible",
+              "dieta"
+            ],
+            "title": "Tipo",
+            "description": "alergeno: es ingrediente; traza: 'puede contener'; posible: indicio sin confirmar (p. ej. lecitina E322 sin origen); dieta: el producto contradice una dieta del perfil.",
+            "examples": [
+              "alergeno"
+            ]
+          },
+          "origen": {
+            "type": "string",
+            "enum": [
+              "fuente",
+              "texto",
+              "indicio"
+            ],
+            "title": "Origen",
+            "description": "fuente: lo declara Open Food Facts; texto: solo lo detectamos en el texto de ingredientes; indicio: alérgeno posible.",
+            "examples": [
+              "fuente"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "codigo",
+          "tipo",
+          "origen"
+        ],
+        "title": "Conflicto"
+      },
+      "ConteoMotivo": {
+        "properties": {
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "alergeno",
+              "traza",
+              "posible",
+              "dieta",
+              "datos_insuficientes"
+            ],
+            "title": "Tipo",
+            "examples": [
+              "alergeno"
+            ]
+          },
+          "codigo": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AllergenCode"
+              },
+              {
+                "$ref": "#/components/schemas/DietLabel"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Codigo",
+            "examples": [
+              "lacteos"
+            ]
+          },
+          "cantidad": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Cantidad",
+            "examples": [
+              25
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "tipo",
+          "cantidad"
+        ],
+        "title": "ConteoMotivo"
       },
       "DetalleCache": {
         "properties": {
@@ -769,6 +1083,48 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "InterpretacionConsulta": {
+        "properties": {
+          "terminos": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Terminos",
+            "description": "Términos que se buscaron con BM25.",
+            "examples": [
+              [
+                "chocolate"
+              ]
+            ]
+          },
+          "restricciones": {
+            "items": {
+              "$ref": "#/components/schemas/RestriccionConsulta"
+            },
+            "type": "array",
+            "title": "Restricciones"
+          },
+          "no_reconocidas": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "No Reconocidas",
+            "description": "Restricciones que no son un alérgeno ni una dieta conocida; quedan como texto de la búsqueda.",
+            "examples": [
+              [
+                "sin azúcar"
+              ]
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "terminos"
+        ],
+        "title": "InterpretacionConsulta"
+      },
       "MetricasCalidad": {
         "properties": {
           "porcentaje_validos": {
@@ -885,6 +1241,93 @@
           "tiempo_promedio_ms"
         ],
         "title": "MetricasEvaluacion"
+      },
+      "MotivoNoApto": {
+        "properties": {
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "alergeno",
+              "traza",
+              "posible",
+              "dieta",
+              "datos_insuficientes"
+            ],
+            "title": "Tipo",
+            "examples": [
+              "alergeno"
+            ]
+          },
+          "codigo": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AllergenCode"
+              },
+              {
+                "$ref": "#/components/schemas/DietLabel"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Codigo",
+            "description": "Nulo solo si tipo es 'datos_insuficientes'.",
+            "examples": [
+              "lacteos"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "tipo"
+        ],
+        "title": "MotivoNoApto"
+      },
+      "PerfilRestricciones": {
+        "properties": {
+          "alergias": {
+            "items": {
+              "$ref": "#/components/schemas/AllergenCode"
+            },
+            "type": "array",
+            "maxItems": 14,
+            "title": "Alergias",
+            "description": "Alérgenos que la persona no puede consumir. Los repetidos se ignoran.",
+            "examples": [
+              [
+                "lacteos",
+                "mani"
+              ]
+            ]
+          },
+          "dietas": {
+            "items": {
+              "$ref": "#/components/schemas/DietLabel"
+            },
+            "type": "array",
+            "maxItems": 4,
+            "title": "Dietas",
+            "description": "Dietas que sigue. Los repetidos se ignoran.",
+            "examples": [
+              [
+                "vegetariano"
+              ]
+            ]
+          },
+          "modo_estricto": {
+            "type": "boolean",
+            "title": "Modo Estricto",
+            "description": "Si es true, las trazas, los indicios y los datos insuficientes hacen el producto no_apto en vez de apto_con_advertencia.",
+            "default": false,
+            "examples": [
+              false
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "PerfilRestricciones",
+        "description": "Restricciones de una persona, sin datos que la identifiquen."
       },
       "Procedencia": {
         "properties": {
@@ -1235,6 +1678,109 @@
         ],
         "title": "RespuestaBusqueda"
       },
+      "RespuestaBusquedaPersonalizada": {
+        "properties": {
+          "consulta": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 2,
+            "title": "Consulta",
+            "examples": [
+              "chocolate sin leche"
+            ]
+          },
+          "interpretacion": {
+            "$ref": "#/components/schemas/InterpretacionConsulta"
+          },
+          "perfil_aplicado": {
+            "$ref": "#/components/schemas/PerfilRestricciones",
+            "description": "El perfil recibido más las restricciones de la consulta."
+          },
+          "modo": {
+            "type": "string",
+            "enum": [
+              "filtrar",
+              "reordenar"
+            ],
+            "title": "Modo",
+            "examples": [
+              "filtrar"
+            ]
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Total",
+            "description": "Coincidencias del ranking personalizado antes de paginar (sin los ocultos).",
+            "examples": [
+              6
+            ]
+          },
+          "total_base": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Total Base",
+            "description": "Coincidencias del ranking base.",
+            "examples": [
+              31
+            ]
+          },
+          "tiempo_ms": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Tiempo Ms",
+            "examples": [
+              3.2
+            ]
+          },
+          "estado_fuente": {
+            "type": "string",
+            "enum": [
+              "online",
+              "cache"
+            ],
+            "title": "Estado Fuente",
+            "examples": [
+              "cache"
+            ]
+          },
+          "resultados": {
+            "items": {
+              "$ref": "#/components/schemas/ResultadoPersonalizado"
+            },
+            "type": "array",
+            "title": "Resultados"
+          },
+          "no_aptos": {
+            "$ref": "#/components/schemas/ResumenNoAptos"
+          },
+          "comparacion": {
+            "$ref": "#/components/schemas/ComparacionRanking"
+          },
+          "aviso": {
+            "type": "string",
+            "title": "Aviso",
+            "default": "Clasificación orientativa según tu perfil y los datos de Open Food Facts. No es una garantía de que el producto sea seguro para ti: revisa siempre la etiqueta del envase.",
+            "examples": [
+              "Clasificación orientativa según tu perfil y los datos de Open Food Facts. No es una garantía de que el producto sea seguro para ti: revisa siempre la etiqueta del envase."
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "consulta",
+          "interpretacion",
+          "perfil_aplicado",
+          "modo",
+          "total",
+          "total_base",
+          "tiempo_ms",
+          "estado_fuente",
+          "no_aptos",
+          "comparacion"
+        ],
+        "title": "RespuestaBusquedaPersonalizada"
+      },
       "RespuestaError": {
         "properties": {
           "error": {
@@ -1325,6 +1871,50 @@
         ],
         "title": "RespuestaSalud"
       },
+      "RestriccionConsulta": {
+        "properties": {
+          "texto": {
+            "type": "string",
+            "title": "Texto",
+            "description": "Frase de la consulta.",
+            "examples": [
+              "sin leche"
+            ]
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "alergeno",
+              "dieta"
+            ],
+            "title": "Tipo",
+            "examples": [
+              "alergeno"
+            ]
+          },
+          "codigo": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AllergenCode"
+              },
+              {
+                "$ref": "#/components/schemas/DietLabel"
+              }
+            ],
+            "title": "Codigo",
+            "examples": [
+              "lacteos"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "texto",
+          "tipo",
+          "codigo"
+        ],
+        "title": "RestriccionConsulta"
+      },
       "ResultadoBusqueda": {
         "properties": {
           "producto": {
@@ -1356,6 +1946,58 @@
           "posicion"
         ],
         "title": "ResultadoBusqueda"
+      },
+      "ResultadoPersonalizado": {
+        "properties": {
+          "producto": {
+            "$ref": "#/components/schemas/Producto"
+          },
+          "score": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Score",
+            "description": "Score BM25.",
+            "examples": [
+              7.8421
+            ]
+          },
+          "posicion": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Posicion",
+            "description": "Posición en el ranking personalizado, desde 1.",
+            "examples": [
+              1
+            ]
+          },
+          "posicion_base": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Posicion Base",
+            "description": "Posición en el ranking base (GET /search con la consulta original); nulo si no aparece en él.",
+            "examples": [
+              9
+            ]
+          },
+          "veredicto": {
+            "$ref": "#/components/schemas/Veredicto"
+          }
+        },
+        "type": "object",
+        "required": [
+          "producto",
+          "score",
+          "posicion",
+          "veredicto"
+        ],
+        "title": "ResultadoPersonalizado"
       },
       "ResumenIngesta": {
         "properties": {
@@ -1489,6 +2131,174 @@
         ],
         "title": "ResumenIngesta"
       },
+      "ResumenNoAptos": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Total",
+            "description": "Productos no_apto entre las coincidencias.",
+            "examples": [
+              25
+            ]
+          },
+          "ocultos": {
+            "type": "boolean",
+            "title": "Ocultos",
+            "description": "true en modo filtrar (no aparecen en resultados); false en reordenar (van al final).",
+            "examples": [
+              true
+            ]
+          },
+          "motivos": {
+            "items": {
+              "$ref": "#/components/schemas/ConteoMotivo"
+            },
+            "type": "array",
+            "title": "Motivos",
+            "description": "Cuántos no_apto hay por cada motivo. Un producto con dos motivos cuenta en los dos."
+          },
+          "texto": {
+            "type": "string",
+            "title": "Texto",
+            "examples": [
+              "25 ocultos por contener lácteos."
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "ocultos",
+          "texto"
+        ],
+        "title": "ResumenNoAptos"
+      },
+      "SalidaTop": {
+        "properties": {
+          "codigo_barras": {
+            "type": "string",
+            "pattern": "^\\d{8,14}$",
+            "title": "Codigo Barras",
+            "description": "Código de barras de 8 a 14 dígitos.",
+            "examples": [
+              "7802800716999"
+            ]
+          },
+          "posicion_base": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Posicion Base",
+            "examples": [
+              1
+            ]
+          },
+          "posicion": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Posicion",
+            "description": "Posición en el ranking personalizado; nulo si quedó oculto.",
+            "examples": [
+              null
+            ]
+          },
+          "veredicto": {
+            "type": "string",
+            "enum": [
+              "apto",
+              "apto_con_advertencia",
+              "no_apto"
+            ],
+            "title": "Veredicto",
+            "examples": [
+              "no_apto"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "codigo_barras",
+          "posicion_base",
+          "veredicto"
+        ],
+        "title": "SalidaTop"
+      },
+      "SolicitudBusquedaPersonalizada": {
+        "properties": {
+          "consulta": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 2,
+            "title": "Consulta",
+            "description": "Texto a buscar; puede traer restricciones como 'sin leche'.",
+            "examples": [
+              "chocolate sin leche"
+            ]
+          },
+          "perfil": {
+            "$ref": "#/components/schemas/PerfilRestricciones"
+          },
+          "modo": {
+            "type": "string",
+            "enum": [
+              "filtrar",
+              "reordenar"
+            ],
+            "title": "Modo",
+            "description": "filtrar: oculta los no_apto; reordenar: los deja al final. En los dos casos se informa cuántos hay y por qué.",
+            "default": "filtrar",
+            "examples": [
+              "filtrar"
+            ]
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "default": 10,
+            "examples": [
+              10
+            ]
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Offset",
+            "default": 0,
+            "examples": [
+              0
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "consulta",
+          "perfil"
+        ],
+        "title": "SolicitudBusquedaPersonalizada"
+      },
+      "SolicitudCompatibilidad": {
+        "properties": {
+          "perfil": {
+            "$ref": "#/components/schemas/PerfilRestricciones"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "perfil"
+        ],
+        "title": "SolicitudCompatibilidad"
+      },
       "SolicitudIngesta": {
         "properties": {
           "pais": {
@@ -1575,6 +2385,145 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "Veredicto": {
+        "properties": {
+          "codigo_barras": {
+            "type": "string",
+            "pattern": "^\\d{8,14}$",
+            "title": "Codigo Barras",
+            "description": "Código de barras de 8 a 14 dígitos.",
+            "examples": [
+              "7802800716999"
+            ]
+          },
+          "veredicto": {
+            "type": "string",
+            "enum": [
+              "apto",
+              "apto_con_advertencia",
+              "no_apto"
+            ],
+            "title": "Veredicto",
+            "description": "Ante la duda nunca es 'apto': el error más grave es un falso apto.",
+            "examples": [
+              "apto_con_advertencia"
+            ]
+          },
+          "alergenos_en_conflicto": {
+            "items": {
+              "$ref": "#/components/schemas/AllergenCode"
+            },
+            "type": "array",
+            "title": "Alergenos En Conflicto",
+            "examples": [
+              []
+            ]
+          },
+          "trazas_en_conflicto": {
+            "items": {
+              "$ref": "#/components/schemas/AllergenCode"
+            },
+            "type": "array",
+            "title": "Trazas En Conflicto",
+            "examples": [
+              [
+                "mani"
+              ]
+            ]
+          },
+          "dietas_no_confirmadas": {
+            "items": {
+              "$ref": "#/components/schemas/DietLabel"
+            },
+            "type": "array",
+            "title": "Dietas No Confirmadas",
+            "description": "Dietas del perfil que el producto no declara cumplir.",
+            "examples": [
+              []
+            ]
+          },
+          "conflictos": {
+            "items": {
+              "$ref": "#/components/schemas/Conflicto"
+            },
+            "type": "array",
+            "title": "Conflictos"
+          },
+          "motivos_no_apto": {
+            "items": {
+              "$ref": "#/components/schemas/MotivoNoApto"
+            },
+            "type": "array",
+            "title": "Motivos No Apto",
+            "description": "Qué lo hizo no_apto; vacío en los demás veredictos."
+          },
+          "datos_suficientes": {
+            "type": "boolean",
+            "title": "Datos Suficientes",
+            "description": "false si no tiene ingredientes, trae alérgenos que no reconocimos o su completitud es menor que 0,5.",
+            "examples": [
+              true
+            ]
+          },
+          "explicacion": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Explicacion",
+            "description": "Explicación legible del veredicto, en español.",
+            "examples": [
+              "No contiene leche ni maní como ingrediente, pero puede contener trazas de maní."
+            ]
+          },
+          "confianza": {
+            "type": "string",
+            "enum": [
+              "alta",
+              "media",
+              "baja"
+            ],
+            "title": "Confianza",
+            "examples": [
+              "alta"
+            ]
+          },
+          "motivos_confianza": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "completitud_media",
+                "completitud_baja",
+                "sin_ingredientes",
+                "alergenos_no_reconocidos",
+                "conflicto_solo_en_texto",
+                "indicio_sin_confirmar"
+              ]
+            },
+            "type": "array",
+            "title": "Motivos Confianza",
+            "description": "Por qué la confianza no es alta; vacío si lo es.",
+            "examples": [
+              []
+            ]
+          },
+          "aviso": {
+            "type": "string",
+            "title": "Aviso",
+            "default": "Clasificación orientativa según tu perfil y los datos de Open Food Facts. No es una garantía de que el producto sea seguro para ti: revisa siempre la etiqueta del envase.",
+            "examples": [
+              "Clasificación orientativa según tu perfil y los datos de Open Food Facts. No es una garantía de que el producto sea seguro para ti: revisa siempre la etiqueta del envase."
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "codigo_barras",
+          "veredicto",
+          "datos_suficientes",
+          "explicacion",
+          "confianza"
+        ],
+        "title": "Veredicto"
       }
     }
   }

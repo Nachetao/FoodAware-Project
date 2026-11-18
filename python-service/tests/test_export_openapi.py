@@ -12,7 +12,8 @@ _spec.loader.exec_module(export_openapi)
 RUTAS_CONTRATO = {
     "/", "/health", "/analizar", "/products/{codigo_barras}", "/search",
     "/ingest/runs", "/ingest/runs/latest", "/metrics/quality",
-    "/metrics/evaluation",
+    "/metrics/evaluation", "/products/{codigo_barras}/compatibility",
+    "/search/personalized",
 }
 
 
