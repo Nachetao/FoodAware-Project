@@ -27,6 +27,7 @@ PROTEGIDAS = [
     ("POST", f"/products/{LECHE['code']}/compatibility", PERFIL),
     ("POST", "/search/personalized",
      {"consulta": "leche", "perfil": {"alergias": ["lacteos"]}}),
+    ("GET", "/metrics/evaluation/adaptive", None),
 ]
 IDS = [f"{metodo} {ruta.split('?')[0]}" for metodo, ruta, _ in PROTEGIDAS]
 

@@ -107,6 +107,7 @@ docker compose up --build -d python-service
 | GET | `/ingest/runs/latest` | `ResumenIngesta` | 403, 404, 500 | real; requiere `X-Clave-Servicio` |
 | GET | `/metrics/quality` | `MetricasCalidad` | 403, 500 | real; requiere `X-Clave-Servicio` |
 | GET | `/metrics/evaluation` | `MetricasEvaluacion` | 403, 500 | real; requiere `X-Clave-Servicio` |
+| GET | `/metrics/evaluation/adaptive` | `MetricasEvaluacionAdaptativa` | 403, 500 | real; requiere `X-Clave-Servicio` ([Capacidad adaptativa](#get-metricsevaluationadaptive)) |
 | POST | `/products/{codigo_barras}/compatibility` | `Veredicto` | 403, 404, 422, 500, 503, 504 | real; requiere `X-Clave-Servicio` ([Capacidad adaptativa](#capacidad-adaptativa)) |
 | POST | `/search/personalized` | `RespuestaBusquedaPersonalizada` | 403, 422, 500 | real; requiere `X-Clave-Servicio` ([Capacidad adaptativa](#capacidad-adaptativa)) |
 
@@ -128,7 +129,7 @@ NestJS exigen el header `X-Clave-Servicio` con el valor de la variable
 
 | Exigen la clave | No la exigen |
 |---|---|
-| `GET /search`, `GET /products/{codigo_barras}`, `GET /metrics/quality`, `GET /metrics/evaluation`, `GET /ingest/runs/latest`, `POST /analizar`, `POST /products/{codigo_barras}/compatibility`, `POST /search/personalized` | `GET /health` (lo usan Render y Docker como health check), `GET /`, `/docs`, `/openapi.json` y `POST /ingest/runs` (tiene su propia clave) |
+| `GET /search`, `GET /products/{codigo_barras}`, `GET /metrics/quality`, `GET /metrics/evaluation`, `GET /metrics/evaluation/adaptive`, `GET /ingest/runs/latest`, `POST /analizar`, `POST /products/{codigo_barras}/compatibility`, `POST /search/personalized` | `GET /health` (lo usan Render y Docker como health check), `GET /`, `/docs`, `/openapi.json` y `POST /ingest/runs` (tiene su propia clave) |
 
 Funciona igual que la clave de ingesta: se compara en tiempo constante (los
 SHA-256 de las dos claves con `hmac.compare_digest`, así tampoco se filtra el
@@ -517,14 +518,24 @@ Ejemplo abreviado, con códigos ilustrativos:
 Los dos endpoints de esta sección exigen `X-Clave-Servicio`, como todos los
 que consume NestJS (ver [Endpoints](#endpoints)).
 
-### Pendiente
+### `GET /metrics/evaluation/adaptive`
 
-- `GET /metrics/evaluation/adaptive`: Precision@5 y tasa de falsos "apto" de
-  la versión adaptativa contra la base. Para no evaluar el veredicto con su
-  propia detección, la tasa de falsos "apto" se va a medir contra
-  [`etiquetado_manual.json`](../../python-service/app/evaluacion/etiquetado_manual.json),
-  30 productos reales con sus alérgenos revisados a mano. El archivo ya está
-  preparado; falta el etiquetado y el cálculo.
+Evaluación de la capacidad adaptativa contra la versión base. Se calcula al
+reconstruir el índice, igual que `GET /metrics/evaluation`, y corresponde al
+corpus que está respondiendo. El método, los resultados y sus limitaciones
+están en
+[recuperacion-y-evaluacion.md](../recuperacion-y-evaluacion.md#8-evaluación-de-la-capacidad-adaptativa).
+
+| Campo | Qué es |
+|---|---|
+| `etiquetado` | `productos_revisados` (con `revisado_por_equipo: true` en [`etiquetado_manual.json`](../../python-service/app/evaluacion/etiquetado_manual.json)), `productos_evaluados` (los que están en el índice), `no_encontrados` y `origen` (cómo se hizo el etiquetado) |
+| `deteccion` | Para `alergenos` y `trazas`: `productos`, `verdaderos_positivos`, `falsos_positivos`, `falsos_negativos`, `precision` y `exhaustividad`, contando pares producto-alérgeno contra el etiquetado |
+| `veredictos[]` | Uno por perfil de prueba y modo (`normal` o `estricto`): `contienen`, `falsos_apto` y `tasa_falsos_apto` (sobre los que contienen algo que el perfil evita), `falsos_apto_por_traza`, `falsos_no_apto` y `tasa_falsos_no_apto`, `coincidencias` y `matriz` (veredicto esperado contra el del sistema) |
+| `busqueda` | En las consultas con restricción del conjunto de evaluación: Precision@K promedio de `GET /search` (`precision_base`) y de `POST /search/personalized` con perfil vacío y modo `filtrar` (`precision_personalizada`), productos `no_apto` en el top K de cada una, y el detalle por consulta |
+
+Las tasas valen `null` cuando no están definidas (ningún producto en el
+denominador). Un campo del etiquetado en `null` deja fuera al producto solo de
+los cálculos que lo necesitan.
 
 ## Errores
 

@@ -13,7 +13,7 @@ RUTAS_CONTRATO = {
     "/", "/health", "/analizar", "/products/{codigo_barras}", "/search",
     "/ingest/runs", "/ingest/runs/latest", "/metrics/quality",
     "/metrics/evaluation", "/products/{codigo_barras}/compatibility",
-    "/search/personalized",
+    "/search/personalized", "/metrics/evaluation/adaptive",
 }
 
 

@@ -1,5 +1,5 @@
 {
-  "descripcion": "Productos reales del corpus para revisar a mano. Sirve para medir la tasa de falsos 'apto' de la capacidad adaptativa sin usar la misma detección que se evalúa. 'sistema' es lo que detecta hoy FoodAware; 'manual' lo completa una persona leyendo ingredientes_texto.",
+  "descripcion": "Productos reales del corpus con sus alérgenos revisados a mano. Sirve para medir la tasa de falsos 'apto' de la capacidad adaptativa sin usar la misma detección que se evalúa. 'sistema' es lo que detecta hoy FoodAware; 'manual' es la etiqueta independiente.",
   "corpus": "Semilla del corpus exportada el 2026-10-25 (385 productos), procesada con VERSION_PROCESAMIENTO 2.",
   "fuente": "Open Food Facts (https://world.openfoodfacts.org)",
   "licencia": "Open Database License (ODbL) v1.0 (https://opendatacommons.org/licenses/odbl/1-0/)",
@@ -20,11 +20,11 @@
     "altramuces"
   ],
   "instrucciones": [
-    "Lee solo ingredientes_texto (y, si hace falta, la foto de la etiqueta en url_fuente). No mires 'sistema' antes de decidir.",
-    "manual.alergenos: lista de códigos de codigos_validos que el producto contiene como ingrediente. [] si no tiene ninguno.",
-    "manual.trazas: lista de códigos que el texto advierte como 'puede contener' o 'trazas de'. [] si no advierte ninguno.",
-    "Deja null solo si no se puede decidir (texto ilegible o en otro idioma) y explícalo en manual.notas.",
-    "Un ingrediente ambiguo (p. ej. 'lecitina' sin origen o 'harina' sin tipo) va en notas, no en la lista, salvo que el texto lo aclare."
+    "El etiquetado de 'manual' lo propuso un asistente de IA leyendo solo ingredientes_texto, sin mirar 'sistema' ni el detector del proyecto. El equipo lo revisa producto por producto y marca manual.revisado_por_equipo en true; solo los revisados cuentan para la evaluación.",
+    "manual.alergenos: códigos de codigos_validos que el producto contiene como ingrediente. [] si no tiene ninguno.",
+    "manual.trazas: códigos que el texto advierte como 'puede contener' o 'trazas de', sin repetir los que ya son ingrediente. [] si no advierte ninguno.",
+    "null significa que no se pudo decidir (texto ilegible o incompleto); el motivo va en manual.notas.",
+    "Lo ambiguo ('lecitina' o INS 322 sin origen, 'harina' sin tipo, 'sabor leche', aceite de soya refinado) va en manual.notas y no en la lista, salvo que el texto lo aclare."
   ],
   "productos": [
     {
@@ -52,9 +52,16 @@
         "completitud": 1.0
       },
       "manual": {
-        "alergenos": null,
-        "trazas": null,
-        "notas": ""
+        "alergenos": [
+          "gluten",
+          "soya",
+          "sesamo"
+        ],
+        "trazas": [
+          "mostaza"
+        ],
+        "notas": "Trigo, centeno, triticale, cebada y espelta: gluten. 'Soya lecithin': soya. 'Contains' lo confirma. El aceite de coco no está en la lista de frutos secos.",
+        "revisado_por_equipo": true
       }
     },
     {
@@ -85,9 +92,17 @@
         "completitud": 1.0
       },
       "manual": {
-        "alergenos": null,
-        "trazas": null,
-        "notas": ""
+        "alergenos": [
+          "gluten",
+          "soya",
+          "lacteos"
+        ],
+        "trazas": [
+          "huevo",
+          "frutos_secos"
+        ],
+        "notas": "La 'harina' sin tipo la aclara la declaración: harina de trigo. Suero y leche en polvo: lácteos.",
+        "revisado_por_equipo": true
       }
     },
     {
@@ -120,9 +135,16 @@
         "completitud": 1.0
       },
       "manual": {
-        "alergenos": null,
-        "trazas": null,
-        "notas": ""
+        "alergenos": [
+          "frutos_secos"
+        ],
+        "trazas": [
+          "lacteos",
+          "soya",
+          "gluten"
+        ],
+        "notas": "Almendras. 'Otros frutos secos' también va como traza, pero ya es ingrediente y no se repite. La lecitina es de maravilla, no de soya.",
+        "revisado_por_equipo": true
       }
     },
     {
@@ -145,9 +167,10 @@
         "completitud": 1.0
       },
       "manual": {
-        "alergenos": null,
-        "trazas": null,
-        "notas": ""
+        "alergenos": [],
+        "trazas": [],
+        "notas": "Solo cacao, alulosa y menta. El texto no trae advertencia de trazas; si se duda, revisar la foto en url_fuente.",
+        "revisado_por_equipo": true
       }
     },
     {
@@ -171,9 +194,10 @@
         "completitud": 1.0
       },
       "manual": {
-        "alergenos": null,
-        "trazas": null,
-        "notas": ""
+        "alergenos": [],
+        "trazas": [],
+        "notas": "Sin gluten ni otro alérgeno de la lista. La proteína de arveja es una legumbre que no está en la lista. El texto no trae advertencia de trazas: conviene revisar la foto.",
+        "revisado_por_equipo": true
       }
     },
     {
@@ -200,9 +224,12 @@
         "completitud": 1.0
       },
       "manual": {
-        "alergenos": null,
-        "trazas": null,
-        "notas": ""
+        "alergenos": [
+          "frutos_secos"
+        ],
+        "trazas": [],
+        "notas": "Almendras. Mono y diglicéridos sin origen declarado (no son alérgenos de la lista).",
+        "revisado_por_equipo": true
       }
     },
     {
@@ -229,9 +256,15 @@
         "completitud": 1.0
       },
       "manual": {
-        "alergenos": null,
-        "trazas": null,
-        "notas": ""
+        "alergenos": [
+          "gluten",
+          "mani",
+          "frutos_secos",
+          "sesamo"
+        ],
+        "trazas": [],
+        "notas": "Avena declarada '(gluten)'. Pasta de maní, almendra y sésamo negro.",
+        "revisado_por_equipo": true
       }
     },
     {
@@ -251,9 +284,10 @@
         "completitud": 0.83
       },
       "manual": {
-        "alergenos": null,
-        "trazas": null,
-        "notas": ""
+        "alergenos": [],
+        "trazas": [],
+        "notas": "Papas, aceite de girasol, cebolla, azúcar y sal. El resto del texto es la dirección y la tabla nutricional; no hay advertencia de trazas.",
+        "revisado_por_equipo": true
       }
     },
     {
@@ -282,9 +316,17 @@
         "completitud": 1.0
       },
       "manual": {
-        "alergenos": null,
-        "trazas": null,
-        "notas": ""
+        "alergenos": [
+          "gluten"
+        ],
+        "trazas": [
+          "sesamo",
+          "soya",
+          "lacteos",
+          "frutos_secos"
+        ],
+        "notas": "Texto en alemán: Roggen (centeno), Hafer (avena) y Weizenkeime (germen de trigo) son gluten. 'Kann Spuren von Sesam, Soja, Milch und Schalenfrüchten enthalten' son las trazas.",
+        "revisado_por_equipo": true
       }
     },
     {
@@ -314,9 +356,13 @@
         "completitud": 1.0
       },
       "manual": {
-        "alergenos": null,
+        "alergenos": [
+          "gluten",
+          "lacteos"
+        ],
         "trazas": null,
-        "notas": ""
+        "notas": "OCR muy dañado. Seguros: 'tarina de trigo' (harina de trigo) y 'leche en potvo'. Dudosos: 'arete de soya' (¿aceite de soya?), 'sesame' (¿sésamo?) y 'lecthe' (¿lecitina?). 'traras de chocolate' no se entiende: trazas sin decidir. Revisar la foto.",
+        "revisado_por_equipo": true
       }
     },
     {
@@ -348,9 +394,17 @@
         "completitud": 1.0
       },
       "manual": {
-        "alergenos": null,
-        "trazas": null,
-        "notas": ""
+        "alergenos": [
+          "gluten",
+          "soya",
+          "sulfitos"
+        ],
+        "trazas": [
+          "huevo",
+          "lacteos"
+        ],
+        "notas": "Sulfitos solo por la declaración 'Contiene ... sulfito' (probablemente el colorante caramelo). 'Manteca de palmiste' es grasa vegetal, no lácteo.",
+        "revisado_por_equipo": true
       }
     },
     {
@@ -381,9 +435,10 @@
         "completitud": 0.83
       },
       "manual": {
-        "alergenos": null,
-        "trazas": null,
-        "notas": ""
+        "alergenos": ["lacteos", "soya"],
+        "trazas": ["frutos_secos", "mani", "gluten"],
+        "notas": "Almendras, maní y gluten aparecen al final sin encabezado y sin ningún ingrediente que los contenga: se interpretan como 'puede contener' mal transcrito. Manteca de cacao no es lácteo.",
+        "revisado_por_equipo": true
       }
     },
     {
@@ -410,9 +465,12 @@
         "completitud": 1.0
       },
       "manual": {
-        "alergenos": null,
-        "trazas": null,
-        "notas": ""
+        "alergenos": [
+          "gluten"
+        ],
+        "trazas": [],
+        "notas": "Harina de trigo. INS 322 es lecitina sin origen declarado (posible soya): no la marqué. INS 471, 472 y 481 no son alérgenos de la lista.",
+        "revisado_por_equipo": true
       }
     },
     {
@@ -432,9 +490,10 @@
         "completitud": 1.0
       },
       "manual": {
-        "alergenos": null,
-        "trazas": null,
-        "notas": ""
+        "alergenos": [],
+        "trazas": [],
+        "notas": "Maíz, sal y tocoferol.",
+        "revisado_por_equipo": true
       }
     },
     {
@@ -461,9 +520,12 @@
         "completitud": 1.0
       },
       "manual": {
-        "alergenos": null,
-        "trazas": null,
-        "notas": ""
+        "alergenos": [
+          "gluten"
+        ],
+        "trazas": [],
+        "notas": "Harina de trigo. 'Aromatizante idéntico al natural de manteca' es un aroma: no confirma lácteos, pero tampoco los descarta.",
+        "revisado_por_equipo": true
       }
     },
     {
@@ -489,9 +551,12 @@
         "completitud": 1.0
       },
       "manual": {
-        "alergenos": null,
-        "trazas": null,
-        "notas": ""
+        "alergenos": [],
+        "trazas": [
+          "frutos_secos"
+        ],
+        "notas": "'Elaborado en líneas que procesan almendras': traza de frutos secos.",
+        "revisado_por_equipo": true
       }
     },
     {
@@ -518,9 +583,13 @@
         "completitud": 0.33
       },
       "manual": {
-        "alergenos": null,
-        "trazas": null,
-        "notas": ""
+        "alergenos": [],
+        "trazas": [
+          "soya",
+          "lacteos"
+        ],
+        "notas": "Papas, aceite de maravilla, TBHQ y sal. 'Puede contener soya, leche y productos lácteos'. El texto empieza con restos del envase.",
+        "revisado_por_equipo": true
       }
     },
     {
@@ -540,9 +609,10 @@
         "completitud": 1.0
       },
       "manual": {
-        "alergenos": null,
-        "trazas": null,
-        "notas": ""
+        "alergenos": [],
+        "trazas": [],
+        "notas": "Maíz, aceite de maravilla y sal.",
+        "revisado_por_equipo": true
       }
     },
     {
@@ -580,9 +650,20 @@
         "completitud": 0.83
       },
       "manual": {
-        "alergenos": null,
-        "trazas": null,
-        "notas": ""
+        "alergenos": [
+          "gluten",
+          "lacteos",
+          "soya"
+        ],
+        "trazas": [
+          "huevo",
+          "mani",
+          "frutos_secos",
+          "sesamo",
+          "sulfitos"
+        ],
+        "notas": "OCR mezclado español e inglés. Contiene gluten (trigo, avena, malta), leche (leche en polvo, suero, yogurt) y soya (aceite y lecitina), lo que confirma 'Contiene: Gluten, Leche y Soya'. Las trazas salen de la versión en inglés ('also processes eggs, soybean, milk, peanuts, almonds, nuts..., sesame, sulphites'). Aparece 'Gelatina', que no es alérgeno de la lista.",
+        "revisado_por_equipo": true
       }
     },
     {
@@ -606,9 +687,12 @@
         "completitud": 1.0
       },
       "manual": {
-        "alergenos": null,
-        "trazas": null,
-        "notas": ""
+        "alergenos": [
+          "lacteos"
+        ],
+        "trazas": [],
+        "notas": "Es leche: la lactasa quita la lactosa, pero la proteína de la leche sigue.",
+        "revisado_por_equipo": true
       }
     },
     {
@@ -637,9 +721,15 @@
         "completitud": 1.0
       },
       "manual": {
-        "alergenos": null,
-        "trazas": null,
-        "notas": ""
+        "alergenos": [
+          "gluten",
+          "sesamo"
+        ],
+        "trazas": [
+          "lacteos"
+        ],
+        "notas": "Ingredientes: trigo, centeno, gluten de trigo, avena y sésamo. Traza de lácteos por 'elaborado en líneas que también procesan leche'. El lupino aparece solo en el texto descriptivo de las semillas, no en la lista de ingredientes: no se cuenta.",
+        "revisado_por_equipo": true
       }
     },
     {
@@ -659,9 +749,10 @@
         "completitud": 0.83
       },
       "manual": {
-        "alergenos": null,
-        "trazas": null,
-        "notas": ""
+        "alergenos": [],
+        "trazas": [],
+        "notas": "Jugos, saborizante, CMC, conservantes y edulcorantes.",
+        "revisado_por_equipo": true
       }
     },
     {
@@ -685,9 +776,10 @@
         "completitud": 1.0
       },
       "manual": {
-        "alergenos": null,
-        "trazas": null,
-        "notas": ""
+        "alergenos": [],
+        "trazas": [],
+        "notas": "Bebida vegetal: proteína de arveja, manteca de coco (no es lácteo ni fruto seco de la lista). El texto no trae advertencia de trazas: conviene revisar la foto.",
+        "revisado_por_equipo": true
       }
     },
     {
@@ -709,9 +801,10 @@
         "completitud": 1.0
       },
       "manual": {
-        "alergenos": null,
-        "trazas": null,
-        "notas": ""
+        "alergenos": [],
+        "trazas": [],
+        "notas": "Bebida vegetal sin leche. 'Sabor leche y crema (saborizantes naturales)' es un saborizante, no un ingrediente lácteo. La manteca de coco no es lácteo.",
+        "revisado_por_equipo": true
       }
     },
     {
@@ -736,9 +829,10 @@
         "completitud": 1.0
       },
       "manual": {
-        "alergenos": null,
-        "trazas": null,
-        "notas": ""
+        "alergenos": [],
+        "trazas": [],
+        "notas": "Sin gluten ni huevo en el texto. 'Aceite vegetal (soya, girasol)': el aceite de soya refinado normalmente no se considera alérgeno, pero la etiqueta no lo aclara; el equipo decide. No hay advertencia de trazas en el texto.",
+        "revisado_por_equipo": true
       }
     },
     {
@@ -764,9 +858,12 @@
         "completitud": 1.0
       },
       "manual": {
-        "alergenos": null,
-        "trazas": null,
-        "notas": ""
+        "alergenos": [
+          "gluten"
+        ],
+        "trazas": [],
+        "notas": "La avena se considera cereal con gluten salvo que sea certificada sin gluten, y el texto no lo dice. El aceite de canola no es alérgeno de la lista.",
+        "revisado_por_equipo": true
       }
     },
     {
@@ -791,9 +888,12 @@
         "completitud": 1.0
       },
       "manual": {
-        "alergenos": null,
-        "trazas": null,
-        "notas": ""
+        "alergenos": [
+          "gluten"
+        ],
+        "trazas": [],
+        "notas": "Harina de trigo. 'Aromas' sin detalle. El texto termina en coma: puede estar cortado, revisar la foto por si hay advertencia de trazas.",
+        "revisado_por_equipo": true
       }
     },
     {
@@ -820,9 +920,12 @@
         "completitud": 1.0
       },
       "manual": {
-        "alergenos": null,
-        "trazas": null,
-        "notas": ""
+        "alergenos": [
+          "soya"
+        ],
+        "trazas": [],
+        "notas": "Lecitina de soja. Sin gluten en los ingredientes.",
+        "revisado_por_equipo": true
       }
     },
     {
@@ -851,9 +954,12 @@
         "completitud": 1.0
       },
       "manual": {
-        "alergenos": null,
-        "trazas": null,
-        "notas": ""
+        "alergenos": [
+          "gluten"
+        ],
+        "trazas": [],
+        "notas": "Harina y salvado de trigo. No hay advertencia de trazas en el texto.",
+        "revisado_por_equipo": true
       }
     },
     {
@@ -883,9 +989,17 @@
         "completitud": 1.0
       },
       "manual": {
-        "alergenos": null,
-        "trazas": null,
-        "notas": ""
+        "alergenos": [
+          "gluten",
+          "soya",
+          "sulfitos"
+        ],
+        "trazas": [
+          "lacteos",
+          "huevo"
+        ],
+        "notas": "Sulfitos solo por 'Contiene: ... Sulfitos' (probablemente el colorante caramelo). 'Manteca de palmiste' es grasa vegetal.",
+        "revisado_por_equipo": true
       }
     }
   ]

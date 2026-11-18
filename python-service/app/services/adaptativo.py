@@ -1,6 +1,6 @@
 """POST /products/{codigo_barras}/compatibility y POST /search/personalized.
 
-La búsqueda personalizada:
+La búsqueda personalizada (ver app.adaptativo.ranking):
 
 1. Interpreta las restricciones de la consulta ("chocolate sin leche") y las
    suma al perfil solo para esta búsqueda (app.adaptativo.consulta).
@@ -14,9 +14,9 @@ La búsqueda personalizada:
    versión no adaptativa y no cambia.
 """
 import time
-from typing import Dict, List, Tuple
+from typing import Dict, List
 
-from app.adaptativo.consulta import interpretar
+from app.adaptativo.ranking import Evaluado, rankear
 from app.adaptativo.textos import contar_motivos, texto_no_aptos
 from app.adaptativo.veredicto import evaluar_veredicto
 from app.procesamiento.texto import tokenizar
@@ -38,9 +38,6 @@ from app.services.catalogo import ServicioCatalogo
 # Tamaño del top que se compara con el ranking base (el mismo K de la
 # evaluación de la búsqueda).
 K_COMPARACION = 5
-_RANGO = {"apto": 0, "apto_con_advertencia": 1, "no_apto": 2}
-
-Evaluado = Tuple[ResultadoBusqueda, Veredicto]
 
 
 class ServicioAdaptativo:
@@ -58,27 +55,15 @@ class ServicioAdaptativo:
         self, solicitud: SolicitudBusquedaPersonalizada
     ) -> RespuestaBusquedaPersonalizada:
         inicio = time.perf_counter()
-        consulta = interpretar(solicitud.consulta)
-        perfil = consulta.aplicar(solicitud.perfil)
-        texto = (consulta.texto_busqueda
-                 if tokenizar(consulta.texto_busqueda) else solicitud.consulta)
-
         instantanea = self._busqueda.instantanea
-        todas = max(1, len(instantanea.productos))
+        ranking = rankear(instantanea, solicitud.consulta, solicitud.perfil)
         # Ranking base: exactamente GET /search con la consulta original.
+        todas = max(1, len(instantanea.productos))
         base = await self._busqueda.buscar(solicitud.consulta, todas, 0)
-        _, coincidencias = instantanea.buscar(texto, todas, 0)
 
-        evaluados: List[Evaluado] = [
-            (r, evaluar_veredicto(r.producto, perfil)) for r in coincidencias
-        ]
-        # sorted es estable y las coincidencias ya vienen por score.
-        ordenados = sorted(evaluados, key=lambda e: _RANGO[e[1].veredicto])
-        no_aptos = [v for _, v in ordenados if v.veredicto == "no_apto"]
         ocultar = solicitud.modo == "filtrar"
-        visibles = [e for e in ordenados
-                    if not (ocultar and e[1].veredicto == "no_apto")]
-
+        visibles = ranking.visibles(solicitud.modo)
+        no_aptos = ranking.no_aptos
         posicion_base = {r.producto.codigo_barras: r.posicion
                          for r in base.resultados}
         pagina = visibles[solicitud.offset:solicitud.offset + solicitud.limit]
@@ -96,11 +81,11 @@ class ServicioAdaptativo:
         return RespuestaBusquedaPersonalizada(
             consulta=solicitud.consulta,
             interpretacion=InterpretacionConsulta(
-                terminos=tokenizar(texto),
-                restricciones=consulta.restricciones,
-                no_reconocidas=consulta.no_reconocidas,
+                terminos=tokenizar(ranking.texto),
+                restricciones=ranking.consulta.restricciones,
+                no_reconocidas=ranking.consulta.no_reconocidas,
             ),
-            perfil_aplicado=perfil,
+            perfil_aplicado=ranking.perfil,
             modo=solicitud.modo,
             total=len(visibles),
             total_base=base.total,
@@ -113,7 +98,7 @@ class ServicioAdaptativo:
                 motivos=motivos,
                 texto=texto_no_aptos(len(no_aptos), ocultar, motivos),
             ),
-            comparacion=_comparar(base.resultados, visibles, perfil),
+            comparacion=_comparar(base.resultados, visibles, ranking.perfil),
         )
 
 
