@@ -188,7 +188,12 @@ FRASES_TRAZAS: Tuple[str, ...] = (
     "fabricado en", "fabricada en", "producido en", "producida en",
     "envasado en", "envasada en", "procesado en", "línea que",
     "planta que", "instalaciones que", "equipos que", "comparte línea",
+    "también procesa", "también procesan", "también elabora",
+    "también elaboran", "también manipula", "también manipulan",
     "may contain", "may also contain", "traces", "manufactured in",
     "manufactured on", "produced in", "produced on", "made in a",
     "made on", "packed in", "processed in", "facility", "same line",
+    "also processes", "also handles",
+    # Otros idiomas que aparecen en Open Food Facts.
+    "kann spuren", "spuren von", "peut contenir", "pode conter",
 )

@@ -8,7 +8,7 @@ import re
 from dataclasses import dataclass
 from typing import Callable, Iterable, Iterator, List, Optional, Tuple
 
-from app.procesamiento.texto import normalizar
+from app.procesamiento.texto import normalizar, sin_tildes
 
 _APERTURAS = "([{"
 _CIERRES = ")]}"
@@ -69,6 +69,32 @@ _INICIOS_DECLARACION = (
     "may contain", "may also contain", "contains", "traces",
     "manufactured", "produced", "made in", "made on", "packed in",
     "free from", "gluten free",
+)
+
+
+# Frases de trazas que pueden aparecer a mitad de un fragmento, sin coma
+# antes: "y sal. Puede contener soya, leche" (con un paréntesis sin cerrar
+# la oración no se corta) o "PGPR Emulsifier. Plant also processes eggs,
+# milk". Desde la frase, lo que sigue en la lista es parte de la
+# declaración, igual que cuando la frase abre el fragmento. Son más
+# estrictas que _INICIOS_DECLARACION para no cortar un ingrediente como
+# "aceite elaborado en Chile": "elaborado en" solo cuenta seguido de una
+# línea, planta o equipo. Se buscan en minúsculas y sin tildes.
+_TRAZA_INTERMEDIA = re.compile(
+    r"(?<![a-z0-9])(?:"
+    r"pueden? contener|podria contener|puede tener|puede presentar|"
+    r"contienen? trazas?|trazas? de|"
+    r"(?:elaborad|fabricad|producid|envasad|procesad)[oa]s? en "
+    r"(?:(?:una|un|la|las|los|el) )?"
+    r"(?:lineas?|plantas?|instalacion(?:es)?|equipos?)|"
+    r"(?:lineas?|plantas?|instalaciones|equipos?) que (?:tambien )?"
+    r"(?:procesan?|elaboran?|manipulan?|utilizan?)|"
+    r"tambien (?:procesan?|elaboran?|manipulan?)|"
+    r"may (?:also )?contain|traces? of|also (?:processes|handles)|"
+    r"(?:made|manufactured|produced|processed|packed) (?:in|on) "
+    r"(?:(?:a|the) )?(?:facility|plant|line|equipment)|"
+    r"kann spuren|spuren von|peut contenir|pode conter"
+    r")(?![a-z0-9])"
 )
 
 
@@ -170,6 +196,18 @@ def _analizar_lista(
             # Lo que sigue en la misma lista es parte de la declaración:
             # "puede contener maní, almendras y soya".
             declaraciones.append(", ".join(p for p in partes[indice:] if p))
+            break
+        corte = _inicio_traza(parte)
+        if corte is not None:
+            # Igual, pero la frase de trazas empieza a mitad del fragmento:
+            # lo de antes es ingrediente y lo demás, declaración.
+            antes = _limpiar_fragmento(parte[:corte])
+            if antes:
+                items, internas = _analizar_item(antes)
+                ingredientes.extend(items)
+                declaraciones.extend(internas)
+            resto = [parte[corte:], *partes[indice + 1:]]
+            declaraciones.append(", ".join(p for p in resto if p))
             break
         items, internas = _analizar_item(parte)
         ingredientes.extend(items)
@@ -277,6 +315,29 @@ def _es_nota_al_pie(oracion: str) -> bool:
     texto = oracion.strip()
     return (texto.startswith("*") and "*" not in texto.lstrip("*")
             and "," not in texto)
+
+
+def _inicio_traza(texto: str) -> Optional[int]:
+    """Dónde empieza la primera frase de trazas fuera de paréntesis, o None.
+
+    Lo que está entre paréntesis se revisa después como grupo propio.
+    """
+    plano = sin_tildes(texto.lower())
+    # Las posiciones de `plano` tienen que valer para `texto`.
+    if len(plano) != len(texto):
+        return None
+    profundidades: List[int] = []
+    profundidad = 0
+    for caracter in plano:
+        if caracter in _CIERRES:
+            profundidad = max(0, profundidad - 1)
+        profundidades.append(profundidad)
+        if caracter in _APERTURAS:
+            profundidad += 1
+    for coincidencia in _TRAZA_INTERMEDIA.finditer(plano):
+        if profundidades[coincidencia.start()] == 0:
+            return coincidencia.start()
+    return None
 
 
 def _es_declaracion(texto: str) -> bool:
