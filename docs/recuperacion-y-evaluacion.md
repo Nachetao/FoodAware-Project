@@ -675,11 +675,11 @@ dónde sale cada uno:
 | Causa | Marcados de más |
 |---|---:|
 | Open Food Facts declara como alérgeno, en `allergens_tags`, lo que el texto dice que es traza (Wafers trisabor, Fitnessbrot y la barra de cereal). No corregimos las etiquetas de la fuente | 6 |
-| Una frase de trazas que nuestra detección no reconocía: "…y sal. Puede contener soya, leche…" dentro de un paréntesis sin cerrar (papas Lays) y "…Plant also processes eggs, …, sulphites" (barra de cereal) | 3 |
+| Una frase de trazas que nuestra detección no reconocía: "…y sal. Puede contener soya, leche…" dentro de un paréntesis sin cerrar (papas Lays) y "…Plant also processes eggs, …, sulphites" (barra de cereal); corregido en la versión 3 | 3 |
 | Lo ambiguo que el etiquetado dejó fuera a propósito: el aroma de manteca (Crackers), "sabor leche y crema" (Not Milk, que Open Food Facts etiqueta con leche), el lupino del texto descriptivo (Pan Integral), el huevo y la soya que Open Food Facts declara en el Molde Integral y lo ilegible del Pocky | 7 |
 | "Almendras, maní, gluten" al final del Trencito, sin ninguna frase: el equipo los dejó como trazas | 3 |
-| "Manteca de palmiste" leída como lácteo (Mini Tritón y Triton) | 2 |
-| "Lecitina de maravilla" leída como soya (leche vegetal): maravilla es girasol | 1 |
+| "Manteca de palmiste" leída como lácteo (Mini Tritón y Triton); corregido en la versión 4 | 2 |
+| "Lecitina de maravilla" leída como soya (leche vegetal): maravilla es girasol; corregido en la versión 4 | 1 |
 
 Las 15 trazas que faltan son el espejo de los primeros grupos: el mismo
 alérgeno que el etiquetado tiene como traza y el sistema como ingrediente. En
@@ -748,21 +748,6 @@ La corrección es general, por patrones de frases y no por producto
   frases de trazas en alemán, francés y portugués que aparecen en Open Food
   Facts ("Kann Spuren von", "Peut contenir", "Pode conter").
 
-Antes de cambiar el código guardamos los resultados como línea base. Sobre el
-etiquetado:
-
-| Medida | Versión 2 | Versión 3 |
-|---|---:|---:|
-| Falsos "apto" (6 perfiles, 2 modos) | 0 | 0 |
-| Falsos "no apto", alergia a lácteos, normal | 5 de 25 (0,20) | 4 de 25 (0,16) |
-| Falsos "no apto", dieta vegana, normal | 6 de 25 (0,24) | 5 de 25 (0,20) |
-| Falsos "no apto", demás perfiles y modos | sin cambios | sin cambios |
-| Alérgenos: precisión | 0,61 (22 de más) | 0,65 (19 de más) |
-| Alérgenos: exhaustividad | 1,00 | 1,00 |
-| Trazas: precisión | 0,52 | 0,58 |
-| Trazas: exhaustividad | 0,42 (15 faltantes) | 0,54 (12 faltantes) |
-| P@5 de las consultas con restricción, base y personalizada | 0,20 y 0,83 | 0,20 y 0,83 |
-
 En el etiquetado se corrigen los 3 casos de la tabla de causas que eran frases
 de trazas: los lácteos de las papas Lays y el huevo y los sulfitos de la barra
 de cereal. Los demás marcados de más tienen otra causa y siguen igual. En todo
@@ -771,6 +756,48 @@ el alérgeno que deja de ser ingrediente viene de una frase de trazas real (por
 ejemplo, "Puede contener trazas de: almendra, pasas, nuez, soya" en un yogur o
 "PODE CONTER AVEIA, SOJA E TRIGO" en unos corn flakes). Ningún ingrediente
 pasó a traza por error.
+
+Después hicimos una segunda corrección (`VERSION_PROCESAMIENTO` 4):
+
+- Dentro de un fragmento, "elaborado en", "fabricado en" y las demás
+  variantes (también en inglés, como "produced in") solo cuentan como frase
+  de trazas si sigue una línea, planta, instalación o equipo. Antes, en
+  "Producto fabricado en Argentina con harina de trigo" el trigo quedaba como
+  traza: un ingrediente real bajaba a advertencia. No cambió ningún producto
+  del corpus, pero ese error iba en la dirección peligrosa y ahora lo cubre un
+  test.
+- Excepciones nuevas: "manteca de palmiste" (y de almendra o avellana) no es
+  lácteo, y "lecitina de maravilla" (maravilla es girasol), "de semillas de
+  girasol" o "rapeseed lecithin" no es soya. En el corpus cambian 4 productos:
+  la leche vegetal y Moroketo dejan de marcar soya, y Mini Tritón y Triton
+  dejan de marcar lácteos como ingrediente, pero los conservan como traza por
+  su "puede contener leche".
+
+Antes de cada cambio guardamos los resultados como línea base. Sobre el
+etiquetado:
+
+| Medida | Versión 2 | Versión 3 | Versión 4 |
+|---|---:|---:|---:|
+| Falsos "apto" (6 perfiles, 2 modos) | 0 | 0 | 0 |
+| Falsos "no apto", alergia a lácteos, normal | 5 de 25 (0,20) | 4 de 25 (0,16) | 2 de 25 (0,08) |
+| Falsos "no apto", alergia a la soya, normal | 3 de 22 (0,14) | 3 de 22 (0,14) | 2 de 22 (0,09) |
+| Falsos "no apto", dieta vegana, normal | 6 de 25 (0,24) | 5 de 25 (0,20) | 3 de 25 (0,12) |
+| Falsos "no apto", demás perfiles y modos | | sin cambios | sin cambios |
+| Alérgenos: precisión | 0,61 (22 de más) | 0,65 (19 de más) | 0,69 (16 de más) |
+| Alérgenos: exhaustividad | 1,00 | 1,00 | 1,00 |
+| Trazas: precisión | 0,52 | 0,58 | 0,63 |
+| Trazas: exhaustividad | 0,42 (15 faltantes) | 0,54 (12 faltantes) | 0,65 (9 faltantes) |
+| P@5 de las consultas con restricción, base y personalizada | 0,20 y 0,83 | 0,20 y 0,83 | 0,20 y 0,83 |
+
+Los reportes completos de cada versión, generados con
+`scripts/evaluar_adaptativo.py --semilla` sobre el código de cada versión,
+están como evidencia en
+[`evidencia/evaluacion-adaptativa/`](evidencia/evaluacion-adaptativa/):
+[versión 2](evidencia/evaluacion-adaptativa/version-2.md) (antes de las
+correcciones), [versión 3](evidencia/evaluacion-adaptativa/version-3.md) y
+[versión 4](evidencia/evaluacion-adaptativa/version-4.md) (la actual). Los
+tres se regeneraron el mismo día con el mismo script, así que tienen el mismo
+formato.
 
 Con la caché y la semilla no hay que hacer nada: al arrancar, el servicio
 reprocesa desde el payload guardado los productos de una versión anterior, y
@@ -791,12 +818,12 @@ la semilla se procesa con la versión actual cada vez que se carga.
   la detección del sistema (la circularidad de arriba).
 - La dieta vegana se evalúa solo por alérgenos, igual que la revisa el
   sistema: la carne, la miel o la gelatina no son alérgenos.
-- La corrección de las frases de trazas la hicimos después de ver los
-  resultados sobre este mismo conjunto, así que la mejora de la versión 3 está
-  medida con los datos que la motivaron y es optimista. Para acotarlo, la
-  corrección es por patrones generales y revisamos su efecto en los 385
-  productos del corpus, no solo en los 30 del etiquetado; aun así, una medición
-  limpia necesitaría un conjunto etiquetado nuevo.
+- Las correcciones de las versiones 3 y 4 las hicimos después de ver los
+  resultados sobre este mismo conjunto, así que su mejora está medida con los
+  datos que la motivaron y es optimista. Para acotarlo, son correcciones por
+  patrones generales y revisamos su efecto en los 385 productos del corpus, no
+  solo en los 30 del etiquetado; aun así, una medición limpia necesitaría un
+  conjunto etiquetado nuevo.
 
 ### Cómo se calcula en el servicio
 

@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from app.evaluacion.adaptativa import PERFILES_PRUEBA
+from app.procesamiento import VERSION_PROCESAMIENTO
 from app.repositories.cache import RepositorioCache
 from app.schemas.metricas import MetricasEvaluacionAdaptativa
 from app.services import semilla
@@ -84,6 +85,7 @@ def test_el_script_genera_el_reporte(tmp_path, capsys):
                    "## Cómo leer estos resultados"):
         assert titulo in texto
     assert "asistencia de IA" in texto
+    assert f"Versión de procesamiento: {VERSION_PROCESAMIENTO}" in texto
     assert "| chocolate sin leche |" in texto
     assert texto in capsys.readouterr().out
 

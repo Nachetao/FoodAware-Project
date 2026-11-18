@@ -129,8 +129,9 @@ EXCEPCIONES: Dict[A, Tuple[str, ...]] = {
         "mantequilla de cacahuete", "mantequilla de almendra",
         "mantequilla de cacao", "mantequilla de karité",
         "manteca de cacao", "manteca de cerdo", "manteca vegetal",
-        "manteca de karité", "manteca de palma", "manteca de coco",
-        "manteca de maní", "manteca de cacahuate",
+        "manteca de karité", "manteca de palma", "manteca de palmiste",
+        "manteca de coco", "manteca de maní", "manteca de cacahuate",
+        "manteca de almendra", "manteca de avellana",
         "coconut milk", "almond milk", "soy milk", "oat milk", "rice milk",
         "coconut cream", "peanut butter", "cocoa butter", "shea butter",
     ),
@@ -151,8 +152,12 @@ EXCEPCIONES: Dict[A, Tuple[str, ...]] = {
         "cassava flour",
     ),
     A.soya: (
-        "lecitina de girasol", "lecitina de raps", "lecitina de canola",
-        "lecitina de colza", "lecitina de huevo", "sunflower lecithin",
+        # En Chile el girasol también se llama maravilla.
+        "lecitina de girasol", "lecitina de maravilla",
+        "lecitina de semilla de girasol", "lecitina de semilla de maravilla",
+        "lecitina de raps", "lecitina de canola", "lecitina de colza",
+        "lecitina de huevo", "sunflower lecithin", "rapeseed lecithin",
+        "canola lecithin",
     ),
     A.frutos_secos: (
         # La nuez moscada es una especia, no un fruto seco.
@@ -181,19 +186,45 @@ POSIBLES: Dict[A, Tuple[str, ...]] = {
     A.soya: ("E322",),
 }
 
+
+def _lugares_de_elaboracion(
+    verbos: Tuple[str, ...], preposiciones: Tuple[str, ...],
+    articulos: Tuple[str, ...], lugares: Tuple[str, ...],
+) -> Tuple[str, ...]:
+    """"elaborado en una línea", "manufactured in a facility"... El plural
+    lo resuelve la normalización: "líneas" queda como "línea"."""
+    return tuple(f"{verbo} {preposicion} {articulo}{lugar}"
+                 for verbo in verbos for preposicion in preposiciones
+                 for articulo in articulos for lugar in lugares)
+
+
 # Frases que pasan lo que sigue a trazas: "puede contener maní".
+# "Elaborado en" o "manufactured in" solo cuentan si sigue una línea, planta,
+# instalación o equipo: "elaborado en una línea que procesa maní" es una
+# traza, pero en "fabricado en Argentina con harina de trigo" el trigo es un
+# ingrediente.
 FRASES_TRAZAS: Tuple[str, ...] = (
     "puede contener", "pueden contener", "podría contener", "puede tener",
-    "puede presentar", "trazas", "elaborado en", "elaborada en",
-    "fabricado en", "fabricada en", "producido en", "producida en",
-    "envasado en", "envasada en", "procesado en", "línea que",
-    "planta que", "instalaciones que", "equipos que", "comparte línea",
+    "puede presentar", "trazas",
+    *_lugares_de_elaboracion(
+        ("elaborado", "elaborada", "fabricado", "fabricada", "producido",
+         "producida", "envasado", "envasada", "procesado", "procesada"),
+        ("en",),
+        ("", "un ", "una ", "el ", "la ", "los ", "las "),
+        ("línea", "planta", "instalación", "equipo"),
+    ),
+    "línea que", "planta que", "instalaciones que", "equipos que",
+    "comparte línea",
     "también procesa", "también procesan", "también elabora",
     "también elaboran", "también manipula", "también manipulan",
-    "may contain", "may also contain", "traces", "manufactured in",
-    "manufactured on", "produced in", "produced on", "made in a",
-    "made on", "packed in", "processed in", "facility", "same line",
-    "also processes", "also handles",
+    "may contain", "may also contain", "traces",
+    *_lugares_de_elaboracion(
+        ("manufactured", "produced", "processed", "packed", "made"),
+        ("in", "on"),
+        ("", "a ", "the "),
+        ("facility", "plant", "line", "equipment"),
+    ),
+    "facility", "facilities", "same line", "also processes", "also handles",
     # Otros idiomas que aparecen en Open Food Facts.
     "kann spuren", "spuren von", "peut contenir", "pode conter",
 )

@@ -144,6 +144,14 @@ def test_sin_falsos_positivos_obvios(texto):
         ("sémola de maíz", []),
         ("trigo sarraceno", []),
         ("lecitina de girasol", []),
+        ("lecitina de maravilla", []),
+        ("Lecitina de semillas de maravilla", []),
+        ("sunflower lecithin", []),
+        ("manteca de palmiste", []),
+        ("Manteca de Palmiste y palma hidrogenada", []),
+        ("manteca de almendras", ["frutos_secos"]),
+        # Sin decir de qué es, la lecitina sigue siendo soya.
+        ("lecitina", ["soya"]),
         ("peanut butter", ["mani"]),
         ("cocoa butter", []),
         # La excepción no tapa otra mención real en el mismo fragmento.
@@ -243,6 +251,19 @@ def test_frases_de_trazas_a_mitad_de_un_fragmento(texto, esperados,
         ("Aceite de oliva elaborado en Chile, leche entera", ["lacteos"], []),
         ("Aceite de oliva elaborado en Chile, harina de trigo, huevo",
          ["gluten", "huevo"], []),
+        # Dentro de un mismo fragmento: "fabricado en" sin línea, planta ni
+        # equipo no convierte en traza lo que sigue.
+        ("Producto fabricado en Argentina con harina de trigo",
+         ["gluten"], []),
+        ("Galletas elaboradas en Chile con leche y huevo",
+         ["lacteos", "huevo"], []),
+        ("Envasado en atmósfera protectora con soya", ["soya"], []),
+        ("Produced in Chile with wheat flour", ["gluten"], []),
+        # Con línea, planta o equipo sí es una traza.
+        ("Fabricado en una planta que procesa maní", [], ["mani"]),
+        ("Elaborado en líneas compartidas con leche", [], ["lacteos"]),
+        ("Manufactured in a facility that also processes milk",
+         [], ["lacteos"]),
         # Entre paréntesis, la frase solo afecta a su grupo.
         ("Chocolate (puede contener avellanas), leche, sal",
          ["lacteos"], ["frutos_secos"]),

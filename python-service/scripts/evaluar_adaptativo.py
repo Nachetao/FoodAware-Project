@@ -48,6 +48,7 @@ from app.evaluacion.etiquetado import (  # noqa: E402
     cargar_etiquetado,
 )
 from app.evaluacion.evaluador import K_POR_DEFECTO  # noqa: E402
+from app.procesamiento import VERSION_PROCESAMIENTO  # noqa: E402
 from app.repositories.cache import RepositorioCache  # noqa: E402
 from app.services.semilla import cargar_semilla  # noqa: E402
 
@@ -140,6 +141,7 @@ def reporte_markdown(resultado: ResultadoEvaluacionAdaptativa, corpus: str,
         "",
         f"- Fecha: {fecha:%Y-%m-%d %H:%M} UTC",
         f"- Corpus: {corpus}, {productos} productos indexados",
+        f"- Versión de procesamiento: {VERSION_PROCESAMIENTO}",
         f"- Etiquetado: {resultado.revisados} productos revisados por el "
         f"equipo, {resultado.evaluados} en el índice",
     ]

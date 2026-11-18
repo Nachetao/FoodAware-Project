@@ -417,14 +417,16 @@ La semilla es una base derivada de Open Food Facts y va con su licencia (ver
 
 Como guardamos el payload crudo, podemos cambiar las reglas de limpieza o de
 detección sin volver a descargar nada. Cada producto guarda la
-`VERSION_PROCESAMIENTO` con que se procesó (hoy es 3). Al arrancar, el
+`VERSION_PROCESAMIENTO` con que se procesó (hoy es 4). Al arrancar, el
 servicio busca los productos con una versión anterior y los rehace desde su
 payload, conservando su `run_id` y su `recuperado_en`, porque los datos siguen
 siendo los de esa descarga y solo cambió cómo se leen. Esto pasa antes de
 construir el índice, así la búsqueda nunca mezcla reglas viejas y nuevas.
 
-Lo usamos con el arreglo de Not Milk (de la versión 1 a la 2) y con las frases
-de trazas a mitad de un fragmento (de la 2 a la 3, ver
+Lo usamos con el arreglo de Not Milk (de la versión 1 a la 2), con las frases
+de trazas a mitad de un fragmento (de la 2 a la 3) y con "elaborado en" sin
+línea ni planta y las excepciones de manteca de palmiste y lecitina de
+maravilla (de la 3 a la 4, ver
 [recuperacion-y-evaluacion.md](recuperacion-y-evaluacion.md#corrección-de-las-frases-de-trazas)):
 al reiniciar, el servicio rehízo la caché desde los payloads guardados.
 También se puede forzar a mano:
