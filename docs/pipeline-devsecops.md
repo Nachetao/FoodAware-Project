@@ -16,7 +16,8 @@ todos se disparan igual:
 
 Hay un octavo, CD Staging (Render), que no corre con los push: espera a que
 los 7 de CI terminen en verde en un commit de `main` y recién ahí despliega
-(ver [CD Staging](#cd-staging-render)).
+(ver [CD Staging](#cd-staging-render)). El noveno, Rollback staging, solo
+corre a mano (ver [Rollback staging](#rollback-staging)).
 
 Todos tienen `permissions: contents: read` (solo leen el repositorio); los
 jobs que suben resultados a la pestaña Security piden además
@@ -171,12 +172,41 @@ mano (*Run workflow*). Tiene tres jobs:
   un deploy de ese commit para python-service, backend y frontend, en ese
   orden, y espera a que cada uno quede `live`. Falla si alguno termina en
   `build_failed`, `update_failed` o `canceled`.
-- Pruebas de salud: 5 pruebas contra las URL públicas, con reintentos hasta
-  5 minutos por el arranque en frío, y una tabla con el resultado en el
-  resumen de la ejecución.
+- Pruebas posteriores al despliegue: contra las URL públicas, con reintentos
+  hasta 5 minutos por prueba por el arranque en frío, y una tabla con el
+  resultado en el resumen de la ejecución. Si todas pasan, marca el commit
+  con el tag `staging-verificado-<commit>` (por eso este job tiene
+  `contents: write`). Si algo falla, el resumen explica cómo hacer rollback.
 
-El detalle, con qué revisa cada prueba, está en
-[despliegue-staging.md](despliegue-staging.md#despliegue-automático).
+El despliegue y las pruebas están en [`.github/scripts/`](../.github/scripts/)
+(`desplegar-render.sh` y `pruebas-staging.sh`), y los usa también el rollback.
+Las pruebas posteriores al despliegue son de dos tipos:
+
+| Prueba | Pasa si |
+|---|---|
+| Salud de python-service, backend y frontend, y la búsqueda `galletas` por el backend con `X-Fuente-Datos: fastapi` | Ver [despliegue-staging.md](despliegue-staging.md#despliegue-automático) |
+| python-service informa el commit desplegado | `commit` de `/health` es el commit que se acaba de desplegar |
+| Búsqueda personalizada "chocolate sin leche" con alergia al maní, por FastAPI | La consulta suma `lacteos` al perfil, hay resultados y ninguno es `no_apto` ni tiene lácteos |
+| Veredicto de un producto conocido de la semilla (Leche Semidescremada, 0400050270413) con alergia a lácteos | `no_apto`, con `lacteos` en conflicto y el aviso presente |
+| Evaluación adaptativa (`GET /metrics/evaluation/adaptive`) | Todo el etiquetado está en el índice, ningún perfil tiene falsos "apto", la búsqueda personalizada no muestra no aptos y su P@5 supera a la base |
+| Commit del backend | Informativa: si `/api/health` informa `commit`, debe ser el desplegado; si no, queda "Pendiente" |
+
+El recorrido funcional no escribe nada: no crea usuarios ni ingestas, solo
+consulta. Llama a FastAPI directo, porque el backend todavía no expone la
+búsqueda personalizada, y se identifica con la clave entre servicios del
+Secret `CLAVE_SERVICIO_STAGING`. La evaluación adaptativa sirve como
+protección también en staging: si un cambio hiciera aparecer un falso "apto"
+sobre el etiquetado, el CD falla.
+
+### Rollback staging
+
+[`rollback-staging.yml`](../.github/workflows/rollback-staging.yml) se corre
+a mano (*Run workflow*, en `main`) con un motivo y, si se quiere, un commit
+verificado. Sin commit, vuelve al último verificado anterior al que está
+desplegado. Despliega con el mismo script que el CD, corre las mismas pruebas
+posteriores al despliegue y comparte con el CD el grupo de concurrencia. La
+estrategia por caso está en
+[despliegue-staging.md](despliegue-staging.md#versión-desplegada-y-rollback).
 
 ## Quality gates
 
@@ -195,8 +225,9 @@ Estos son los nuestros y por qué elegimos cada umbral:
 | Trivy | Sin CRITICAL con arreglo disponible | Lo que no tiene arreglo no lo podemos corregir nosotros; las HIGH se reportan pero no bloquean |
 | Integración | Las 5 pruebas de CI Integración y las 36 de integración del backend pasan | Son las que prueban los servicios juntos: con Docker Compose, y el backend completo contra un FastAPI simulado |
 | Render Blueprint | Válido contra el esquema y la API | Un `render.yaml` roto solo se notaría al desplegar |
+| Integración a `main` | Pull Request con los 15 checks de CI en verde (ver [Protección de main](#protección-de-main)) | Lo que falla no llega a `main`, y por lo tanto tampoco al CD |
 | Despliegue a staging | Los 7 workflows de CI en verde para el commit de `main` | Lo que no pasó todos los gates anteriores no se publica |
-| Pruebas de salud del staging | Las 5 pasan dentro de 5 minutos cada una | Confirman que lo desplegado responde de punta a punta, no solo que el build terminó |
+| Pruebas posteriores al despliegue | Las 9 pasan dentro de 5 minutos cada una, incluido el commit desplegado y el recorrido funcional | Confirman que lo desplegado es la versión esperada y responde de punta a punta, no solo que el build terminó. Solo los commits que las pasan quedan como versión verificada para el rollback |
 
 Las HIGH que dejamos pasar no las ignoramos: están listadas, con su plan, en
 [limitaciones.md](limitaciones.md#5-seguridad-y-vulnerabilidades).
@@ -222,10 +253,11 @@ alguien borra una Variable. Ningún valor está en el repositorio.
 | `RENDER_OWNER_ID` | Variable | CI Render | ninguno: sin ella se omite el job | ID del workspace de Render |
 | `DB_PASSWORD` | Secret | CI Integración | aleatorio en cada ejecución | Contraseña de la base de CI |
 | `JWT_SECRET` | Secret | CI Integración | aleatorio en cada ejecución | Firma de tokens en CI |
-| `RENDER_API_KEY` | Secret | CI Render, CD Staging | en CI Render se omite la validación con la API; CD Staging falla | Validar el Blueprint y desplegar con la API de Render |
-| `GITHUB_TOKEN` | Secret automático | Gitleaks, CD Staging | lo crea GitHub | Leer los commits de un PR; revisar el CI y los despliegues de un commit |
-| `RENDER_SERVICE_ID_PYTHON`, `RENDER_SERVICE_ID_BACKEND`, `RENDER_SERVICE_ID_FRONTEND` | Variable del Environment `staging` | CD Staging | ninguno: el despliegue falla | ID de cada servicio en Render (`srv-…`) |
-| `STAGING_URL_PYTHON`, `STAGING_URL_BACKEND`, `STAGING_URL_FRONTEND` | Variable del Environment `staging` | CD Staging | ninguno: las pruebas de salud fallan | URL pública de cada servicio |
+| `RENDER_API_KEY` | Secret | CI Render, CD Staging, Rollback staging | en CI Render se omite la validación con la API; los despliegues fallan | Validar el Blueprint y desplegar con la API de Render |
+| `CLAVE_SERVICIO_STAGING` | Secret | CD Staging, Rollback staging | ninguno: las pruebas posteriores al despliegue fallan | La clave entre servicios de staging, para el recorrido funcional contra FastAPI |
+| `GITHUB_TOKEN` | Secret automático | Gitleaks, CD Staging, Rollback staging | lo crea GitHub | Leer los commits de un PR; revisar el CI y los despliegues de un commit; crear y leer los tags `staging-verificado-*` |
+| `RENDER_SERVICE_ID_PYTHON`, `RENDER_SERVICE_ID_BACKEND`, `RENDER_SERVICE_ID_FRONTEND` | Variable del Environment `staging` | CD Staging, Rollback staging | ninguno: el despliegue falla | ID de cada servicio en Render (`srv-…`) |
+| `STAGING_URL_PYTHON`, `STAGING_URL_BACKEND`, `STAGING_URL_FRONTEND` | Variable del Environment `staging` | CD Staging, Rollback staging | ninguno: las pruebas fallan | URL pública de cada servicio |
 
 El Environment `staging` solo acepta despliegues desde `main`, así que
 ningún workflow de otra rama puede leer sus Variables ni desplegar.
@@ -233,9 +265,16 @@ ningún workflow de otra rama puede leer sus Variables ni desplegar.
 Los Secrets que llegan a un `.env` se enmascaran con `::add-mask::`, así que
 si se imprimen por error en el log aparecen como `***`. Los secretos de
 staging (contraseña de la base, `JWT_SECRET`, `INGESTA_CLAVE`,
-`CLAVE_SERVICIO`) no están en
-GitHub: los genera Render (ver
-[despliegue-staging.md](despliegue-staging.md#secretos-y-configuración)).
+`CLAVE_SERVICIO`) los genera Render (ver
+[despliegue-staging.md](despliegue-staging.md#secretos-y-configuración)). La
+única copia en GitHub es `CLAVE_SERVICIO_STAGING`, que necesitan las pruebas
+posteriores al despliegue. Para crearla: en Render, servicio
+`foodaware-staging-python` → *Environment* → copiar el valor de
+`CLAVE_SERVICIO`; en GitHub, *Settings → Secrets and variables → Actions →
+New repository secret*, con el nombre `CLAVE_SERVICIO_STAGING`. Va a nivel de
+repositorio, como `RENDER_API_KEY`, porque el job de pruebas no usa el
+Environment (si lo usara, cada ejecución registraría un segundo despliegue).
+Si se regenera la clave en Render, hay que actualizar este Secret.
 
 ## Pruebas
 
@@ -247,10 +286,10 @@ GitHub: los genera Render (ver
 | Backend, integración | Jest (`npm run test:integration`) | 36 (4 archivos) | La app NestJS completa contra un FastAPI simulado: búsqueda y salud, detalle de producto, métricas, y perfil, alergias y compatibilidad con JWT |
 | Frontend | Vitest | 121 (12 archivos) | Búsqueda (incluidos los avisos de respaldo y "Despertando el servidor…"), detalle de producto, métricas, login, registro y perfil, sesión, servicios y etiquetas de alérgenos |
 | Integración | bash + curl en CI | 5 | Los servicios juntos, ver arriba |
-| Salud del staging | bash + curl en CD Staging | 5 | Lo desplegado en Render, por sus URL públicas |
+| Posteriores al despliegue | bash + curl en CD Staging y Rollback staging | 9 (más 1 informativa) | Lo desplegado en Render, por sus URL públicas: salud, commit desplegado y un recorrido funcional que no escribe datos |
 
-En total son 1185 pruebas automatizadas más las 5 de CI Integración y las 5
-de salud del staging. Las de Python las contamos el 25 de octubre de 2026 y
+En total son 1185 pruebas automatizadas más las 5 de CI Integración y las 9
+posteriores al despliegue. Las de Python las contamos el 25 de octubre de 2026 y
 las del backend y el frontend el 24 de octubre de 2026, corriendo cada grupo;
 todas pasaron.
 
@@ -325,7 +364,78 @@ npx de la imagen final, igual que hicimos con pip en el python-service.
 
 También nos dimos cuenta de que los PR #15 y #16 se pudieron integrar con CI
 Seguridad en rojo. Para que los gates bloqueen de verdad hay que activar una
-regla de protección de `main` que exija los checks antes del merge.
+regla de protección de `main` que exija los checks antes del merge (ver la
+sección siguiente).
+
+## Protección de main
+
+Una regla de GitHub (ruleset) que exige un Pull Request y los checks de CI en
+verde antes de unir a `main`. No está en el repositorio: se configura en
+GitHub, con permisos de administrador.
+
+### Pasos
+
+1. En el repositorio: *Settings → Rules → Rulesets → New ruleset → New branch
+   ruleset*.
+2. **Ruleset Name:** `Proteger main`. **Enforcement status:** `Active`.
+3. **Bypass list:** vacía. Así nadie, ni los administradores, puede saltarse
+   la regla; si hiciera falta en una emergencia, se desactiva el ruleset por
+   un momento y queda registrado.
+4. **Target branches → Add target → Include default branch** (`main`).
+5. **Branch rules:**
+   - `Restrict deletions` y `Block force pushes`: marcadas.
+   - `Require a pull request before merging`: marcada. En
+     **Required approvals**, `1` si el otro integrante puede revisar a tiempo
+     (GitHub no deja aprobar el propio Pull Request), o `0` si no. Con `0`
+     igual se exige el Pull Request y los checks.
+   - `Require status checks to pass`: marcada, con
+     `Require branches to be up to date before merging` también marcada
+     (así los checks corren sobre lo que va a quedar en `main`). En
+     **Add checks**, agregar los 15 de la tabla de abajo; GitHub los sugiere
+     por nombre a medida que se escribe.
+6. **Create**.
+
+Para comprobarlo: abrir un Pull Request de prueba; el botón de merge queda
+bloqueado hasta que los 15 checks terminen en verde, y un push directo a
+`main` se rechaza.
+
+La alternativa clásica es *Settings → Branches → Add branch protection rule*,
+con el patrón `main` y las mismas opciones (`Require a pull request before
+merging`, `Require status checks to pass before merging` con los mismos
+checks, sin `Allow force pushes` ni `Allow deletions`).
+
+### Checks obligatorios
+
+Son los nombres de los jobs, que es como GitHub nombra los checks. Un check
+aparece en el buscador recién después de haber corrido al menos una vez en la
+última semana.
+
+| Check | Workflow |
+|---|---|
+| `Lint, pruebas y auditoría` | CI Backend (NestJS) |
+| `Lint, pruebas, auditoría y compilación` | CI Frontend (Angular) |
+| `Lint, pruebas y contrato` | CI Python (FastAPI) |
+| `Dependencias vulnerables (pip-audit)` | CI Python (FastAPI) |
+| `Aplicación completa con docker compose` | CI Integración (NestJS ↔ FastAPI) |
+| `Detección de secretos (Gitleaks)` | CI Seguridad |
+| `SAST Python (bandit)` | CI Seguridad |
+| `SAST CodeQL (python)` | CI Seguridad |
+| `SAST CodeQL (javascript-typescript)` | CI Seguridad |
+| `Imagen Docker (Trivy, python-service)` | CI Seguridad |
+| `Imagen Docker (Trivy, backend)` | CI Seguridad |
+| `Imagen Docker (Trivy, frontend)` | CI Seguridad |
+| `render.yaml contra el JSON Schema oficial` | CI Render Blueprint |
+| `render.yaml con la API de Render (sin crear recursos)` | CI Render Blueprint |
+| `Terraform Validate & Plan` | Terraform CI |
+
+No van como obligatorios CD Staging ni Rollback staging, porque no corren en
+los Pull Requests, ni el check `CodeQL` que agrega la pestaña Security, que
+duplica los dos de CodeQL. El job de la API de Render se salta si no existe la
+Variable `RENDER_OWNER_ID`; GitHub cuenta un job saltado como aprobado, así que
+no bloquea.
+
+Si se renombra un job, hay que actualizar el check en el ruleset: con el
+nombre viejo, el Pull Request queda esperando un check que ya no existe.
 
 ## Evidencia
 

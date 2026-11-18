@@ -80,6 +80,7 @@ endpoint *Validate Blueprint* de la API, que no crea ni modifica recursos.
 | Lo demás (puertos, timeouts, opciones de ingesta) | `render.yaml` | Valores no sensibles, versionados |
 | `RENDER_API_KEY` | GitHub, Secret | Render → Account Settings → API Keys |
 | `RENDER_OWNER_ID` | GitHub, Variable | ID del workspace (`tea-…` o `usr-…`), en Render → Workspace Settings |
+| `CLAVE_SERVICIO_STAGING` | GitHub, Secret | Copia de `CLAVE_SERVICIO` de `foodaware-staging-python`, para las pruebas posteriores al despliegue ([pipeline-devsecops.md](pipeline-devsecops.md#variables-y-secrets-de-github-actions)) |
 
 Ningún secreto queda en el repositorio. Las variables con `sync: false` solo se
 piden al crear el Blueprint; si después hay que cambiarlas, se editan en
@@ -203,6 +204,7 @@ despliega por sí solo. Lo hace el workflow
    | `GET /api/metricas/calidad` | `porcentaje_validos` es mayor que 0 |
    | Frontend | Responde 200 con el HTML de la aplicación (`<app-root>`) |
    | Commit del backend | Si `/api/health` informa `commit`, es el desplegado. Mientras no lo informe queda como "Pendiente" y no hace fallar el CD |
+   | Recorrido funcional por FastAPI | Una búsqueda personalizada, el veredicto de un producto conocido de la semilla y la evaluación adaptativa sin falsos "apto". Usa el Secret `CLAVE_SERVICIO_STAGING` y no escribe datos ([pipeline-devsecops.md](pipeline-devsecops.md#cd-staging-render)) |
 
    Al final escribe una tabla con el resultado y el detalle de cada prueba en
    el resumen de la ejecución. Si todo pasa, marca el commit con el tag

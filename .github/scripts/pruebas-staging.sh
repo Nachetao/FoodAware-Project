@@ -9,14 +9,22 @@
 #                     300: un servicio dormido tarda ~1 min en despertar)
 #   PAUSA_SEGUNDOS    entre reintentos (por defecto 15)
 #   CONSULTA          búsqueda de prueba (por defecto "galletas")
+#   CLAVE_SERVICIO    clave entre servicios (Secret CLAVE_SERVICIO_STAGING),
+#                     para las pruebas funcionales contra FastAPI
+#   PRODUCTO_PRUEBA   producto de la semilla con lácteos declarados por Open
+#                     Food Facts (por defecto la Leche Semidescremada
+#                     0400050270413)
 #
-# Escribe una tabla en el resumen de la ejecución y termina con error si
-# alguna prueba falla.
+# Además de la salud de cada servicio, hace un recorrido funcional corto que
+# no escribe datos: una búsqueda personalizada, el veredicto de un producto
+# conocido y la evaluación adaptativa. Escribe una tabla en el resumen de la
+# ejecución y termina con error si alguna prueba falla.
 set -euo pipefail
 
 PLAZO_SEGUNDOS=${PLAZO_SEGUNDOS:-300}
 PAUSA_SEGUNDOS=${PAUSA_SEGUNDOS:-15}
 CONSULTA=${CONSULTA:-galletas}
+PRODUCTO_PRUEBA=${PRODUCTO_PRUEBA:-0400050270413}
 RESUMEN=${GITHUB_STEP_SUMMARY:-/dev/null}
 
 for variable in URL_PYTHON URL_BACKEND URL_FRONTEND; do
@@ -25,6 +33,10 @@ for variable in URL_PYTHON URL_BACKEND URL_FRONTEND; do
     exit 1
   fi
 done
+if [[ -z "${CLAVE_SERVICIO:-}" ]]; then
+  echo "::error::Falta el Secret CLAVE_SERVICIO_STAGING (docs/pipeline-devsecops.md)"
+  exit 1
+fi
 if [[ ! "${COMMIT_ESPERADO:-}" =~ ^[0-9a-f]{40}$ ]]; then
   echo "::error::COMMIT_ESPERADO debe ser un commit completo"
   exit 1
@@ -77,6 +89,56 @@ frontend() {
   [[ "$respuesta" == "200 text/html"* ]] && grep -q '<app-root' index.html
 }
 
+# --- recorrido funcional contra FastAPI (no escribe datos) -------------------
+
+fastapi() {
+  # fastapi <método> <ruta> [cuerpo JSON]
+  local argumentos=(-sS --fail-with-body --max-time 60 -X "$1"
+                    -H "X-Clave-Servicio: $CLAVE_SERVICIO"
+                    -H "Content-Type: application/json")
+  if [[ $# -ge 3 ]]; then
+    argumentos+=(-d "$3")
+  fi
+  curl "${argumentos[@]}" "$URL_PYTHON$2"
+}
+busqueda_personalizada() {
+  local cuerpo
+  cuerpo=$(fastapi POST /search/personalized \
+    '{"consulta": "chocolate sin leche", "perfil": {"alergias": ["mani"]}, "limit": 5}') || return 1
+  jq -r '"\(.total) visibles, \(.no_aptos.texto) Perfil aplicado: \(.perfil_aplicado.alergias | join(", "))"' <<< "$cuerpo"
+  # "sin leche" se interpreta, se suma al perfil y ningún visible es no_apto
+  # ni tiene lácteos.
+  jq -e '(.interpretacion.restricciones | map(.codigo) | index("lacteos"))
+         and (.perfil_aplicado.alergias | index("mani") and index("lacteos"))
+         and .total > 0
+         and all(.resultados[]; .veredicto.veredicto != "no_apto"
+                 and ((.producto.alergenos | index("lacteos")) | not))' \
+    <<< "$cuerpo" > /dev/null
+}
+veredicto_producto() {
+  local cuerpo
+  cuerpo=$(fastapi POST "/products/$PRODUCTO_PRUEBA/compatibility" \
+    '{"perfil": {"alergias": ["lacteos"]}}') || return 1
+  jq -r '"\(.veredicto) (confianza \(.confianza)): \(.explicacion)"' <<< "$cuerpo"
+  jq -e '.veredicto == "no_apto"
+         and (.alergenos_en_conflicto | index("lacteos"))
+         and (.aviso | length > 0)' <<< "$cuerpo" > /dev/null
+}
+evaluacion_adaptativa() {
+  local cuerpo
+  cuerpo=$(fastapi GET /metrics/evaluation/adaptive) || return 1
+  jq -r '"\(.etiquetado.productos_evaluados) de \(.etiquetado.productos_revisados) productos, \([.veredictos[].falsos_apto] | add) falsos apto, P@5 \(.busqueda.precision_base) → \(.busqueda.precision_personalizada)"' <<< "$cuerpo"
+  # Sobre el corpus de staging (la semilla), el etiquetado completo está en
+  # el índice, ningún perfil tiene falsos "apto" y la personalizada no
+  # muestra no aptos.
+  jq -e '.etiquetado.productos_revisados > 0
+         and .etiquetado.productos_evaluados == .etiquetado.productos_revisados
+         and ([.veredictos[] | .falsos_apto + .falsos_apto_por_traza] | add) == 0
+         and .busqueda.no_aptos_top_personalizado == 0
+         and .busqueda.precision_personalizada > .busqueda.precision_base' \
+    <<< "$cuerpo" > /dev/null
+}
+
 DETALLE=""
 # reintentar <prueba>: la repite hasta que pase o se cumpla el plazo.
 reintentar() {
@@ -104,6 +166,9 @@ pruebas=(
   "busqueda|backend: búsqueda \"$CONSULTA\" a través de FastAPI"
   "metricas|backend: GET /api/metricas/calidad (válidos > 0)"
   "frontend|frontend: HTML de la aplicación"
+  "busqueda_personalizada|FastAPI: búsqueda personalizada \"chocolate sin leche\" (alergia al maní)"
+  "veredicto_producto|FastAPI: veredicto de $PRODUCTO_PRUEBA con alergia a lácteos"
+  "evaluacion_adaptativa|FastAPI: evaluación adaptativa sin falsos apto"
 )
 {
   echo "### Pruebas de salud del staging (commit \`${COMMIT_ESPERADO:0:7}\`)"

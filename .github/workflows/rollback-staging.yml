@@ -166,6 +166,8 @@ jobs:
           URL_BACKEND: ${{ needs.desplegar.outputs.url_backend }}
           URL_FRONTEND: ${{ needs.desplegar.outputs.url_frontend }}
           COMMIT_ESPERADO: ${{ needs.desplegar.outputs.sha }}
+          # Clave entre servicios para el recorrido funcional contra FastAPI.
+          CLAVE_SERVICIO: ${{ secrets.CLAVE_SERVICIO_STAGING }}
         run: bash .github/scripts/pruebas-staging.sh
 
       - name: Si las pruebas fallan
