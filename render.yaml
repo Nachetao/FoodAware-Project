@@ -5,9 +5,10 @@
 #   (autoDeployTrigger "off": un push no despliega por sí solo).
 # - Los cambios de este archivo se aplican con "Manual Sync" en el Blueprint
 #   (Auto Sync desactivado), para no saltarse el CI.
-# - Secretos: Render genera JWT_SECRET e INGESTA_CLAVE (generateValue) y la
-#   contraseña de la base; OFF_USER_AGENT se pide al crear el Blueprint
-#   (sync: false). Ninguno queda en el repositorio.
+# - Secretos: Render genera JWT_SECRET, INGESTA_CLAVE y CLAVE_SERVICIO
+#   (generateValue; el backend toma CLAVE_SERVICIO de python-service con
+#   fromService) y la contraseña de la base; OFF_USER_AGENT se pide al
+#   crear el Blueprint (sync: false). Ninguno queda en el repositorio.
 # - Los web services gratuitos no reciben tráfico por red privada: el backend
 #   llama a python-service por su URL pública.
 # - Las URL públicas (PYTHON_API_URL, CORS_ORIGINS y API_URL) también son
@@ -69,6 +70,15 @@ services:
       # Clave de POST /ingest/runs (ingestas manuales).
       - key: INGESTA_CLAVE
         generateValue: true
+      # Clave compartida con el backend (header X-Clave-Servicio). Se genera
+      # aquí y el backend la toma con fromService, así no hay que copiarla.
+      - key: CLAVE_SERVICIO
+        generateValue: true
+      # Transición: "false" mientras el backend no envía la clave (sin
+      # header se acepta con una advertencia; una clave incorrecta da 403).
+      # Pasa a "true" cuando el backend la envíe.
+      - key: CLAVE_SERVICIO_OBLIGATORIA
+        value: "false"
 
   - type: web
     name: foodaware-staging-backend
@@ -118,6 +128,13 @@ services:
         value: "5000"
       - key: PYTHON_API_REINTENTOS
         value: "2"
+      # La misma clave que generó python-service, para el header
+      # X-Clave-Servicio.
+      - key: CLAVE_SERVICIO
+        fromService:
+          type: web
+          name: foodaware-staging-python
+          envVarKey: CLAVE_SERVICIO
       # URL pública del frontend, el único origen permitido por CORS (varios
       # se separan con comas). Ej.: https://foodaware-staging-frontend.onrender.com
       - key: CORS_ORIGINS

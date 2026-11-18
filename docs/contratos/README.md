@@ -107,7 +107,7 @@ docker compose up --build -d python-service
 | GET | `/ingest/runs/latest` | `ResumenIngesta` | 404, 500 | real |
 | GET | `/metrics/quality` | `MetricasCalidad` | 500 | real |
 | GET | `/metrics/evaluation` | `MetricasEvaluacion` | 500 | real |
-| POST | `/products/{codigo_barras}/compatibility` | `Veredicto` | 404, 422, 500, 503, 504 | formato definitivo; reglas en desarrollo ([Capacidad adaptativa](#capacidad-adaptativa)) |
+| POST | `/products/{codigo_barras}/compatibility` | `Veredicto` | 404, 422, 500, 503, 504 | real ([Capacidad adaptativa](#capacidad-adaptativa)) |
 | POST | `/search/personalized` | `RespuestaBusquedaPersonalizada` | 422, 500 | formato definitivo; falta interpretar la consulta ([Capacidad adaptativa](#capacidad-adaptativa)) |
 
 Parámetros de búsqueda: `q` de 2 a 100 caracteres, `limit` de 1 a 50 (10 por
@@ -118,9 +118,40 @@ Open Food Facts. Exige el header `X-Clave-Ingesta` con el valor de la variable
 `INGESTA_CLAVE` del servicio, y la compara en tiempo constante. Está cerrado por
 defecto: si `INGESTA_CLAVE` no está definida o está vacía, responde 403 siempre.
 Sin la clave correcta responde 403 `FORBIDDEN` antes de validar el cuerpo, y con
-el mismo mensaje haya o no una clave configurada. `GET /ingest/runs/latest` y los
-demás endpoints siguen públicos. NestJS no llama a este endpoint; las ingestas
-automáticas del servicio no pasan por HTTP y no necesitan la clave.
+el mismo mensaje haya o no una clave configurada. NestJS no llama a este
+endpoint, así que no exige `X-Clave-Servicio`; las ingestas automáticas del
+servicio no pasan por HTTP y no necesitan ninguna clave.
+
+**Clave entre servicios (`X-Clave-Servicio`).** Los endpoints que consume
+NestJS exigen el header `X-Clave-Servicio` con el valor de la variable
+`CLAVE_SERVICIO`, que comparten los dos servicios:
+
+| Exigen la clave | No la exigen |
+|---|---|
+| `GET /search`, `GET /products/{codigo_barras}`, `GET /metrics/quality`, `GET /metrics/evaluation`, `GET /ingest/runs/latest`, `POST /analizar`, `POST /products/{codigo_barras}/compatibility`, `POST /search/personalized` | `GET /health` (lo usan Render y Docker como health check), `GET /`, `/docs`, `/openapi.json` y `POST /ingest/runs` (tiene su propia clave) |
+
+Funciona igual que la clave de ingesta: se compara en tiempo constante (los
+SHA-256 de las dos claves con `hmac.compare_digest`, así tampoco se filtra el
+largo), se revisa antes de validar el cuerpo y de la simulación de errores, y
+el rechazo es siempre 403 `FORBIDDEN` con el mismo mensaje ("Se requiere una
+clave de servicio válida"), sea que falte el header, que no coincida o que no
+haya clave configurada. El log registra la ruta del rechazo, nunca la clave.
+En `/analizar` el 403 usa el formato de error del contrato, aunque sus demás
+errores siguen siendo los nativos de FastAPI.
+
+`CLAVE_SERVICIO_OBLIGATORIA` controla qué pasa cuando no llega el header:
+
+| `CLAVE_SERVICIO_OBLIGATORIA` | Sin header (o vacío) | Clave incorrecta | Clave correcta |
+|---|---|---|---|
+| `true` (por defecto en el código) | 403 | 403 | se atiende |
+| `false` (transición) | se atiende y queda una advertencia en el log (`evento: clave_servicio_ausente`) | 403 | se atiende |
+
+Con `true` y sin `CLAVE_SERVICIO` definida, todo lo protegido responde 403:
+está cerrado por defecto. `false` existe para la transición: hoy el backend
+todavía no envía el header, y en `docker-compose.yml` y `render.yaml` la
+variable está en `false` para que siga funcionando. Cuando NestJS envíe la
+clave en todas sus llamadas, se cambia a `true` (ver
+[despliegue-staging.md](../despliegue-staging.md#activar-la-clave-entre-servicios)).
 
 `/search` declara 503 y 504 en OpenAPI, pero hoy no los produce porque no
 consulta la fuente. `estado_fuente` vale `"online"` si la última ingesta
@@ -295,7 +326,7 @@ Respuesta (`Veredicto`):
 |---|---|
 | `veredicto` | `apto`, `apto_con_advertencia` o `no_apto` |
 | `alergenos_en_conflicto` | Alérgenos del perfil que el producto tiene como ingrediente |
-| `trazas_en_conflicto` | Alérgenos del perfil que el producto puede contener |
+| `trazas_en_conflicto` | Lo que el perfil evita (por alergia o por dieta) y el producto puede contener |
 | `dietas_no_confirmadas` | Dietas del perfil que el producto no declara cumplir |
 | `conflictos` | Cada conflicto con su `tipo` (`alergeno`, `traza`, `posible`, `dieta`) y su `origen`: `fuente` (lo declara Open Food Facts), `texto` (solo lo detectamos en los ingredientes) o `indicio` (alérgeno posible, como la lecitina E322 sin origen). En `tipo: "dieta"`, `codigo` es la dieta contradicha |
 | `motivos_no_apto` | Qué lo hizo `no_apto` (`tipo` y `codigo`; `codigo` nulo en `datos_insuficientes`). Vacío en los demás veredictos |
@@ -330,29 +361,58 @@ Food Facts etiqueta con `en:milk`:
 }
 ```
 
-**Reglas del veredicto.** Se aplica la primera fila que corresponda:
+**Reglas del veredicto.** El veredicto es el de la fila más grave que se
+cumpla; `motivos_no_apto` trae todas las filas que lo hicieron `no_apto`, no
+solo la primera. "Lo que el perfil evita" son sus alergias más los alérgenos
+que prohíben sus dietas (tabla de abajo): una traza de gluten importa igual a
+quien es alérgico al gluten que a quien sigue una dieta sin gluten.
 
 | # | Situación | Modo normal | Modo estricto |
 |---|---|---|---|
 | 1 | Un alérgeno del perfil está en `alergenos` | `no_apto` | `no_apto` |
-| 2 | El producto contradice una dieta (vegano o vegetariano con un alérgeno de origen animal, `sin_gluten` con gluten) | `no_apto` | `no_apto` |
-| 3 | Una traza del perfil está en `trazas` | `apto_con_advertencia` | `no_apto` |
-| 4 | Un alérgeno del perfil aparece como `alergeno_posible` | `apto_con_advertencia` | `no_apto` |
+| 2 | Un alérgeno del producto contradice una dieta del perfil | `no_apto` | `no_apto` |
+| 3 | Algo que el perfil evita está en `trazas` (y no es ya un ingrediente) | `apto_con_advertencia` | `no_apto` |
+| 4 | Algo que el perfil evita aparece como `alergeno_posible` | `apto_con_advertencia` | `no_apto` |
 | 5 | Con alergias o dietas en el perfil, `datos_suficientes` es `false` | `apto_con_advertencia` | `no_apto` |
-| 6 | El perfil pide una dieta que el producto no declara en `etiquetas_dieta` | `apto_con_advertencia` | `apto_con_advertencia` |
+| 6 | El perfil pide una dieta que el producto no declara en `etiquetas_dieta` (y que no contradice) | `apto_con_advertencia` | `apto_con_advertencia` |
 | 7 | Ninguna de las anteriores | `apto` | `apto` |
 
-**Confianza.** En `no_apto` depende del conflicto que lo decidió: `alta` si lo
-declara la fuente, `media` si solo lo detectamos en el texto y `baja` si es un
-indicio o faltan datos. En `apto` y `apto_con_advertencia` toma el valor más
-bajo entre la completitud (`alta` desde 0,8, `media` desde 0,5, `baja` bajo
-0,5) y el origen de los conflictos. Un `apto` nunca tiene confianza `baja`,
-porque con datos insuficientes se aplica la fila 5.
+Alérgenos que contradicen cada dieta (fila 2) y que se evitan como traza o
+indicio (filas 3 y 4):
 
-**Estado de implementación:** el formato es el definitivo. Hoy el servicio
-aplica las filas 1 y 3; en los demás casos responde `apto_con_advertencia` con
-una explicación que lo indica, y nunca `apto`. Las filas 2 y 4 a 7 y la regla
-completa de confianza llegan en el siguiente cambio, sin cambiar el formato.
+| Dieta | Alérgenos |
+|---|---|
+| `vegano` | lácteos, huevo, pescado, crustáceos y moluscos |
+| `vegetariano` | pescado, crustáceos y moluscos |
+| `sin_gluten` | gluten |
+| `sin_lactosa` | ninguno: un deslactosado lleva lácteos y cumple la dieta, así que solo se confirma con la etiqueta (fila 6) |
+
+Solo se revisan los alérgenos: un producto con miel o gelatina y sin etiqueta
+vegana queda en la fila 6, no en la 7.
+
+`alergenos_en_conflicto` solo trae alergias del perfil; las contradicciones de
+dieta van en `conflictos` con `tipo: "dieta"` y la dieta como `codigo`.
+`trazas_en_conflicto` sí incluye las trazas que se evitan por una dieta.
+
+**Confianza.** En `no_apto` depende de lo que lo decidió: `alta` si algún
+conflicto decisivo lo declara la fuente, `media` si solo lo detectamos en el
+texto y `baja` si es un indicio o si lo decidieron los datos insuficientes (en
+ese caso `motivos_confianza` dice qué falta). En `apto` y
+`apto_con_advertencia` es el nivel más bajo entre la completitud (`alta` desde
+0,8, `media` desde 0,5, `baja` bajo 0,5), los datos que faltan y el origen de
+los conflictos (`media` si alguno es solo del texto, `baja` si alguno es un
+indicio), y `motivos_confianza` trae todos los factores que la bajaron. Con
+alergias o dietas en el perfil, un `apto` nunca tiene confianza `baja`, porque
+con datos insuficientes se aplica la fila 5. Con el perfil vacío no hay nada
+que revisar: el veredicto es `apto` y la confianza solo refleja la ficha.
+
+**Explicación.** Una o más frases, en este orden: alérgenos ("Contiene maní y
+lácteos, que están en tu perfil."), dietas contradichas ("No cumple la dieta
+vegana: contiene lácteos y huevo."), trazas, indicios, datos insuficientes
+("No podemos revisarlo bien: no tiene lista de ingredientes.") y dietas no
+confirmadas. En modo estricto, lo que solo es `no_apto` por el modo lleva
+"(modo estricto)". En un `no_apto` por alérgeno o dieta en modo normal, las
+trazas se informan en `trazas_en_conflicto` pero no en la explicación.
 
 ### `POST /search/personalized`
 
@@ -402,7 +462,7 @@ Ejemplo abreviado, con códigos ilustrativos:
   "estado_fuente": "cache",
   "resultados": [
     {"producto": {"codigo_barras": "7800000000020", "...": "..."}, "score": 1.2134,
-     "posicion": 1, "posicion_base": 2, "veredicto": {"veredicto": "apto_con_advertencia", "...": "..."}}
+     "posicion": 1, "posicion_base": 2, "veredicto": {"veredicto": "apto", "...": "..."}}
   ],
   "no_aptos": {
     "total": 2,
@@ -438,8 +498,9 @@ consulta original.
 - `GET /metrics/evaluation/adaptive`: Precision@5 y tasa de falsos "apto" de
   la versión adaptativa contra la base, sobre un conjunto de productos
   etiquetados a mano. Se define junto con la búsqueda personalizada completa.
-- Autenticación entre servicios: estos endpoints, y los demás que consume
-  NestJS salvo `/health`, van a exigir el header `X-Clave-Servicio`.
+
+Estos dos endpoints exigen `X-Clave-Servicio`, como todos los que consume
+NestJS (ver [Endpoints](#endpoints)).
 
 ## Errores
 
@@ -452,14 +513,15 @@ Los endpoints del contrato responden siempre con esta forma:
 | Código | HTTP | Cuándo |
 |---|---|---|
 | `VALIDATION_ERROR` | 422 | Parámetros o cuerpo inválidos |
-| `FORBIDDEN` | 403 | `POST /ingest/runs` sin la clave interna correcta |
+| `FORBIDDEN` | 403 | `POST /ingest/runs` sin la clave interna correcta, o un endpoint que consume NestJS sin `X-Clave-Servicio` válida |
 | `NOT_FOUND` | 404 | Producto, ejecución o ruta inexistente |
 | `SOURCE_UNAVAILABLE` | 503 | Open Food Facts no responde |
 | `SOURCE_TIMEOUT` | 504 | Open Food Facts excede el timeout |
 | `INTERNAL_ERROR` | 500 | Error no controlado (sin detalles internos) |
 
 `/`, `/health` y `/analizar` conservan los errores nativos de FastAPI (`{"detail": ...}`)
-porque NestJS ya los consume.
+porque NestJS ya los consume. La excepción es el 403 de `X-Clave-Servicio` en
+`/analizar`, que usa la forma de arriba.
 
 ## Headers
 
@@ -468,6 +530,7 @@ porque NestJS ya los consume.
 | `X-Request-ID` | petición y respuesta | Si NestJS lo envía, se devuelve igual (letras, números, `.`, `_`, `-`, máx. 128); si no, se genera un uuid4. También va en `error.request_id`. |
 | `X-Response-Time-ms` | respuesta | Milisegundos que tardó el servicio hasta enviar la respuesta (p. ej. `12.345`). Va en todas las respuestas, también en los errores. |
 | `X-Clave-Ingesta` | petición | Solo en `POST /ingest/runs`: clave interna igual a `INGESTA_CLAVE`. Sin ella, o si no coincide, responde 403 `FORBIDDEN`. |
+| `X-Clave-Servicio` | petición | En los endpoints que consume NestJS: clave igual a `CLAVE_SERVICIO`. Si no coincide, 403 `FORBIDDEN`; si falta, 403 o advertencia según `CLAVE_SERVICIO_OBLIGATORIA` (ver [Endpoints](#endpoints)). |
 | `X-Simular-Error` | petición | Solo con `SIMULAR_ERRORES_HABILITADO=true` en `.env`. Valores: `SOURCE_UNAVAILABLE` (503), `SOURCE_TIMEOUT` (504), `INTERNAL_ERROR` (500). Funciona en los endpoints del contrato (no en `/`, `/health` ni `/analizar`); no aparece en OpenAPI. |
 
 ## Códigos de alérgenos (`AllergenCode`)

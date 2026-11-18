@@ -73,6 +73,8 @@ endpoint *Validate Blueprint* de la API, que no crea ni modifica recursos.
 | `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` | Render (backend) | `fromDatabase`: Render los toma de la base; la contraseña la genera Render |
 | `JWT_SECRET` | Render (backend) | `generateValue: true` (Render genera 256 bits aleatorios) |
 | `INGESTA_CLAVE` | Render (python-service) | `generateValue: true` |
+| `CLAVE_SERVICIO` | Render (python-service y backend) | `generateValue: true` en python-service; el backend la toma de ahí con `fromService`, así los dos tienen la misma sin copiarla |
+| `CLAVE_SERVICIO_OBLIGATORIA` | `render.yaml` (python-service) | `"false"` durante la transición (ver "Activar la clave entre servicios") |
 | `OFF_USER_AGENT` | Render (python-service) | `sync: false`: se escribe al crear el Blueprint, con el correo del equipo |
 | `PYTHON_API_URL`, `CORS_ORIGINS` (backend) y `API_URL` (frontend) | Render | `sync: false`: se escriben al crear el Blueprint. No son secretas, pero dependen de las URL que asigne Render |
 | Lo demás (puertos, timeouts, opciones de ingesta) | `render.yaml` | Valores no sensibles, versionados |
@@ -242,6 +244,46 @@ Las variables con `sync: false` no se actualizan con el sync: se editan en el
 servicio. Los nombres de la base, su región, su usuario y su versión de
 PostgreSQL no se pueden cambiar después de crearla.
 
+## Activar la clave entre servicios
+
+Los endpoints de FastAPI que consume el backend exigen el header
+`X-Clave-Servicio` con el valor de `CLAVE_SERVICIO` (detalle en el
+[contrato](contratos/README.md#endpoints)). Mientras el backend no envíe la
+clave, `CLAVE_SERVICIO_OBLIGATORIA` queda en `"false"`: FastAPI atiende las
+peticiones sin header y deja una advertencia en el log, pero rechaza con 403
+una clave incorrecta. Se activa en tres pasos:
+
+1. **Antes de unir a `main` el cambio que agrega la clave**, en Render:
+   servicio `foodaware-staging-python` → *Environment* → agregar
+   `CLAVE_SERVICIO_OBLIGATORIA` con el valor `false`. Hace falta porque las
+   variables nuevas de `render.yaml` no llegan con el despliegue automático,
+   solo con *Manual Sync*: si el CD despliega el código nuevo antes que la
+   variable, el servicio usa el valor por defecto (`true`), el backend recibe
+   403 en todo y las pruebas de salud del CD fallan.
+2. **Después del merge**, abrir el Blueprint en Render y pulsar *Manual Sync*.
+   Render crea `CLAVE_SERVICIO` en python-service (con un valor aleatorio), la
+   copia al backend con `fromService` y deja `CLAVE_SERVICIO_OBLIGATORIA` en
+   `false`, igual que en el paso 1. En los logs de python-service aparecen
+   advertencias `clave_servicio_ausente` en cada llamada del backend: es lo
+   esperado mientras el backend no envíe el header.
+3. **Cuando el backend envíe la clave en todas sus llamadas** (y ese cambio
+   esté desplegado): comprobar en los logs de python-service que ya no
+   aparecen advertencias `clave_servicio_ausente`, cambiar
+   `CLAVE_SERVICIO_OBLIGATORIA` a `"true"` en `render.yaml` con un PR y, después
+   del merge, volver a pulsar *Manual Sync*. Para probarlo:
+
+   ```powershell
+   # Sin clave: debe responder 403 FORBIDDEN.
+   Invoke-WebRequest -UseBasicParsing "https://foodaware-staging-python.onrender.com/metrics/quality"
+   # Por el backend, que sí envía la clave: debe responder las métricas.
+   Invoke-RestMethod "https://foodaware-staging-backend.onrender.com/api/metricas/calidad"
+   ```
+
+En local es lo mismo: `CLAVE_SERVICIO` en `.env` (la leen los dos
+contenedores) y `CLAVE_SERVICIO_OBLIGATORIA=true` cuando el backend la envíe.
+Si `.env` no define `CLAVE_SERVICIO_OBLIGATORIA`, `docker-compose.yml` la deja
+en `false`, que es lo que pasa en CI Integración.
+
 ## Lanzar una ingesta manual en staging
 
 `POST /ingest/runs` exige la clave interna `INGESTA_CLAVE`, que Render generó.
@@ -263,8 +305,9 @@ Invoke-RestMethod -Method Post -Uri "$url/ingest/runs" `
   -ContentType "application/json" `
   -Body '{"categorias": ["en:biscuits", "en:dairies"], "max_productos": 100}'
 
-# Revisa cómo terminó (estado "completado" y los conteos).
-Invoke-RestMethod "$url/ingest/runs/latest"
+# Revisa cómo terminó (estado "completado" y los conteos). Se consulta por
+# el backend: GET /ingest/runs/latest de FastAPI exige X-Clave-Servicio.
+Invoke-RestMethod "https://foodaware-staging-backend.onrender.com/api/ingesta/ultima"
 Remove-Variable clave, segura
 ```
 
@@ -375,6 +418,7 @@ Según la [documentación de Render](https://render.com/docs/free):
 | CD Staging falla en "Desplegar en Render" | El build o el arranque falló en Render, o falta una Variable del Environment o el Secret `RENDER_API_KEY` | El error dice qué servicio y en qué estado quedó; los logs del build están en el Dashboard de Render. Los servicios anteriores en el orden ya quedaron con el commit nuevo |
 | CD Staging falla en las pruebas de salud | Un servicio no despertó en 5 minutos, o el despliegue quedó funcionando mal | La tabla del resumen dice qué prueba falló y qué respondió; repetir con *Re-run failed jobs* si fue un arranque lento |
 | Búsqueda con `X-Fuente-Datos: respaldo` | python-service dormido o lento | Despertar python-service (`/health`) y repetir |
+| La búsqueda, el detalle y las métricas del backend responden 403 `FORBIDDEN` (el backend propaga los 4xx de FastAPI y no usa el respaldo); FastAPI registra `clave_servicio_rechazada` | El backend envía una `CLAVE_SERVICIO` distinta, o `CLAVE_SERVICIO_OBLIGATORIA` está en `true` y el backend todavía no envía la clave | Revisar que `CLAVE_SERVICIO` del backend venga de python-service (`fromService`) o dejar `CLAVE_SERVICIO_OBLIGATORIA` en `"false"` (ver "Activar la clave entre servicios") |
 | `/api/health` del backend con `fastapi: error` | `PYTHON_API_URL` no coincide con la URL real o python-service está dormido | Revisar el paso 6; despertar python-service |
 | El frontend no llega al backend (error de red o CORS) | `API_URL` o `CORS_ORIGINS` con una URL distinta, o `API_URL` terminada en `/api` | Revisar el paso 6 y redesplegar el frontend |
 | El deploy falla porque Render no detecta un puerto abierto | El servicio no escucha en `PORT` | Revisar `PORT` en `render.yaml` (8000 y 3000) |

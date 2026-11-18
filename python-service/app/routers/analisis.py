@@ -1,13 +1,20 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
+from app.core.clave_servicio import exigir_clave_servicio
+from app.core.errores import respuestas_error
 from app.schemas.analisis import ProductoInput
 
 router = APIRouter(tags=["analisis"])
 
 
 # Contrato consumido por backend/src/ia/ia.service.ts: no cambiar la forma
-# de la respuesta sin coordinarlo con NestJS.
-@router.post("/analizar")
+# de la respuesta sin coordinarlo con NestJS. El 403 de la clave sí usa el
+# formato de error del contrato; los demás errores siguen siendo los nativos.
+@router.post(
+    "/analizar",
+    dependencies=[Depends(exigir_clave_servicio)],
+    responses={403: respuestas_error(403)[403]},
+)
 def analizar_producto(producto: ProductoInput):
     # Lógica simulada de análisis
     ingredientes_lower = [

@@ -178,14 +178,16 @@ no se sube al repositorio.
 | `LIMITADOR_ESPERA_MAX_SEGUNDOS` | python-service | Máximo que una petición espera al limitador de tasa | `3` |
 | `CACHE_DB_PATH` | python-service | Ruta de la caché SQLite | `/data/foodaware-cache.sqlite3` |
 | `INGESTA_CLAVE` | python-service | Clave de `POST /ingest/runs`; vacía, el endpoint queda cerrado | vacía |
+| `CLAVE_SERVICIO` | python-service, backend | Clave compartida del header `X-Clave-Servicio`, que FastAPI exige en los endpoints que consume el backend | vacía |
+| `CLAVE_SERVICIO_OBLIGATORIA` | python-service | `true`: sin la clave, 403. `false`: transición mientras el backend no la envía (sin header se acepta con una advertencia) | `true` en el código; `false` en `.env.example`, `docker-compose.yml` y Render |
 | `CARGAR_SEMILLA_SI_VACIA` | python-service | Cargar la semilla del corpus si la caché está vacía | `true` |
 | `INGESTA_AL_INICIAR`, `INGESTA_INTERVALO_HORAS`, `CACHE_TTL_HORAS` | python-service | Estrategia de actualización | `true`, `24`, `72` |
 | `INGESTA_CATEGORIAS`, `INGESTA_MAX_PRODUCTOS` | python-service | Categorías y tope de productos de cada ingesta | 7 categorías, `500` |
 
 El detalle de las variables del python-service está en
 [docs/contratos/README.md](docs/contratos/README.md#estrategia-de-actualización).
-En staging, Render genera los secretos (`JWT_SECRET`, `INGESTA_CLAVE` y la
-contraseña de la base); ver [docs/despliegue-staging.md](docs/despliegue-staging.md#secretos-y-configuración).
+En staging, Render genera los secretos (`JWT_SECRET`, `INGESTA_CLAVE`,
+`CLAVE_SERVICIO` y la contraseña de la base); ver [docs/despliegue-staging.md](docs/despliegue-staging.md#secretos-y-configuración).
 
 ## Documentación
 

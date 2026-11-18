@@ -4,6 +4,7 @@ from pydantic import SecretStr
 
 from app.core import config
 from app.core.clave_ingesta import HEADER_CLAVE_INGESTA
+from app.core.clave_servicio import HEADER_CLAVE_SERVICIO
 from app.core.errores import NoEncontrado
 from app.main import app, construir_servicios
 from app.services.ingesta import ServicioIngesta
@@ -11,6 +12,9 @@ from tests.payloads_off import productos_de_ejemplo
 
 BASE_OFF = "https://world.openfoodfacts.org"
 CLAVE_INGESTA = "clave-de-prueba"
+CLAVE_SERVICIO = "clave-de-servicio-de-prueba"
+# Lo que envía NestJS; los tests que crean su propio TestClient lo usan.
+HEADERS_SERVICIO = {HEADER_CLAVE_SERVICIO: CLAVE_SERVICIO}
 
 
 def pytest_configure(config):
@@ -93,6 +97,15 @@ def clave_ingesta(monkeypatch):
                         SecretStr(CLAVE_INGESTA))
 
 
+@pytest.fixture(autouse=True)
+def clave_servicio(monkeypatch):
+    # Como en producción: clave configurada y obligatoria. `client` la envía
+    # siempre; test_clave_servicio prueba los rechazos y la transición.
+    monkeypatch.setattr(config.settings, "clave_servicio",
+                        SecretStr(CLAVE_SERVICIO))
+    monkeypatch.setattr(config.settings, "clave_servicio_obligatoria", True)
+
+
 @pytest.fixture
 def off_falso():
     return ClienteOFFFalso()
@@ -104,8 +117,8 @@ def client(tmp_path, monkeypatch, off_falso):
                         str(tmp_path / "cache.sqlite3"))
     # Sin User-Agent el arranque no crea un cliente real de OFF.
     monkeypatch.setattr(config.settings, "off_user_agent", None)
-    with TestClient(app, headers={HEADER_CLAVE_INGESTA: CLAVE_INGESTA}) \
-            as cliente_http:
+    headers = {HEADER_CLAVE_INGESTA: CLAVE_INGESTA, **HEADERS_SERVICIO}
+    with TestClient(app, headers=headers) as cliente_http:
         repositorio = app.state.repositorio
         servicios = construir_servicios(repositorio, off_falso)
         app.state.catalogo = servicios.catalogo

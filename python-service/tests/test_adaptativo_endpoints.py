@@ -125,8 +125,10 @@ def test_solicitud_invalida_responde_422_del_contrato(client, codigo, cuerpo):
 def test_filtrar_oculta_los_no_aptos_y_dice_por_que(client, corpus):
     respuesta = personalizada(client)
 
-    codigos = [r.producto.codigo_barras for r in respuesta.resultados]
-    assert sorted(codigos) == sorted([ARROZ["code"], COCO["code"]])
+    # Primero el apto y después el que puede contener maní.
+    assert [(r.producto.codigo_barras, r.veredicto.veredicto)
+            for r in respuesta.resultados] == [
+        (ARROZ["code"], "apto"), (COCO["code"], "apto_con_advertencia")]
     assert respuesta.total == 2
     assert respuesta.total_base == 4
     assert respuesta.no_aptos.total == 2

@@ -64,15 +64,35 @@
         ],
         "summary": "Analizar Producto",
         "operationId": "analizar_producto_analizar_post",
+        "parameters": [
+          {
+            "name": "X-Clave-Servicio",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Clave compartida con NestJS (variable CLAVE_SERVICIO del servicio).",
+              "title": "X-Clave-Servicio"
+            },
+            "description": "Clave compartida con NestJS (variable CLAVE_SERVICIO del servicio)."
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/ProductoInput"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -80,6 +100,16 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          },
+          "403": {
+            "description": "Falta la clave interna o no es válida (FORBIDDEN).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaError"
+                }
               }
             }
           },
@@ -115,6 +145,24 @@
               "title": "Codigo Barras"
             },
             "description": "De 8 a 14 dígitos."
+          },
+          {
+            "name": "X-Clave-Servicio",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Clave compartida con NestJS (variable CLAVE_SERVICIO del servicio).",
+              "title": "X-Clave-Servicio"
+            },
+            "description": "Clave compartida con NestJS (variable CLAVE_SERVICIO del servicio)."
           }
         ],
         "responses": {
@@ -124,6 +172,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Producto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Falta la clave interna o no es válida (FORBIDDEN).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaError"
                 }
               }
             }
@@ -224,6 +282,24 @@
               "default": 0,
               "title": "Offset"
             }
+          },
+          {
+            "name": "X-Clave-Servicio",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Clave compartida con NestJS (variable CLAVE_SERVICIO del servicio).",
+              "title": "X-Clave-Servicio"
+            },
+            "description": "Clave compartida con NestJS (variable CLAVE_SERVICIO del servicio)."
           }
         ],
         "responses": {
@@ -233,6 +309,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RespuestaBusqueda"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Falta la clave interna o no es válida (FORBIDDEN).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaError"
                 }
               }
             }
@@ -379,6 +465,26 @@
         ],
         "summary": "Resumen de la última ejecución de ingesta",
         "operationId": "ultima_ingesta_ingest_runs_latest_get",
+        "parameters": [
+          {
+            "name": "X-Clave-Servicio",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Clave compartida con NestJS (variable CLAVE_SERVICIO del servicio).",
+              "title": "X-Clave-Servicio"
+            },
+            "description": "Clave compartida con NestJS (variable CLAVE_SERVICIO del servicio)."
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -386,6 +492,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ResumenIngesta"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Falta la clave interna o no es válida (FORBIDDEN).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaError"
                 }
               }
             }
@@ -430,6 +546,26 @@
         ],
         "summary": "Métricas de calidad de los datos almacenados",
         "operationId": "metricas_calidad_metrics_quality_get",
+        "parameters": [
+          {
+            "name": "X-Clave-Servicio",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Clave compartida con NestJS (variable CLAVE_SERVICIO del servicio).",
+              "title": "X-Clave-Servicio"
+            },
+            "description": "Clave compartida con NestJS (variable CLAVE_SERVICIO del servicio)."
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -437,6 +573,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/MetricasCalidad"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Falta la clave interna o no es válida (FORBIDDEN).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaError"
                 }
               }
             }
@@ -471,6 +617,26 @@
         ],
         "summary": "Métricas de evaluación de la búsqueda (Precision@K y Recall@K)",
         "operationId": "metricas_evaluacion_metrics_evaluation_get",
+        "parameters": [
+          {
+            "name": "X-Clave-Servicio",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Clave compartida con NestJS (variable CLAVE_SERVICIO del servicio).",
+              "title": "X-Clave-Servicio"
+            },
+            "description": "Clave compartida con NestJS (variable CLAVE_SERVICIO del servicio)."
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -478,6 +644,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/MetricasEvaluacion"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Falta la clave interna o no es válida (FORBIDDEN).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaError"
                 }
               }
             }
@@ -525,6 +701,24 @@
               "title": "Codigo Barras"
             },
             "description": "De 8 a 14 dígitos."
+          },
+          {
+            "name": "X-Clave-Servicio",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Clave compartida con NestJS (variable CLAVE_SERVICIO del servicio).",
+              "title": "X-Clave-Servicio"
+            },
+            "description": "Clave compartida con NestJS (variable CLAVE_SERVICIO del servicio)."
           }
         ],
         "requestBody": {
@@ -544,6 +738,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Veredicto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Falta la clave interna o no es válida (FORBIDDEN).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaError"
                 }
               }
             }
@@ -609,15 +813,35 @@
         "summary": "Búsqueda BM25 personalizada según un perfil",
         "description": "Ordena aptos, apto_con_advertencia y no_apto (ocultos en modo filtrar), informa cuántos no_apto hay y por qué, y compara el top con el ranking base de GET /search.",
         "operationId": "buscar_personalizada_search_personalized_post",
+        "parameters": [
+          {
+            "name": "X-Clave-Servicio",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Clave compartida con NestJS (variable CLAVE_SERVICIO del servicio).",
+              "title": "X-Clave-Servicio"
+            },
+            "description": "Clave compartida con NestJS (variable CLAVE_SERVICIO del servicio)."
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/SolicitudBusquedaPersonalizada"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -626,6 +850,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RespuestaBusquedaPersonalizada"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Falta la clave interna o no es válida (FORBIDDEN).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaError"
                 }
               }
             }
