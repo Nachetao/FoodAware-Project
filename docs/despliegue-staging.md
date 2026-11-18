@@ -197,13 +197,22 @@ despliega por sí solo. Lo hace el workflow
    | Prueba | Pasa si |
    |---|---|
    | `GET /health` de python-service | `estado` es `ok` o `degradado` |
+   | Commit de python-service | `commit` de `/health` es el commit que se acaba de desplegar |
    | `GET /api/health` del backend | `postgresql` y `fastapi` están `ok` |
    | Búsqueda `galletas` por el backend | Devuelve productos con `X-Fuente-Datos: fastapi` (con `respaldo` no quedaría probada la comunicación con FastAPI) |
    | `GET /api/metricas/calidad` | `porcentaje_validos` es mayor que 0 |
    | Frontend | Responde 200 con el HTML de la aplicación (`<app-root>`) |
+   | Commit del backend | Si `/api/health` informa `commit`, es el desplegado. Mientras no lo informe queda como "Pendiente" y no hace fallar el CD |
 
    Al final escribe una tabla con el resultado y el detalle de cada prueba en
-   el resumen de la ejecución.
+   el resumen de la ejecución. Si todo pasa, marca el commit con el tag
+   `staging-verificado-<commit>` (ver "Versión desplegada y rollback"). Si
+   falla el despliegue o alguna prueba, deja en el resumen cómo hacer
+   rollback.
+
+El despliegue y las pruebas están en
+[`.github/scripts/`](../.github/scripts/) (`desplegar-render.sh` y
+`pruebas-staging.sh`), así el CD y el rollback usan exactamente los mismos.
 
 Se ve en *Actions → CD Staging (Render)*. Una ejecución que no desplegó porque
 faltaba algún CI termina en verde con el motivo en el resumen; es normal ver
@@ -217,6 +226,125 @@ después de recrear la base o de cambiar una variable en Render.
 **Si GitHub Actions no está disponible**, se puede desplegar desde cada
 servicio en Render con *Manual Deploy → Deploy latest commit*, en el mismo
 orden: python-service, backend y frontend.
+
+## Versión desplegada y rollback
+
+### Qué versión está desplegada
+
+- **python-service** informa en `GET /health` el campo `commit`: el commit del
+  repositorio que se está ejecutando. Lo toma de `RENDER_GIT_COMMIT`, que
+  Render define en cada despliegue (en local se puede pasar `GIT_COMMIT`; sin
+  ninguna de las dos vale `null`). Para verlo:
+
+  ```powershell
+  (Invoke-RestMethod https://foodaware-staging-python.onrender.com/health).commit
+  ```
+
+- **El CD lo comprueba:** después de desplegar, una de las pruebas de salud
+  exige que ese `commit` sea el que se acaba de desplegar. Si Render dejara
+  corriendo otra versión (por ejemplo, porque la nueva no arrancó), el CD
+  falla.
+- **Versiones verificadas:** cada commit que pasa todas las pruebas de salud
+  queda con el tag `staging-verificado-<7 caracteres del commit>` en GitHub.
+  Es la lista de versiones a las que se puede volver:
+  `git fetch --tags` y después `git tag -l "staging-verificado-*"`.
+- **Backend:** todavía no informa el commit. Le toca a backend: leer
+  `RENDER_GIT_COMMIT` y devolverlo como `commit` en `GET /api/health`, con el
+  mismo formato que python-service (`null` si no existe). Apenas lo haga, el
+  CD lo compara solo; mientras tanto esa fila aparece como "Pendiente".
+- **Frontend:** es un sitio estático y no tiene endpoint de salud. Opcional:
+  escribir el commit en el build (Render también define `RENDER_GIT_COMMIT` al
+  compilar) y mostrarlo, por ejemplo, en un `version.json`.
+
+### Rollback staging
+
+El workflow [`rollback-staging.yml`](../.github/workflows/rollback-staging.yml)
+vuelve staging a la última versión verificada. Se corre a mano, desde
+*Actions → Rollback staging → Run workflow*, en la rama `main`:
+
+- **motivo** (obligatorio): queda en el resumen de la ejecución.
+- **commit** (opcional): un commit verificado al que volver. Vacío, elige el
+  verificado más reciente que sea anterior al que está desplegado, según el
+  `commit` de `/health` y la fecha de cada commit. Así, si el último
+  verificado resulta tener un error crítico, el rollback vuelve al anterior.
+
+Con la CLI de GitHub:
+
+```powershell
+gh workflow run rollback-staging.yml --ref main -f motivo="Error en el veredicto de lácteos"
+```
+
+Despliega los tres servicios en el mismo orden y con el mismo script que el
+CD, y después corre las mismas pruebas de salud, incluida la del commit.
+Comparte el grupo de concurrencia con el CD, así que nunca se cruzan. Si el CD
+falla al desplegar o en las pruebas, su resumen trae el enlace y el comando
+para hacer rollback.
+
+Después de un rollback, `main` sigue teniendo el commit con el problema, pero
+el CD no lo vuelve a desplegar solo porque ya figura como desplegado. Para
+avanzar hay que unir un arreglo a `main` (el CD lo despliega con su CI) o
+correr *Run workflow* en CD Staging.
+
+### Qué hacer en cada caso
+
+| Caso | Qué pasa en staging | Qué hacer |
+|---|---|---|
+| Falla el despliegue (`build_failed`) | Render no cambia ese servicio: sigue la versión anterior. Pero los servicios que ya se desplegaron antes en el orden quedan con el commit nuevo, así que staging puede quedar con versiones mezcladas | Si fue algo pasajero (cuota de build, red), *Re-run failed jobs*. Si es del código, Rollback staging deja los tres servicios en la última versión verificada |
+| El servicio no inicia (`update_failed`) | Según la documentación de Render, solo cambia el tráfico a la versión nueva cuando su health check responde; si no, sigue la anterior. Igual pueden quedar versiones mezcladas | Igual que arriba |
+| Fallan las pruebas de salud del CD | Los tres servicios quedaron con el commit nuevo, pero algo no responde bien | Revisar la tabla del resumen: si fue un arranque lento, *Re-run failed jobs*; si es del código, Rollback staging |
+| Error crítico detectado después | La versión nueva pasó las pruebas, pero se equivoca (por ejemplo, un veredicto mal) | Rollback staging: como el desplegado está verificado, vuelve al verificado anterior. Después, arreglo en `main` |
+| Vulnerabilidad grave | Depende de qué versión la trajo | Si la trajo el último commit, rollback y arreglo en `main`. Si estaba en todas las versiones (por ejemplo, la imagen base), el rollback no sirve: hay que arreglar hacia adelante, y CI Seguridad bloquea el CD hasta que pase. Si se filtró un secreto, además rotarlo (`RENDER_API_KEY`, `CLAVE_SERVICIO`, `INGESTA_CLAVE`, `JWT_SECRET`) |
+| Versión incompatible con la base | La versión anterior del backend arranca con un esquema que ya cambió | Ver la sección siguiente |
+
+### La base de datos y las versiones incompatibles
+
+**python-service no tiene este problema en staging.** Su caché SQLite vive en
+el disco efímero de Render y se rearma desde la semilla en cada despliegue,
+con las reglas de la versión que arranca. En local, con el volumen de Docker,
+una versión anterior no reprocesa los productos que una más nueva ya procesó
+(tienen una `VERSION_PROCESAMIENTO` mayor); se arregla con
+`python scripts/reprocesar_cache.py --todos`.
+
+**El backend sí: PostgreSQL y las migraciones de TypeORM.** Las migraciones
+corren al iniciar el backend, y un rollback del código no las deshace: la
+versión anterior arranca con el esquema nuevo. Además, en el plan gratuito no
+hay shell ni one-off jobs y la base no acepta conexiones externas
+(`ipAllowList` vacía), así que `npm run migration:revert` no se puede correr
+en Render. Por eso le toca a backend:
+
+1. Escribir migraciones compatibles hacia atrás ("expandir y después
+   contraer"): agregar columnas que acepten `null` o tengan valor por defecto,
+   y no renombrar ni borrar una columna en el mismo cambio en que el código
+   deja de usarla, sino en uno posterior.
+2. Que cada migración tenga su `down()` y probarlo en local
+   (`npm run migration:revert`).
+3. Antes de unir una migración, comprobar que la versión anterior del backend
+   sigue funcionando con el esquema nuevo.
+4. Avisar en el Pull Request cuando una migración no sea compatible hacia
+   atrás: en ese caso no hay que hacer rollback del backend, sino arreglar
+   hacia adelante.
+5. Si alguna vez hay que revertir el esquema en staging, decidir cómo: un
+   cambio que revierta al arrancar o, como último recurso, recrear la base
+   (ver "Recrear la base cada 30 días"; se pierden los usuarios).
+
+### Por qué el rollback no es automático
+
+Se podría disparar Rollback staging cuando fallan las pruebas del CD, y
+staging volvería solo a un estado sano. Por ahora no lo hacemos:
+
+- En el plan gratuito las pruebas fallan a veces por arranques lentos o por la
+  cuota de build, no por el código. Un rollback automático en esos casos sería
+  innecesario y gastaría minutos de build (cada uno construye dos imágenes).
+- Un rollback no deshace las migraciones de la base: hecho solo, después de
+  una migración incompatible, empeoraría las cosas.
+- El rollback también es un despliegue y también puede fallar.
+- En staging conviene que una persona mire la tabla de pruebas antes de
+  decidir, porque es justamente donde se encuentran estos errores.
+
+Tendría sentido automatizarlo cuando las pruebas sean estables (en un plan que
+no se duerma) y las migraciones se revisen como compatibles hacia atrás. Una
+forma prudente de partir sería hacer rollback solo si las pruebas fallan dos
+veces seguidas y el commit no trae migraciones.
 
 ## Antes de una demo
 
@@ -416,6 +544,8 @@ Según la [documentación de Render](https://render.com/docs/free):
 | La primera petición tarda ~1 min o da 502 | El servicio estaba dormido | Reintentar, o correr `scripts/despertar-staging.ps1` antes de usarlo |
 | Un push a `main` no se desplegó | Algún CI falló o todavía no terminaba, o `main` avanzó | Revisar el resumen de las ejecuciones de CD Staging: cada una dice por qué no desplegó |
 | CD Staging falla en "Desplegar en Render" | El build o el arranque falló en Render, o falta una Variable del Environment o el Secret `RENDER_API_KEY` | El error dice qué servicio y en qué estado quedó; los logs del build están en el Dashboard de Render. Los servicios anteriores en el orden ya quedaron con el commit nuevo |
+| La prueba "python-service: informa el commit desplegado" falla con "no informa el commit" | El servicio no recibió `RENDER_GIT_COMMIT` | Revisar en los logs del despliegue que Render haya desplegado un commit del repositorio y no una imagen; mientras tanto, `GIT_COMMIT` en *Environment* sirve para probar |
+| Rollback staging dice que no hay versiones verificadas | Ningún CD pasó todavía todas las pruebas desde que existe el tag `staging-verificado-*` | Esperar al primer CD verde o desplegar a mano un commit conocido desde Render |
 | CD Staging falla en las pruebas de salud | Un servicio no despertó en 5 minutos, o el despliegue quedó funcionando mal | La tabla del resumen dice qué prueba falló y qué respondió; repetir con *Re-run failed jobs* si fue un arranque lento |
 | Búsqueda con `X-Fuente-Datos: respaldo` | python-service dormido o lento | Despertar python-service (`/health`) y repetir |
 | La búsqueda, el detalle y las métricas del backend responden 403 `FORBIDDEN` (el backend propaga los 4xx de FastAPI y no usa el respaldo); FastAPI registra `clave_servicio_rechazada` | El backend envía una `CLAVE_SERVICIO` distinta, o `CLAVE_SERVICIO_OBLIGATORIA` está en `true` y el backend todavía no envía la clave | Revisar que `CLAVE_SERVICIO` del backend venga de python-service (`fromService`) o dejar `CLAVE_SERVICIO_OBLIGATORIA` en `"false"` (ver "Activar la clave entre servicios") |

@@ -4,6 +4,8 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from app.core import config
+from app.core.config import Settings
 from app.core.logs import SERVICIO
 from app.schemas.ingesta import ResumenIngesta
 from app.schemas.sistema import RespuestaSalud
@@ -196,3 +198,39 @@ def test_health_cache_caida_es_503(
 def test_health_no_consulta_open_food_facts(client, off_falso):
     salud(client)
     assert off_falso.llamadas == []
+
+
+# --- commit desplegado -------------------------------------------------------
+
+COMMIT = "55a40763d1e8c0f2b9a7e5d4c3b2a1f0e9d8c7b6"
+
+
+def test_health_informa_el_commit_desplegado(client, monkeypatch):
+    monkeypatch.setattr(config.settings, "commit_desplegado", COMMIT)
+
+    assert salud(client).commit == COMMIT
+
+
+def test_health_sin_commit_conocido_lo_informa_como_null(client,
+                                                         monkeypatch):
+    monkeypatch.setattr(config.settings, "commit_desplegado", None)
+
+    respuesta = client.get("/health").json()
+    assert "commit" in respuesta
+    assert respuesta["commit"] is None
+
+
+@pytest.mark.parametrize("variable", ["RENDER_GIT_COMMIT", "GIT_COMMIT"])
+def test_el_commit_se_lee_del_entorno(monkeypatch, variable):
+    monkeypatch.delenv("RENDER_GIT_COMMIT", raising=False)
+    monkeypatch.delenv("GIT_COMMIT", raising=False)
+    monkeypatch.setenv(variable, COMMIT)
+
+    assert Settings().commit_desplegado == COMMIT
+
+
+def test_render_tiene_prioridad_sobre_git_commit(monkeypatch):
+    monkeypatch.setenv("RENDER_GIT_COMMIT", COMMIT)
+    monkeypatch.setenv("GIT_COMMIT", "otro")
+
+    assert Settings().commit_desplegado == COMMIT

@@ -3,6 +3,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request, Response
 
+from app.core.config import settings
 from app.core.dependencias import obtener_busqueda, obtener_repositorio
 from app.repositories.cache import RepositorioCache
 from app.schemas.sistema import RespuestaSalud
@@ -36,8 +37,10 @@ async def health_check(
     repositorio: Annotated[RepositorioCache, Depends(obtener_repositorio)],
     busqueda: Annotated[ServicioBusqueda, Depends(obtener_busqueda)],
 ):
-    salud = await asyncio.to_thread(evaluar_salud, repositorio, busqueda,
-                                    request.app.version)
+    salud = await asyncio.to_thread(
+        evaluar_salud, repositorio, busqueda, request.app.version,
+        commit=settings.commit_desplegado,
+    )
     if salud.estado == "error":
         response.status_code = 503
     return salud

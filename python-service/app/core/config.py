@@ -1,6 +1,6 @@
 from typing import List, Optional
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import AliasChoices, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Mismo límite que SolicitudIngesta.categorias en el contrato.
@@ -56,6 +56,12 @@ class Settings(BaseSettings):
     # clave incorrecta igual da 403.
     clave_servicio_obligatoria: bool = Field(
         True, validation_alias="CLAVE_SERVICIO_OBLIGATORIA"
+    )
+    # Commit del repositorio que se está ejecutando, para GET /health. Render
+    # define RENDER_GIT_COMMIT en cada despliegue; en otro lado se puede pasar
+    # GIT_COMMIT. Sin ninguna de las dos, /health lo informa como null.
+    commit_desplegado: Optional[str] = Field(
+        None, validation_alias=AliasChoices("RENDER_GIT_COMMIT", "GIT_COMMIT")
     )
     # Si la caché está vacía al iniciar, carga semilla/corpus-off.json.gz
     # antes de cualquier ingesta (en Render el disco se pierde al reiniciar).
