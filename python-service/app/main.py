@@ -14,7 +14,14 @@ from app.core.logs import configurar_logs
 from app.core.request_id import RequestIdMiddleware
 from app.procesamiento import VERSION_PROCESAMIENTO
 from app.repositories.cache import RepositorioCache
-from app.routers import analisis, catalogo, ingesta, metricas, sistema
+from app.routers import (
+    adaptativo,
+    analisis,
+    catalogo,
+    ingesta,
+    metricas,
+    sistema,
+)
 from app.schemas.ingesta import SolicitudIngesta
 from app.services.busqueda import ServicioBusqueda
 from app.services.catalogo import ServicioCatalogo
@@ -146,3 +153,4 @@ app.include_router(analisis.router)
 app.include_router(catalogo.router)
 app.include_router(ingesta.router)
 app.include_router(metricas.router)
+app.include_router(adaptativo.router)

@@ -107,6 +107,8 @@ docker compose up --build -d python-service
 | GET | `/ingest/runs/latest` | `ResumenIngesta` | 404, 500 | real |
 | GET | `/metrics/quality` | `MetricasCalidad` | 500 | real |
 | GET | `/metrics/evaluation` | `MetricasEvaluacion` | 500 | real |
+| POST | `/products/{codigo_barras}/compatibility` | `Veredicto` | 404, 422, 500, 503, 504 | formato definitivo; reglas en desarrollo ([Capacidad adaptativa](#capacidad-adaptativa)) |
+| POST | `/search/personalized` | `RespuestaBusquedaPersonalizada` | 422, 500 | formato definitivo; falta interpretar la consulta ([Capacidad adaptativa](#capacidad-adaptativa)) |
 
 Parámetros de búsqueda: `q` de 2 a 100 caracteres, `limit` de 1 a 50 (10 por
 defecto), `offset` ≥ 0. Códigos de barras: 8 a 14 dígitos.
@@ -238,6 +240,206 @@ pueden estar desactualizados o la búsqueda vacía); con 503, no. `detalle`
 muestra los datos que llevaron a cada estado. El healthcheck de Docker usa este
 endpoint: el contenedor solo queda `unhealthy` con `error` (503), y el backend
 espera a que python-service esté `healthy` para arrancar.
+
+## Capacidad adaptativa
+
+FoodAware clasifica cada producto según las restricciones de la persona y
+personaliza la búsqueda con esa clasificación. La especificación general está
+en [capacidad-adaptativa.md](../capacidad-adaptativa.md); aquí va el contrato
+entre NestJS y FastAPI.
+
+### Principios
+
+- **Solo el perfil, sin identidad.** NestJS envía las alergias, las dietas y el
+  modo estricto, nunca el id, el nombre ni el correo del usuario. Los modelos de
+  entrada rechazan cualquier campo extra con 422, así un dato de identidad
+  enviado por error no pasa.
+- **POST con el perfil en el cuerpo**, para que no quede en la URL ni en los
+  logs de acceso, que solo registran método, ruta, código y duración.
+- **El error más grave es un falso "apto".** "apto" se gana: ante cualquier
+  duda el veredicto baja a `apto_con_advertencia` (o a `no_apto` en modo
+  estricto).
+- **Clasificación, no garantía.** Todo veredicto y toda búsqueda personalizada
+  traen el campo `aviso`, siempre con el mismo texto: "Clasificación
+  orientativa según tu perfil y los datos de Open Food Facts. No es una
+  garantía de que el producto sea seguro para ti: revisa siempre la etiqueta
+  del envase." El frontend lo debe mostrar junto al veredicto.
+- **Sin estado.** FastAPI no guarda perfiles ni veredictos: los calcula en
+  cada petición con el producto y el perfil que recibe.
+
+### Perfil (`PerfilRestricciones`)
+
+```json
+{"alergias": ["lacteos", "mani"], "dietas": ["vegetariano"], "modo_estricto": false}
+```
+
+| Campo | Tipo | Regla |
+|---|---|---|
+| `alergias` | `AllergenCode[]` | Códigos del contrato, nunca texto libre ("leche" da 422). Los repetidos se ignoran. Vacío por defecto |
+| `dietas` | `DietLabel[]` | `vegano`, `vegetariano`, `sin_gluten` o `sin_lactosa`. Los repetidos se ignoran. Vacío por defecto |
+| `modo_estricto` | `bool` | `false` por defecto. En `true`, las trazas, los indicios y los datos insuficientes hacen el producto `no_apto` en vez de `apto_con_advertencia` |
+
+`sin_lactosa` es una dieta y no una alergia: un producto deslactosado tiene
+lácteos y puede ser apto para alguien intolerante a la lactosa, pero no para
+alguien alérgico a la proteína de la leche (`lacteos`).
+
+### `POST /products/{codigo_barras}/compatibility`
+
+Cuerpo: `{"perfil": PerfilRestricciones}`. El producto se obtiene igual que en
+`GET /products/{codigo_barras}` (caché y, si no está o está vencido, Open Food
+Facts), así que responde los mismos 404, 503 y 504.
+
+Respuesta (`Veredicto`):
+
+| Campo | Qué es |
+|---|---|
+| `veredicto` | `apto`, `apto_con_advertencia` o `no_apto` |
+| `alergenos_en_conflicto` | Alérgenos del perfil que el producto tiene como ingrediente |
+| `trazas_en_conflicto` | Alérgenos del perfil que el producto puede contener |
+| `dietas_no_confirmadas` | Dietas del perfil que el producto no declara cumplir |
+| `conflictos` | Cada conflicto con su `tipo` (`alergeno`, `traza`, `posible`, `dieta`) y su `origen`: `fuente` (lo declara Open Food Facts), `texto` (solo lo detectamos en los ingredientes) o `indicio` (alérgeno posible, como la lecitina E322 sin origen). En `tipo: "dieta"`, `codigo` es la dieta contradicha |
+| `motivos_no_apto` | Qué lo hizo `no_apto` (`tipo` y `codigo`; `codigo` nulo en `datos_insuficientes`). Vacío en los demás veredictos |
+| `datos_suficientes` | `false` si no tiene ingredientes, trae alérgenos que no reconocimos o su completitud es menor que 0,5 |
+| `explicacion` | Frase en español para mostrar tal cual |
+| `confianza` | `alta`, `media` o `baja` |
+| `motivos_confianza` | Por qué no es `alta`: `completitud_media`, `completitud_baja`, `sin_ingredientes`, `alergenos_no_reconocidos`, `conflicto_solo_en_texto` o `indicio_sin_confirmar`. Vacío si es `alta` |
+| `aviso` | El aviso permanente de arriba |
+
+El esquema garantiza tres cosas: un `apto` nunca trae conflictos ni dietas sin
+confirmar, `motivos_no_apto` tiene elementos si y solo si el veredicto es
+`no_apto`, y `motivos_confianza` está vacío si y solo si la confianza es
+`alta`.
+
+Ejemplo, con `{"perfil": {"alergias": ["lacteos"]}}` sobre una leche que Open
+Food Facts etiqueta con `en:milk`:
+
+```json
+{
+  "codigo_barras": "7802920000015",
+  "veredicto": "no_apto",
+  "alergenos_en_conflicto": ["lacteos"],
+  "trazas_en_conflicto": [],
+  "dietas_no_confirmadas": [],
+  "conflictos": [{"codigo": "lacteos", "tipo": "alergeno", "origen": "fuente"}],
+  "motivos_no_apto": [{"tipo": "alergeno", "codigo": "lacteos"}],
+  "datos_suficientes": true,
+  "explicacion": "Contiene lácteos, que está en tu perfil.",
+  "confianza": "alta",
+  "motivos_confianza": [],
+  "aviso": "Clasificación orientativa según tu perfil y los datos de Open Food Facts. No es una garantía de que el producto sea seguro para ti: revisa siempre la etiqueta del envase."
+}
+```
+
+**Reglas del veredicto.** Se aplica la primera fila que corresponda:
+
+| # | Situación | Modo normal | Modo estricto |
+|---|---|---|---|
+| 1 | Un alérgeno del perfil está en `alergenos` | `no_apto` | `no_apto` |
+| 2 | El producto contradice una dieta (vegano o vegetariano con un alérgeno de origen animal, `sin_gluten` con gluten) | `no_apto` | `no_apto` |
+| 3 | Una traza del perfil está en `trazas` | `apto_con_advertencia` | `no_apto` |
+| 4 | Un alérgeno del perfil aparece como `alergeno_posible` | `apto_con_advertencia` | `no_apto` |
+| 5 | Con alergias o dietas en el perfil, `datos_suficientes` es `false` | `apto_con_advertencia` | `no_apto` |
+| 6 | El perfil pide una dieta que el producto no declara en `etiquetas_dieta` | `apto_con_advertencia` | `apto_con_advertencia` |
+| 7 | Ninguna de las anteriores | `apto` | `apto` |
+
+**Confianza.** En `no_apto` depende del conflicto que lo decidió: `alta` si lo
+declara la fuente, `media` si solo lo detectamos en el texto y `baja` si es un
+indicio o faltan datos. En `apto` y `apto_con_advertencia` toma el valor más
+bajo entre la completitud (`alta` desde 0,8, `media` desde 0,5, `baja` bajo
+0,5) y el origen de los conflictos. Un `apto` nunca tiene confianza `baja`,
+porque con datos insuficientes se aplica la fila 5.
+
+**Estado de implementación:** el formato es el definitivo. Hoy el servicio
+aplica las filas 1 y 3; en los demás casos responde `apto_con_advertencia` con
+una explicación que lo indica, y nunca `apto`. Las filas 2 y 4 a 7 y la regla
+completa de confianza llegan en el siguiente cambio, sin cambiar el formato.
+
+### `POST /search/personalized`
+
+Cuerpo (`SolicitudBusquedaPersonalizada`):
+
+| Campo | Regla |
+|---|---|
+| `consulta` | 2 a 100 caracteres, como `q` de `/search` |
+| `perfil` | `PerfilRestricciones` |
+| `modo` | `filtrar` (por defecto) oculta los `no_apto`; `reordenar` los deja al final |
+| `limit`, `offset` | 1 a 50 (10 por defecto) y ≥ 0 |
+
+Cómo arma el ranking:
+
+1. Parte del ranking base: el de `GET /search` con la misma consulta, con
+   todas las coincidencias (sin paginar).
+2. Le pone un `Veredicto` a cada producto, con las mismas reglas de
+   `/compatibility`.
+3. Ordena por veredicto (`apto`, después `apto_con_advertencia`, después
+   `no_apto`) y, dentro de cada grupo, por la posición en el ranking base.
+4. En modo `filtrar` saca los `no_apto` y recién ahí pagina, así `total` es el
+   número de resultados visibles.
+
+Respuesta (`RespuestaBusquedaPersonalizada`):
+
+| Campo | Qué es |
+|---|---|
+| `consulta`, `interpretacion` | La consulta y lo que se buscó: `terminos` (los tokens que usó BM25), `restricciones` ("sin leche" → `lacteos`) y `no_reconocidas` ("sin azúcar") |
+| `perfil_aplicado` | El perfil recibido más las restricciones de la consulta |
+| `modo`, `total`, `total_base` | Modo usado, resultados del ranking personalizado y coincidencias del ranking base |
+| `resultados[]` | `producto`, `score` BM25, `posicion` (personalizada), `posicion_base` (en `/search`; nulo si no aparece) y `veredicto` |
+| `no_aptos` | Resumen siempre presente: `total`, `ocultos` (`true` en `filtrar`), `motivos` con la `cantidad` de productos por cada `tipo` y `codigo` (un producto con dos motivos cuenta en los dos) y `texto`, listo para mostrar: "25 ocultos por contener lácteos." o "3 ocultos: 2 por contener lácteos y 1 por poder contener maní." |
+| `comparacion` | Los `k` = 5 primeros de cada ranking (`top_base`, `top_personalizado`), los que `salieron_del_top` (con su `posicion_base`, su `posicion` nueva o nulo si quedaron ocultos, y su `veredicto`) y los que `entraron_al_top` |
+| `estado_fuente`, `tiempo_ms`, `aviso` | Igual que en `/search`, más el aviso permanente |
+
+Ejemplo abreviado, con códigos ilustrativos:
+
+```json
+{
+  "consulta": "galletas",
+  "interpretacion": {"terminos": ["galleta"], "restricciones": [], "no_reconocidas": []},
+  "perfil_aplicado": {"alergias": ["lacteos", "mani"], "dietas": [], "modo_estricto": false},
+  "modo": "filtrar",
+  "total": 2,
+  "total_base": 4,
+  "tiempo_ms": 1.8,
+  "estado_fuente": "cache",
+  "resultados": [
+    {"producto": {"codigo_barras": "7800000000020", "...": "..."}, "score": 1.2134,
+     "posicion": 1, "posicion_base": 2, "veredicto": {"veredicto": "apto_con_advertencia", "...": "..."}}
+  ],
+  "no_aptos": {
+    "total": 2,
+    "ocultos": true,
+    "motivos": [{"tipo": "alergeno", "codigo": "lacteos", "cantidad": 1},
+                {"tipo": "alergeno", "codigo": "mani", "cantidad": 1}],
+    "texto": "2 ocultos: 1 por contener lácteos y 1 por contener maní."
+  },
+  "comparacion": {
+    "k": 5,
+    "top_base": ["7800000000013", "7800000000020", "7800000000037", "7800000000044"],
+    "top_personalizado": ["7800000000020", "7800000000044"],
+    "salieron_del_top": [
+      {"codigo_barras": "7800000000013", "posicion_base": 1, "posicion": null, "veredicto": "no_apto"},
+      {"codigo_barras": "7800000000037", "posicion_base": 3, "posicion": null, "veredicto": "no_apto"}
+    ],
+    "entraron_al_top": []
+  },
+  "aviso": "Clasificación orientativa según tu perfil y los datos de Open Food Facts. No es una garantía de que el producto sea seguro para ti: revisa siempre la etiqueta del envase."
+}
+```
+
+**Estado de implementación:** el formato es el definitivo. Todavía no
+interpreta las restricciones de la consulta: busca la consulta completa,
+`restricciones` y `no_reconocidas` vienen vacías y `perfil_aplicado` es el
+perfil recibido. Cuando se agregue, "chocolate sin leche" va a buscar
+"chocolate", sumar `lacteos` al perfil solo para esa búsqueda y dejar
+`posicion_base` en nulo para los productos que no estén en el ranking de la
+consulta original.
+
+### Pendiente
+
+- `GET /metrics/evaluation/adaptive`: Precision@5 y tasa de falsos "apto" de
+  la versión adaptativa contra la base, sobre un conjunto de productos
+  etiquetados a mano. Se define junto con la búsqueda personalizada completa.
+- Autenticación entre servicios: estos endpoints, y los demás que consume
+  NestJS salvo `/health`, van a exigir el header `X-Clave-Servicio`.
 
 ## Errores
 
