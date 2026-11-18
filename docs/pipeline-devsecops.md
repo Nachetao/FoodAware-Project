@@ -267,7 +267,7 @@ alguien borra una Variable. Ningún valor está en el repositorio.
 | `RENDER_API_KEY` | Secret | CI Render, CD Staging, Rollback staging | en CI Render se omite la validación con la API; los despliegues fallan | Validar el Blueprint y desplegar con la API de Render |
 | `CLAVE_SERVICIO_STAGING` | Secret | CD Staging, Rollback staging | ninguno: las pruebas posteriores al despliegue fallan | La clave entre servicios de staging, para el recorrido funcional contra FastAPI |
 | `TF_API_TOKEN` | Secret | Terraform CI | ninguno: sin él se omite el plan | Leer el estado de Terraform en HCP Terraform |
-| `TF_GITHUB_TOKEN_LECTURA` | Secret | Terraform CI | ninguno: sin él se omite el plan | Token *fine-grained* de solo lectura para que el plan lea los rulesets y el Environment `staging` |
+| `TF_GITHUB_TOKEN_LECTURA` | Secret | Terraform CI | ninguno: sin él se omite el plan | Token *fine-grained* de solo lectura para que el plan lea el ruleset de `main` y el Environment `staging` |
 | `GITHUB_TOKEN` | Secret automático | Gitleaks, CD Staging, Rollback staging | lo crea GitHub | Leer los commits de un PR; revisar el CI y los despliegues de un commit; crear y leer los tags `staging-verificado-*` |
 | `RENDER_SERVICE_ID_PYTHON`, `RENDER_SERVICE_ID_BACKEND`, `RENDER_SERVICE_ID_FRONTEND` | Variable del Environment `staging` | CD Staging, Rollback staging | ninguno: el despliegue falla | ID de cada servicio en Render (`srv-…`) |
 | `STAGING_URL_PYTHON`, `STAGING_URL_BACKEND`, `STAGING_URL_FRONTEND` | Variable del Environment `staging` | CD Staging, Rollback staging | ninguno: las pruebas fallan | URL pública de cada servicio |
@@ -467,7 +467,6 @@ siguen en el Blueprint (ver
 | Recurso | Archivo | Origen |
 |---|---|---|
 | Ruleset `Proteger main` (PR y los 15 checks) | `rulesets.tf` | Existía (id 27586111): se importa |
-| Ruleset `Proteger tags staging-verificado`: nadie crea, mueve ni borra esos tags, salvo los workflows (app GitHub Actions) | `rulesets.tf` | Nuevo |
 | Environment `staging`, que solo acepta despliegues desde `main` | `staging.tf` | Existía: se importa, con su regla de rama (id 64326475) |
 | Las 6 Variables del Environment `staging` (`STAGING_URL_*`, `RENDER_SERVICE_ID_*`) | `staging.tf` | Existían: se importan |
 
@@ -482,8 +481,9 @@ Quedan fuera a propósito:
   no rompe nada.
 
 Lo que ya existía se adopta con bloques `import`
-([`terraform/imports.tf`](../terraform/imports.tf)), sin recrearlo: el primer
-plan debe decir `9 to import, 1 to add, 0 to change, 0 to destroy`.
+([`terraform/imports.tf`](../terraform/imports.tf)), sin recrearlo. El primer
+`apply` importó los 9 recursos; desde entonces el plan debe decir
+`No changes` mientras nadie cambie nada.
 
 ### Estado y credenciales
 
@@ -491,7 +491,7 @@ El estado vive en HCP Terraform (plan gratuito), en el workspace
 `foodaware-github` con **modo de ejecución Local**: HCP Terraform guarda el
 estado y lo bloquea durante el `apply`, pero `plan` y `apply` corren donde se
 ejecutan, con las credenciales de ese lugar. El estado no tiene secretos (solo
-URL, ID de servicios y la configuración de los rulesets) y nunca se sube al
+URL, ID de servicios y la configuración del ruleset) y nunca se sube al
 repositorio (`.gitignore` excluye `*.tfstate`, `*.tfvars` y `*.tfplan`).
 
 | Credencial | Permisos | Dónde vive | Para qué |

@@ -1,9 +1,8 @@
 name: Terraform CI
 
 # terraform/ administra la configuración de GitHub del repositorio
-# (rulesets de main y de los tags staging-verificado-*, y el Environment
-# staging con sus variables). Detalles en docs/pipeline-devsecops.md
-# ("Terraform").
+# (ruleset de main y el Environment staging con sus variables).
+# Detalles en docs/pipeline-devsecops.md ("Terraform").
 #
 # - Formato y validación: en todo push y PR, sin secretos.
 # - Plan: en main y en PR desde este mismo repositorio, con un token de

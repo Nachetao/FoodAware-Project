@@ -1,7 +1,7 @@
-# Configuración de GitHub del repositorio como código: las reglas que
-# protegen main y los tags de versiones verificadas, y el Environment
-# staging que usan "CD Staging (Render)" y "Rollback staging". Los
-# servicios de Render siguen en el Blueprint (render.yaml); ver
+# Configuración de GitHub del repositorio como código: la regla que
+# protege main y el Environment staging que usan "CD Staging (Render)" y
+# "Rollback staging". Los servicios de Render siguen en el Blueprint
+# (render.yaml); ver
 # docs/despliegue-staging.md ("Por qué Blueprint y no Terraform").
 #
 # El estado vive en HCP Terraform (workspace en modo de ejecución

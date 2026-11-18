@@ -71,34 +71,3 @@ resource "github_repository_ruleset" "main" {
     }
   }
 }
-
-# ── Tags de versiones verificadas ─────────────────────────────────────
-# "CD Staging (Render)" crea staging-verificado-<commit> cuando el
-# staging pasa todas sus pruebas, y "Rollback staging" vuelve solo a esos
-# commits. Nadie puede crearlos, moverlos ni borrarlos, salvo los
-# workflows (app GitHub Actions).
-resource "github_repository_ruleset" "tags_verificados" {
-  name        = "Proteger tags staging-verificado"
-  repository  = var.repositorio
-  target      = "tag"
-  enforcement = "active"
-
-  conditions {
-    ref_name {
-      include = ["refs/tags/staging-verificado-*"]
-      exclude = []
-    }
-  }
-
-  bypass_actors {
-    actor_id    = local.github_actions_app_id
-    actor_type  = "Integration"
-    bypass_mode = "always"
-  }
-
-  rules {
-    creation = true
-    update   = true
-    deletion = true
-  }
-}

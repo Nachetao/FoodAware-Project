@@ -47,9 +47,8 @@ verde con la tabla de las pruebas de salud).
 
 Los servicios, la base y sus variables de staging están en el Blueprint
 (`render.yaml`), no en Terraform. [`terraform/`](../terraform/) administra
-otra cosa: la configuración de GitHub de la que depende el despliegue (las
-reglas de `main` y de los tags `staging-verificado-*`, y el Environment
-`staging` con sus Variables). Ver
+otra cosa: la configuración de GitHub de la que depende el despliegue (la
+regla que protege `main` y el Environment `staging` con sus Variables). Ver
 [pipeline-devsecops.md](pipeline-devsecops.md#terraform-la-configuración-de-github-como-código).
 
 Por qué Render no está en Terraform:

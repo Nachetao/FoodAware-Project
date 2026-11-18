@@ -1,8 +1,6 @@
 # Todo esto ya existía (se configuró a mano en GitHub): Terraform lo
 # adopta en el primer apply sin recrearlo. Después del primer apply estos
 # bloques no hacen nada; se dejan como registro de qué se adoptó.
-#
-# El único recurso nuevo es github_repository_ruleset.tags_verificados.
 
 import {
   to = github_repository_ruleset.main
