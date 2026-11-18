@@ -152,12 +152,22 @@ La acción de Trivy está fijada por commit y no por tag, porque en marzo de
 
 ### Terraform CI
 
-[`ci-terraform.yml`](../.github/workflows/ci-terraform.yml) corre
-`terraform init`, `fmt -check`, `validate` y `plan` sobre
-[`terraform/`](../terraform/). Hoy esa carpeta solo declara el proveedor de
-AWS y dos variables, sin recursos, así que el plan sale vacío. Por qué no la
-usamos para staging está en
-[despliegue-staging.md](despliegue-staging.md#por-qué-blueprint-y-no-terraform).
+[`ci-terraform.yml`](../.github/workflows/ci-terraform.yml) revisa
+[`terraform/`](../terraform/), que declara la configuración de GitHub del
+repositorio (ver [Terraform](#terraform-la-configuración-de-github-como-código)):
+
+- En todo push y PR, sin secretos: `fmt -check`, `init -backend=false` y
+  `validate`. Si alguno falla, el check falla.
+- En `main` y en PR desde este repositorio: `plan` con un token de GitHub de
+  **solo lectura** y el estado en HCP Terraform. El resumen del workflow
+  muestra cuántos recursos se importarían, crearían, cambiarían o
+  destruirían. El plan no hace fallar el check por mostrar diferencias (se
+  aplican en local), pero sí si no puede correr con los secretos
+  configurados; si propone destruir algo, deja una advertencia. Sin los
+  secretos (PR desde forks, Dependabot o antes de configurar HCP Terraform)
+  se omite con un aviso.
+- `apply` no corre nunca en CI: ningún token con escritura pasa por GitHub
+  Actions.
 
 ### CD Staging (Render)
 
@@ -246,6 +256,7 @@ alguien borra una Variable. Ningún valor está en el repositorio.
 | `PYTHON_VERSION` | Variable | CI Python, CI Seguridad, CI Render | `3.11` | Versión de Python, la misma de `python-service/Dockerfile` |
 | `TRIVY_VERSION` | Variable | CI Seguridad | `v0.75.0` | Versión de Trivy |
 | `TERRAFORM_VERSION` | Variable | Terraform CI | `1.16.5` | Versión de Terraform |
+| `TF_CLOUD_ORGANIZATION` | Variable | Terraform CI | ninguno: sin ella se omite el plan | Organización de HCP Terraform donde está el estado |
 | `DB_USER`, `DB_NAME` | Variable | CI Integración | `foodaware`, `foodaware_db` | Base de datos de CI |
 | `LOG_LEVEL` | Variable | CI Integración | `INFO` | Nivel de logs del python-service |
 | `OFF_USER_AGENT` | Variable | CI Integración | un User-Agent de ejemplo | Formato válido para que el cliente se cree (en CI nunca sale a la red) |
@@ -255,6 +266,8 @@ alguien borra una Variable. Ningún valor está en el repositorio.
 | `JWT_SECRET` | Secret | CI Integración | aleatorio en cada ejecución | Firma de tokens en CI |
 | `RENDER_API_KEY` | Secret | CI Render, CD Staging, Rollback staging | en CI Render se omite la validación con la API; los despliegues fallan | Validar el Blueprint y desplegar con la API de Render |
 | `CLAVE_SERVICIO_STAGING` | Secret | CD Staging, Rollback staging | ninguno: las pruebas posteriores al despliegue fallan | La clave entre servicios de staging, para el recorrido funcional contra FastAPI |
+| `TF_API_TOKEN` | Secret | Terraform CI | ninguno: sin él se omite el plan | Leer el estado de Terraform en HCP Terraform |
+| `TF_GITHUB_TOKEN_LECTURA` | Secret | Terraform CI | ninguno: sin él se omite el plan | Token *fine-grained* de solo lectura para que el plan lea los rulesets y el Environment `staging` |
 | `GITHUB_TOKEN` | Secret automático | Gitleaks, CD Staging, Rollback staging | lo crea GitHub | Leer los commits de un PR; revisar el CI y los despliegues de un commit; crear y leer los tags `staging-verificado-*` |
 | `RENDER_SERVICE_ID_PYTHON`, `RENDER_SERVICE_ID_BACKEND`, `RENDER_SERVICE_ID_FRONTEND` | Variable del Environment `staging` | CD Staging, Rollback staging | ninguno: el despliegue falla | ID de cada servicio en Render (`srv-…`) |
 | `STAGING_URL_PYTHON`, `STAGING_URL_BACKEND`, `STAGING_URL_FRONTEND` | Variable del Environment `staging` | CD Staging, Rollback staging | ninguno: las pruebas fallan | URL pública de cada servicio |
@@ -370,8 +383,13 @@ sección siguiente).
 ## Protección de main
 
 Una regla de GitHub (ruleset) que exige un Pull Request y los checks de CI en
-verde antes de unir a `main`. No está en el repositorio: se configura en
-GitHub, con permisos de administrador.
+verde antes de unir a `main`. Se creó a mano con los pasos de abajo y desde
+la Parte 9C está declarada en
+[`terraform/rulesets.tf`](../terraform/rulesets.tf) (ver
+[Terraform](#terraform-la-configuración-de-github-como-código)): para
+cambiarla se edita ese archivo y se aplica en local, no en la interfaz de
+GitHub, o el próximo plan mostrará la diferencia. Los pasos quedan como
+registro y para recrearla si se perdiera.
 
 ### Pasos
 
@@ -434,8 +452,84 @@ duplica los dos de CodeQL. El job de la API de Render se salta si no existe la
 Variable `RENDER_OWNER_ID`; GitHub cuenta un job saltado como aprobado, así que
 no bloquea.
 
-Si se renombra un job, hay que actualizar el check en el ruleset: con el
-nombre viejo, el Pull Request queda esperando un check que ya no existe.
+Si se renombra un job, hay que actualizar el check en el ruleset (en
+`local.checks_requeridos` de [`terraform/rulesets.tf`](../terraform/rulesets.tf),
+y aplicar): con el nombre viejo, el Pull Request queda esperando un check que
+ya no existe.
+
+## Terraform: la configuración de GitHub como código
+
+[`terraform/`](../terraform/) declara la configuración de GitHub de la que
+dependen el pipeline y el despliegue. Los servicios de Render no están aquí:
+siguen en el Blueprint (ver
+[despliegue-staging.md](despliegue-staging.md#por-qué-blueprint-y-no-terraform)).
+
+| Recurso | Archivo | Origen |
+|---|---|---|
+| Ruleset `Proteger main` (PR y los 15 checks) | `rulesets.tf` | Existía (id 27586111): se importa |
+| Ruleset `Proteger tags staging-verificado`: nadie crea, mueve ni borra esos tags, salvo los workflows (app GitHub Actions) | `rulesets.tf` | Nuevo |
+| Environment `staging`, que solo acepta despliegues desde `main` | `staging.tf` | Existía: se importa, con su regla de rama (id 64326475) |
+| Las 6 Variables del Environment `staging` (`STAGING_URL_*`, `RENDER_SERVICE_ID_*`) | `staging.tf` | Existían: se importan |
+
+Quedan fuera a propósito:
+
+- **Los Secrets** (`RENDER_API_KEY`, `CLAVE_SERVICIO_STAGING`, etc.):
+  Terraform guardaría su valor en el estado.
+- **Los Environments `main - foodaware-staging-*`**: los crea la integración
+  de Render.
+- **Las Variables a nivel de repositorio** (`NODE_VERSION_*`, `TRIVY_VERSION`,
+  etc.): todas tienen un valor por defecto en los workflows, así que perderlas
+  no rompe nada.
+
+Lo que ya existía se adopta con bloques `import`
+([`terraform/imports.tf`](../terraform/imports.tf)), sin recrearlo: el primer
+plan debe decir `9 to import, 1 to add, 0 to change, 0 to destroy`.
+
+### Estado y credenciales
+
+El estado vive en HCP Terraform (plan gratuito), en el workspace
+`foodaware-github` con **modo de ejecución Local**: HCP Terraform guarda el
+estado y lo bloquea durante el `apply`, pero `plan` y `apply` corren donde se
+ejecutan, con las credenciales de ese lugar. El estado no tiene secretos (solo
+URL, ID de servicios y la configuración de los rulesets) y nunca se sube al
+repositorio (`.gitignore` excluye `*.tfstate`, `*.tfvars` y `*.tfplan`).
+
+| Credencial | Permisos | Dónde vive | Para qué |
+|---|---|---|---|
+| Token de GitHub de lectura | *Fine-grained*, solo `FoodAware-Project`: Administration y Environments en *Read-only* (Metadata se agrega solo) | Secret `TF_GITHUB_TOKEN_LECTURA` | El `plan` de CI |
+| Token de HCP Terraform para CI | Token de usuario con vencimiento | Secret `TF_API_TOKEN` | Leer el estado en el `plan` de CI |
+| Token de GitHub con escritura | *Fine-grained*, solo `FoodAware-Project`: Administration y Environments en *Read and write* | Solo en la sesión de PowerShell de quien aplica (variable de entorno), nunca en un archivo ni en GitHub | El `apply` local |
+| Token de HCP Terraform local | Otro token de usuario, con vencimiento | Igual que el anterior | Leer y bloquear el estado en el `apply` |
+
+La organización de HCP Terraform va en la Variable `TF_CLOUD_ORGANIZATION`
+(no es secreta). Ningún token con escritura sobre GitHub pasa por CI: si se
+filtrara el Secret de CI, solo serviría para leer.
+
+### Aplicar un cambio (PowerShell, con Docker)
+
+1. Cambiar el `.tf` en una rama y abrir el Pull Request. El resumen de
+   "Terraform CI" muestra el plan (importar, crear, cambiar, destruir).
+2. Después del merge, desde `main` actualizado, cargar las credenciales en la
+   sesión (lo que se escribe en `Read-Host` no queda en el historial):
+
+   ```powershell
+   $env:TF_CLOUD_ORGANIZATION = "<organización>"
+   $env:TF_TOKEN_app_terraform_io = [System.Net.NetworkCredential]::new('', (Read-Host 'Token HCP Terraform' -AsSecureString)).Password
+   $env:GITHUB_TOKEN = [System.Net.NetworkCredential]::new('', (Read-Host 'Token GitHub con escritura' -AsSecureString)).Password
+   function tf { docker run --rm -it -v "${PWD}\terraform:/w" -w /w -e TF_CLOUD_ORGANIZATION -e TF_TOKEN_app_terraform_io -e GITHUB_TOKEN hashicorp/terraform:1.16.5 @args }
+   ```
+
+3. `tf init`, luego `tf plan -out=cambio.tfplan` y revisar el plan. **Si
+   propone destruir o reemplazar algo (`destroy`, `must be replaced`, `-/+`),
+   no aplicar.**
+4. `tf apply cambio.tfplan` (aplica exactamente el plan revisado), y después
+   `tf plan` debe decir `No changes`.
+5. Cerrar la sesión de PowerShell (o `Remove-Item Env:GITHUB_TOKEN,
+   Env:TF_TOKEN_app_terraform_io`) y borrar `terraform\cambio.tfplan`.
+
+Si alguien cambia un ruleset o una Variable de `staging` en la interfaz de
+GitHub, el siguiente plan de CI lo muestra como diferencia. Se corrige
+llevando el cambio al `.tf` o volviendo a aplicar.
 
 ## Evidencia
 

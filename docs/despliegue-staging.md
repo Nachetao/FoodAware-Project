@@ -45,8 +45,14 @@ verde con la tabla de las pruebas de salud).
 
 ## Por qué Blueprint y no Terraform
 
-La carpeta [`terraform/`](../terraform/) se mantiene, y CI valida su formato y
-su sintaxis, pero staging no la usa:
+Los servicios, la base y sus variables de staging están en el Blueprint
+(`render.yaml`), no en Terraform. [`terraform/`](../terraform/) administra
+otra cosa: la configuración de GitHub de la que depende el despliegue (las
+reglas de `main` y de los tags `staging-verificado-*`, y el Environment
+`staging` con sus Variables). Ver
+[pipeline-devsecops.md](pipeline-devsecops.md#terraform-la-configuración-de-github-como-código).
+
+Por qué Render no está en Terraform:
 
 - El proveedor oficial de Terraform para Render (`render-oss/render`) funciona
   sobre la API REST de Render, y esa API **no permite crear web services del
@@ -57,8 +63,9 @@ su sintaxis, pero staging no la usa:
   non-free tier services`
   ([issue #80](https://github.com/render-oss/terraform-provider-render/issues/80),
   abierto).
-- Terraform además necesitaría un backend remoto para el estado, y ese estado
-  guardaría las contraseñas.
+- El estado de Terraform guardaría las contraseñas de la base y los
+  `generateValue` de Render. El estado de `terraform/` (en HCP Terraform) no
+  tiene secretos, porque los Secrets de GitHub quedan fuera a propósito.
 
 El Blueprint sí admite `plan: free`, Render guarda su estado (no hay estado ni
 secretos en el repositorio) y se valida sin crear nada: el workflow
