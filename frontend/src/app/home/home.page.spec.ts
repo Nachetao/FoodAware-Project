@@ -1,20 +1,47 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { IonicModule } from '@ionic/angular/lazy';
+import {
+  AlertController,
+  IonicModule,
+  LoadingController,
+} from '@ionic/angular/lazy';
 import { provideRouter } from '@angular/router';
+import { of, throwError } from 'rxjs';
 
 import { HomePage } from './home.page';
 import { HomePageModule } from './home.module';
 import { AuthService } from '../auth/auth.service';
+import { AnalisisService, ResultadoAnalisis } from '../analisis/analisis.service';
+import { ErrorApi } from '../products/models/error';
 
 describe('HomePage', () => {
   let component: HomePage;
   let fixture: ComponentFixture<HomePage>;
+  let analizar: ReturnType<typeof vi.fn<AnalisisService['analizar']>>;
+  let crearAlerta: ReturnType<typeof vi.fn>;
+  let cerrarCarga: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
+    analizar = vi.fn<AnalisisService['analizar']>();
+    crearAlerta = vi.fn().mockResolvedValue({ present: vi.fn() });
+    cerrarCarga = vi.fn().mockResolvedValue(true);
+
     await TestBed.configureTestingModule({
       // El módulo de la página trae FormsModule y la barra superior compartida.
       imports: [IonicModule.forRoot(), HomePageModule],
-      providers: [provideRouter([])],
+      providers: [
+        provideRouter([]),
+        { provide: AnalisisService, useValue: { analizar } },
+        { provide: AlertController, useValue: { create: crearAlerta } },
+        {
+          provide: LoadingController,
+          useValue: {
+            create: vi.fn().mockResolvedValue({
+              present: vi.fn(),
+              dismiss: cerrarCarga,
+            }),
+          },
+        },
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(HomePage);
@@ -65,6 +92,93 @@ describe('HomePage', () => {
       await fixture.whenStable();
 
       expect(botonAnalizar().disabled).toBe(true);
+    });
+  });
+
+  describe('análisis de ingredientes', () => {
+    const resultado: ResultadoAnalisis = {
+      id: 'f-1',
+      nombre: 'Barrita energética',
+      ingredientes: ['avena', 'maní'],
+      alergenosPresentes: ['maní'],
+      esNutricionalmenteSaludable: true,
+      aptoParaConsumo: false,
+    };
+
+    const texto = () => {
+      fixture.detectChanges();
+      return (fixture.nativeElement as HTMLElement).textContent ?? '';
+    };
+
+    it('envía los ingredientes separados y muestra el resultado', async () => {
+      analizar.mockReturnValue(of(resultado));
+      component.productoNombre = '  Barrita energética ';
+      component.ingredientesTexto = 'avena, , maní ';
+
+      await component.analizarProducto();
+
+      expect(analizar).toHaveBeenCalledWith('Barrita energética', ['avena', 'maní']);
+      expect(cerrarCarga).toHaveBeenCalled();
+      expect(component.resultado()).toEqual(resultado);
+      expect(component.error()).toBe('');
+      expect(texto()).toContain('Barrita energética');
+      expect(texto()).toContain('Alérgenos detectados:');
+      expect(texto()).toContain('maní');
+    });
+
+    it('muestra el mensaje del ErrorApi si el análisis falla', async () => {
+      const error: ErrorApi = {
+        status: 0,
+        codigo: null,
+        mensaje: 'No se pudo conectar con el servidor.',
+        requestId: null,
+      };
+      analizar.mockReturnValue(throwError(() => error));
+      component.productoNombre = 'Barrita';
+      component.ingredientesTexto = 'avena';
+
+      await component.analizarProducto();
+
+      expect(cerrarCarga).toHaveBeenCalled();
+      expect(component.resultado()).toBeNull();
+      expect(component.error()).toBe('No se pudo conectar con el servidor.');
+      expect(texto()).toContain('No se pudo conectar con el servidor.');
+    });
+
+    it('limpia el error anterior al volver a analizar', async () => {
+      component.error.set('Error previo');
+      analizar.mockReturnValue(of(resultado));
+      component.productoNombre = 'Barrita';
+      component.ingredientesTexto = 'avena';
+
+      await component.analizarProducto();
+
+      expect(component.error()).toBe('');
+      expect(texto()).not.toContain('Error previo');
+    });
+
+    it('avisa y no analiza si falta un campo', async () => {
+      component.productoNombre = '   ';
+      component.ingredientesTexto = 'avena';
+
+      await component.analizarProducto();
+
+      expect(crearAlerta).toHaveBeenCalledWith(
+        expect.objectContaining({ header: 'Campos requeridos' }),
+      );
+      expect(analizar).not.toHaveBeenCalled();
+    });
+
+    it('avisa y no analiza si no queda ningún ingrediente al separar', async () => {
+      component.productoNombre = 'Barrita';
+      component.ingredientesTexto = ' , ,';
+
+      await component.analizarProducto();
+
+      expect(crearAlerta).toHaveBeenCalledWith(
+        expect.objectContaining({ header: 'Ingredientes inválidos' }),
+      );
+      expect(analizar).not.toHaveBeenCalled();
     });
   });
 

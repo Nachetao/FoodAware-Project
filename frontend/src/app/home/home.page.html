@@ -25,19 +25,19 @@
     </ion-button>
 
     <!-- Error -->
-    @if (errorMsg) {
+    @if (error()) {
       <ion-card color="danger" class="ion-margin-top">
         <ion-card-header>
           <ion-card-title>Error</ion-card-title>
         </ion-card-header>
         <ion-card-content>
-          <p>{{ errorMsg }}</p>
+          <p>{{ error() }}</p>
         </ion-card-content>
       </ion-card>
     }
 
     <!-- Resultado del análisis -->
-    @if (resultado) {
+    @if (resultado(); as resultado) {
       <ion-card [color]="resultado.aptoParaConsumo ? 'success' : 'danger'" class="ion-margin-top">
         <ion-card-header>
           <ion-card-subtitle>Resultado del Análisis</ion-card-subtitle>
@@ -60,7 +60,7 @@
                 <strong>Saludable:</strong> {{ resultado.esNutricionalmenteSaludable ? 'Sí' : 'No' }}
               </div>
             </ion-item>
-            @if (resultado.alergenosPresentes?.length > 0) {
+            @if (resultado.alergenosPresentes?.length) {
               <ion-item>
                 <ion-icon name="warning" slot="start" color="warning"></ion-icon>
                 <div class="texto-resultado">
@@ -69,7 +69,7 @@
                 </div>
               </ion-item>
             }
-            @if (resultado.ingredientes?.length > 0) {
+            @if (resultado.ingredientes.length > 0) {
               <ion-item>
                 <ion-icon name="list" slot="start" color="medium"></ion-icon>
                 <div class="texto-resultado">
