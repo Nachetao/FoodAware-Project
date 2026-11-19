@@ -248,7 +248,13 @@ describe('ProductsService', () => {
     const URL = `${environment.apiUrl}/api/products/7801234000018/compatibilidad`;
 
     it('hace GET a /:codigo/compatibilidad', async () => {
-      const cuerpo = { apto: false, alergenos_en_conflicto: ['lacteos'], trazas_en_conflicto: [] };
+      const cuerpo = {
+        veredicto: 'no_apto',
+        apto: false,
+        alergenos_en_conflicto: ['lacteos'],
+        trazas_en_conflicto: [],
+        datos_suficientes: true,
+      };
       const resultado = firstValueFrom(service.compatibilidad('7801234000018'));
 
       httpMock.expectOne(URL).flush(cuerpo);

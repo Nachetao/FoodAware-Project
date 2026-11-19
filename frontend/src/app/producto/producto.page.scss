@@ -82,7 +82,14 @@
   color: var(--ion-color-danger-contrast);
 }
 
-// Trazas: advertencia, no prohibición; misma familia ámbar que los chips.
+// Advertencia, no prohibición; misma familia ámbar que los chips.
+.apto-con-advertencia {
+  border: 1px solid var(--app-alerta-borde);
+  background: var(--app-alerta-fondo);
+  color: var(--app-alerta-texto);
+}
+
+// Trazas junto a un "No apto": dato secundario, más discreto.
 .trazas-en-conflicto {
   border: 1px dashed var(--app-alerta-borde);
   background: var(--app-alerta-fondo);

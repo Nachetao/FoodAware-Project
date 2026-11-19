@@ -273,9 +273,13 @@ describe("ProductsService", () => {
   describe("compatibilidad y compatibles", () => {
     const galletas = {
       codigo_barras: "7801234000018",
+      ingredientes: ["harina de trigo", "leche", "avena"],
       alergenos: [AllergenCode.GLUTEN, AllergenCode.LACTEOS],
       trazas: [AllergenCode.MANI],
+      calidad: { es_valido: true, problemas: [], completitud: 0.9 },
     } as Producto;
+    const conDatos = (cambios: Partial<Producto>) =>
+      ({ ...galletas, ...cambios }) as Producto;
 
     beforeEach(() => {
       fastApiClient.obtenerProducto.mockResolvedValue(galletas);
@@ -285,29 +289,126 @@ describe("ProductsService", () => {
       });
     });
 
-    it("no es apto si un alérgeno coincide e informa las trazas en conflicto", async () => {
-      const resultado = await service.compatibilidad("7801234000018", "u1", REQUEST_ID);
+    const conAlergias = (alergias: AllergenCode[]) =>
+      usersService.perfil.mockResolvedValue({ id: "u1", alergias });
+    const compatibilidadDeGalletas = () =>
+      service.compatibilidad("7801234000018", "u1", REQUEST_ID);
+    const calidad = (completitud: number, problemas: string[] = []) => ({
+      es_valido: problemas.length === 0,
+      problemas,
+      completitud,
+    });
+
+    it("no_apto si un alérgeno coincide, aunque también haya trazas en conflicto", async () => {
+      const resultado = await compatibilidadDeGalletas();
 
       expect(usersService.perfil).toHaveBeenCalledWith("u1");
       expect(resultado).toEqual({
         respuesta: {
+          veredicto: "no_apto",
           apto: false,
           alergenos_en_conflicto: [AllergenCode.LACTEOS],
           trazas_en_conflicto: [AllergenCode.MANI],
+          datos_suficientes: true,
         },
         fuente: "fastapi",
       });
     });
 
-    it("las trazas en conflicto no lo hacen no apto", async () => {
-      usersService.perfil.mockResolvedValue({ id: "u1", alergias: [AllergenCode.MANI] });
+    it("no_apto por alérgeno aunque los datos sean insuficientes", async () => {
+      fastApiClient.obtenerProducto.mockResolvedValue(
+        conDatos({ calidad: calidad(0.2) }),
+      );
 
-      const { respuesta } = await service.compatibilidad("7801234000018", "u1", REQUEST_ID);
+      const { respuesta } = await compatibilidadDeGalletas();
+
+      expect(respuesta.veredicto).toBe("no_apto");
+      expect(respuesta.apto).toBe(false);
+      expect(respuesta.datos_suficientes).toBe(false);
+    });
+
+    it("las trazas en conflicto nunca dan apto: apto_con_advertencia", async () => {
+      conAlergias([AllergenCode.MANI]);
+
+      const { respuesta } = await compatibilidadDeGalletas();
 
       expect(respuesta).toEqual({
-        apto: true,
+        veredicto: "apto_con_advertencia",
+        apto: false,
         alergenos_en_conflicto: [],
         trazas_en_conflicto: [AllergenCode.MANI],
+        datos_suficientes: true,
+      });
+    });
+
+    it("apto si no hay conflictos y los datos son suficientes", async () => {
+      conAlergias([AllergenCode.SOYA]);
+
+      const { respuesta } = await compatibilidadDeGalletas();
+
+      expect(respuesta).toEqual({
+        veredicto: "apto",
+        apto: true,
+        alergenos_en_conflicto: [],
+        trazas_en_conflicto: [],
+        datos_suficientes: true,
+      });
+    });
+
+    it.each([
+      ["sin ingredientes", { ingredientes: [] }],
+      [
+        "con el problema sin_ingredientes",
+        { calidad: calidad(0.9, ["sin_ingredientes"]) },
+      ],
+      [
+        "con el problema ingredientes_vacios",
+        { calidad: calidad(0.9, ["ingredientes_vacios"]) },
+      ],
+      ["con completitud menor que 0,5", { calidad: calidad(0.49) }],
+    ])(
+      "con alergias y datos insuficientes (%s): apto_con_advertencia",
+      async (_caso, cambios: Partial<Producto>) => {
+        conAlergias([AllergenCode.SOYA]);
+        fastApiClient.obtenerProducto.mockResolvedValue(conDatos(cambios));
+
+        const { respuesta } = await compatibilidadDeGalletas();
+
+        expect(respuesta).toEqual({
+          veredicto: "apto_con_advertencia",
+          apto: false,
+          alergenos_en_conflicto: [],
+          trazas_en_conflicto: [],
+          datos_suficientes: false,
+        });
+      },
+    );
+
+    it("con completitud justo 0,5 los datos alcanzan", async () => {
+      conAlergias([AllergenCode.SOYA]);
+      fastApiClient.obtenerProducto.mockResolvedValue(
+        conDatos({ calidad: calidad(0.5) }),
+      );
+
+      const { respuesta } = await compatibilidadDeGalletas();
+
+      expect(respuesta.veredicto).toBe("apto");
+      expect(respuesta.datos_suficientes).toBe(true);
+    });
+
+    it("sin alergias en el perfil es apto aunque falten datos", async () => {
+      conAlergias([]);
+      const sinIngredientes = conDatos({ ingredientes: [] });
+      fastApiClient.obtenerProducto.mockResolvedValue(sinIngredientes);
+
+      const { respuesta } = await compatibilidadDeGalletas();
+
+      expect(respuesta).toEqual({
+        veredicto: "apto",
+        apto: true,
+        alergenos_en_conflicto: [],
+        trazas_en_conflicto: [],
+        datos_suficientes: false,
       });
     });
 
@@ -317,7 +418,7 @@ describe("ProductsService", () => {
       );
       productsRepository.buscarPorCodigo.mockResolvedValue(galletas);
 
-      const { fuente } = await service.compatibilidad("7801234000018", "u1", REQUEST_ID);
+      const { fuente } = await compatibilidadDeGalletas();
 
       expect(fuente).toBe("respaldo");
     });

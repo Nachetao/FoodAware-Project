@@ -46,9 +46,12 @@ const SQL_PAGINA = `SELECT p.*, s.score ${DESDE_PUNTUADOS}
   ORDER BY s.score DESC, p.completitud DESC, p.codigo_barras
   LIMIT $2 OFFSET $3`;
 
-// Compatibles: además, ningún alérgeno del usuario ($2). Usa el índice GIN
-// IDX_products_alergenos_gin; con $2 = '{}' no excluye nada.
-const SIN_ALERGIAS_DEL_USUARIO = `AND NOT (p.alergenos && $2::text[])`;
+// Compatibles: además, ningún alérgeno del usuario ($2), ni como ingrediente
+// ni como traza: "solo aptos" no muestra productos con advertencia. Usa los
+// índices GIN IDX_products_alergenos_gin e IDX_products_trazas_gin; con
+// $2 = '{}' no excluye nada.
+const SIN_ALERGIAS_DEL_USUARIO = `AND NOT (p.alergenos && $2::text[])
+  AND NOT (p.trazas && $2::text[])`;
 const SQL_TOTAL_COMPATIBLES = `${SQL_TOTAL} ${SIN_ALERGIAS_DEL_USUARIO}`;
 const SQL_PAGINA_COMPATIBLES = `SELECT p.*, s.score ${DESDE_PUNTUADOS}
   ${SIN_ALERGIAS_DEL_USUARIO}

@@ -118,7 +118,7 @@ export class ProductsController {
   @ApiOperation({
     summary: "Productos guardados compatibles con las alergias del usuario",
     description:
-      "Requiere token. Busca en los productos guardados (mismo ranking que el respaldo) y excluye los que contienen alguno de los alérgenos del usuario. Misma forma que /search, con estado_fuente \"cache\".",
+      'Requiere token. Busca en los productos guardados (mismo ranking que el respaldo) y excluye los que tienen alguno de los alérgenos del usuario como ingrediente o como traza. Misma forma que /search, con estado_fuente "cache".',
   })
   @ApiOkResponse({ type: RespuestaBusqueda })
   @ApiUnauthorizedResponse({ description: "Falta el token o no es válido." })
@@ -138,7 +138,7 @@ export class ProductsController {
   @ApiOperation({
     summary: "Compatibilidad del producto con las alergias del usuario",
     description:
-      "Requiere token. apto es false si algún alérgeno coincide; las trazas que coinciden se informan pero no lo hacen no apto. El producto se obtiene como en el detalle (X-Fuente-Datos indica si vino del respaldo).",
+      'Requiere token. veredicto es no_apto si algún alérgeno coincide, apto_con_advertencia si solo coinciden trazas o si, con alergias en el perfil, faltan datos (sin ingredientes o completitud menor que 0,5), y apto en otro caso. apto es true solo con veredicto "apto". El producto se obtiene como en el detalle (X-Fuente-Datos indica si vino del respaldo).',
   })
   @ApiParam({ name: "codigo_barras", description: "De 8 a 14 dígitos." })
   @ApiOkResponse({ type: Compatibilidad, headers: HEADER_RESPUESTA })

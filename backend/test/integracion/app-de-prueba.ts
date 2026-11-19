@@ -43,8 +43,11 @@ export class ProductosEnMemoria implements Pick<
   ): Promise<ResultadoRespaldo> {
     const excluir = new Set<string>(alergias);
     const todos = await this.buscarRespaldo({ ...params, limit: 1000, offset: 0 });
+    // Igual que el SQL real: ni alérgenos ni trazas del usuario.
     const compatibles = todos.resultados.filter(
-      (r) => !r.producto.alergenos.some((a) => excluir.has(a)),
+      (r) =>
+        !r.producto.alergenos.some((a) => excluir.has(a)) &&
+        !r.producto.trazas.some((a) => excluir.has(a)),
     );
     return {
       total: compatibles.length,
