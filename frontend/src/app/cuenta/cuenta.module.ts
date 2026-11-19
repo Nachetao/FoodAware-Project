@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 import { IonicModule } from '@ionic/angular/lazy';
 import { authGuard } from '../auth/auth.guard';
+import { CompartidoModule } from '../compartido/compartido.module';
 import { LoginPage } from './login.page';
 import { PerfilPage } from './perfil.page';
 import { RegistroPage } from './registro.page';
@@ -15,6 +16,7 @@ import { SelectorAlergiasComponent } from './selector-alergias.component';
     CommonModule,
     FormsModule,
     IonicModule,
+    CompartidoModule,
     RouterModule.forChild([
       { path: 'login', component: LoginPage },
       { path: 'registro', component: RegistroPage },

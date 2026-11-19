@@ -1,12 +1,13 @@
 import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
-import { RouterLink, RouterModule, provideRouter } from '@angular/router';
+import { RouterLink, provideRouter } from '@angular/router';
 import { IonicModule } from '@ionic/angular/lazy';
 import { Subject, of, throwError } from 'rxjs';
 import type { Mock } from 'vitest';
 
 import { BusquedaPage } from './busqueda.page';
+import { BusquedaPageModule } from './busqueda.module';
 import { AuthService } from '../auth/auth.service';
 import { ProductsService } from '../products/products.service';
 import { BusquedaProductos, ResultadoBusqueda } from '../products/models/busqueda';
@@ -151,8 +152,8 @@ describe('BusquedaPage', () => {
     autenticado = signal(false);
 
     await TestBed.configureTestingModule({
-      declarations: [BusquedaPage],
-      imports: [IonicModule.forRoot(), RouterModule],
+      // El módulo de la página trae la barra superior compartida y el router.
+      imports: [IonicModule.forRoot(), BusquedaPageModule],
       providers: [
         provideRouter([]),
         { provide: ProductsService, useValue: { buscar, buscarPersonalizado } },

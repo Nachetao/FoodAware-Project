@@ -8,10 +8,7 @@ import { ErrorApi } from '../products/models/error';
   selector: 'app-registro',
   template: `
     <ion-header>
-      <ion-toolbar>
-        <ion-buttons slot="start"><ion-back-button defaultHref="/login" text=""></ion-back-button></ion-buttons>
-        <ion-title>Crear cuenta</ion-title>
-      </ion-toolbar>
+      <app-barra-superior titulo="Crear cuenta" atras="/login"></app-barra-superior>
     </ion-header>
     <ion-content class="ion-padding">
       <form class="formulario" (ngSubmit)="registrar()">
