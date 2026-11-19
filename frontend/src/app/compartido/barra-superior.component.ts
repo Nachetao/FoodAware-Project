@@ -3,7 +3,8 @@ import { AuthService } from '../auth/auth.service';
 
 /**
  * Barra superior de todas las páginas: título, botón atrás opcional y las
- * mismas acciones siempre visibles (buscar, métricas y perfil o ingresar).
+ * mismas acciones siempre visibles (buscar, métricas y perfil o ingresar; y
+ * administración, solo para administradores).
  * Va dentro del <ion-header> de cada página, así una página puede agregar
  * otra barra debajo (por ejemplo, el buscador). Las acciones propias de una
  * página se proyectan con el atributo accionExtra:
@@ -44,6 +45,17 @@ import { AuthService } from '../auth/auth.service';
         >
           <ion-icon slot="icon-only" name="stats-chart-outline" aria-hidden="true"></ion-icon>
         </ion-button>
+        @if (auth.esAdmin()) {
+          <ion-button
+            routerLink="/admin"
+            routerLinkActive
+            #admin="routerLinkActive"
+            [attr.aria-current]="admin.isActive ? 'page' : null"
+            aria-label="Administración"
+          >
+            <ion-icon slot="icon-only" name="shield-checkmark-outline" aria-hidden="true"></ion-icon>
+          </ion-button>
+        }
         @if (auth.autenticado()) {
           <ion-button
             routerLink="/perfil"

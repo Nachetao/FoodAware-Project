@@ -1,0 +1,74 @@
+<ion-header>
+  <app-barra-superior titulo="Administración" atras="/home">
+    <ion-button accionExtra aria-label="Actualizar administración" (click)="actualizar()">
+      <ion-icon slot="icon-only" name="refresh-outline" aria-hidden="true"></ion-icon>
+    </ion-button>
+  </app-barra-superior>
+</ion-header>
+
+<ion-content class="ion-padding">
+  <div class="contenedor">
+    <section class="seccion usuarios" aria-labelledby="titulo-usuarios">
+      <h2 id="titulo-usuarios">Usuarios</h2>
+      @let seccionUsuarios = usuarios();
+      @if (seccionUsuarios.datos; as lista) {
+        <p class="resumen">{{ lista.length }} {{ lista.length === 1 ? 'usuario' : 'usuarios' }}</p>
+        @if (lista.length > 0) {
+          <ul class="lista">
+            @for (usuario of lista; track usuario.id) {
+              <li>
+                <span class="nombre">{{ usuario.nombre }}</span>
+                <span class="detalle">{{ usuario.correo }}</span>
+                @if (usuario.rol === 'administrador') {
+                  <span class="etiqueta-rol">Administrador</span>
+                }
+              </li>
+            }
+          </ul>
+        }
+      }
+      <ng-container *ngTemplateOutlet="estado; context: { $implicit: seccionUsuarios }"></ng-container>
+    </section>
+
+    <section class="seccion alimentos" aria-labelledby="titulo-alimentos">
+      <h2 id="titulo-alimentos">Alimentos analizados</h2>
+      @let seccionAlimentos = alimentos();
+      @if (seccionAlimentos.datos; as lista) {
+        @if (lista.length > 0) {
+          <p class="resumen">
+            {{ lista.length }} {{ lista.length === 1 ? 'alimento' : 'alimentos' }}
+          </p>
+          <ul class="lista">
+            @for (alimento of lista; track alimento.id) {
+              <li>
+                <span class="nombre">{{ alimento.nombre }}</span>
+                <span class="detalle">
+                  {{ alergenos(alimento) ? 'Alérgenos: ' + alergenos(alimento) : 'Sin alérgenos detectados' }}
+                </span>
+                <span class="detalle">
+                  Saludable: {{ alimento.esNutricionalmenteSaludable ? 'Sí' : 'No' }}
+                </span>
+              </li>
+            }
+          </ul>
+        } @else {
+          <p class="resumen">Todavía no hay alimentos analizados.</p>
+        }
+      }
+      <ng-container *ngTemplateOutlet="estado; context: { $implicit: seccionAlimentos }"></ng-container>
+    </section>
+  </div>
+</ion-content>
+
+<ng-template #estado let-seccion>
+  @if (seccion.cargando && !seccion.datos) {
+    <div class="cargando">
+      <ion-spinner name="crescent" aria-label="Cargando"></ion-spinner>
+    </div>
+  }
+  @if (seccion.error) {
+    <ion-text color="danger">
+      <p class="error" role="alert">{{ seccion.error }}</p>
+    </ion-text>
+  }
+</ng-template>

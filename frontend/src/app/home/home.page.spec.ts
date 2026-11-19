@@ -45,7 +45,7 @@ describe('HomePage', () => {
           { path: 'perfil', component: VaciaPage },
           { path: 'login', component: VaciaPage },
         ]),
-        { provide: AuthService, useValue: { autenticado } },
+        { provide: AuthService, useValue: { autenticado, esAdmin: signal(false) } },
         { provide: AnalisisService, useValue: { analizar } },
         { provide: AlertController, useValue: { create: crearAlerta } },
         {

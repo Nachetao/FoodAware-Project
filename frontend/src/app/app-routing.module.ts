@@ -1,5 +1,6 @@
 import { NgModule } from '@angular/core';
 import { PreloadAllModules, RouterModule, Routes } from '@angular/router';
+import { adminGuard } from './auth/admin.guard';
 
 const routes: Routes = [
   {
@@ -17,6 +18,12 @@ const routes: Routes = [
   {
     path: 'metricas',
     loadChildren: () => import('./metricas/metricas.module').then( m => m.MetricasPageModule)
+  },
+  {
+    // Solo administradores; el backend también responde 403 a los demás.
+    path: 'admin',
+    canActivate: [adminGuard],
+    loadChildren: () => import('./admin/admin.module').then( m => m.AdminPageModule)
   },
   {
     path: '',

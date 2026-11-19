@@ -4,12 +4,30 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { Router, UrlTree, provideRouter } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { environment } from '../../environments/environment';
-import { AuthService, Usuario } from './auth.service';
+import { AuthService, Usuario, rolDelToken } from './auth.service';
 import { authInterceptor } from './auth.interceptor';
 import { authGuard } from './auth.guard';
+import { adminGuard } from './admin.guard';
 
 const API = `${environment.apiUrl}/api`;
-const ANA: Usuario = { id: 'u1', nombre: 'Ana', correo: 'ana@correo.cl', alergias: ['mani'] };
+
+/** JWT con el payload en base64url (UTF-8), como lo firma el backend. */
+function jwt(payload: object): string {
+  const bytes = new TextEncoder().encode(JSON.stringify(payload));
+  const base64 = btoa(String.fromCharCode(...bytes));
+  return `cabecera.${base64.replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_')}.firma`;
+}
+const TOKEN_USUARIO = jwt({ sub: 'u1', correo: 'ana@correo.cl', rol: 'usuario' });
+const TOKEN_ADMIN = jwt({ sub: 'u2', correo: 'ñandú@correo.cl', rol: 'administrador' });
+const ANA: Usuario = {
+  id: 'u1',
+  nombre: 'Ana',
+  correo: 'ana@correo.cl',
+  alergias: ['mani'],
+  dietas: [],
+  modo_estricto: false,
+  rol: 'usuario',
+};
 
 describe('Autenticación', () => {
   let auth: AuthService;
@@ -88,6 +106,34 @@ describe('Autenticación', () => {
     });
   });
 
+  describe('rol del token', () => {
+    it.each([
+      ['un token de usuario', TOKEN_USUARIO, 'usuario'],
+      ['un token de administrador (con UTF-8 en el payload)', TOKEN_ADMIN, 'administrador'],
+      ['un token sin rol', jwt({ sub: 'u1' }), null],
+      ['un rol desconocido', jwt({ rol: 'superusuario' }), null],
+      ['un token que no es un JWT', 'jwt-1', null],
+      ['un payload que no es JSON', 'a.no-es-json.b', null],
+      ['sin token', null, null],
+    ])('rolDelToken con %s', (_caso, token, rol) => {
+      expect(rolDelToken(token)).toBe(rol);
+    });
+
+    it('esAdmin sigue al token de la sesión', () => {
+      expect(auth.esAdmin()).toBe(false);
+
+      auth.token.set(TOKEN_ADMIN);
+      expect(auth.rol()).toBe('administrador');
+      expect(auth.esAdmin()).toBe(true);
+
+      auth.token.set(TOKEN_USUARIO);
+      expect(auth.esAdmin()).toBe(false);
+
+      auth.cerrarSesion();
+      expect(auth.rol()).toBeNull();
+    });
+  });
+
   describe('authInterceptor', () => {
     it('agrega el Bearer a las peticiones al backend con sesión', async () => {
       await iniciarSesion();
@@ -132,6 +178,26 @@ describe('Autenticación', () => {
     it('sin sesión redirige a /login con la ruta de vuelta', () => {
       const resultado = ejecutar() as UrlTree;
       expect(TestBed.inject(Router).serializeUrl(resultado)).toBe('/login?volver=%2Fperfil');
+    });
+  });
+
+  describe('adminGuard', () => {
+    const ejecutar = () =>
+      TestBed.runInInjectionContext(() => adminGuard({} as never, { url: '/admin' } as never));
+    const url = (resultado: unknown) => TestBed.inject(Router).serializeUrl(resultado as UrlTree);
+
+    it('deja pasar a un administrador', () => {
+      auth.token.set(TOKEN_ADMIN);
+      expect(ejecutar()).toBe(true);
+    });
+
+    it('a un usuario sin ese rol lo manda a /home', () => {
+      auth.token.set(TOKEN_USUARIO);
+      expect(url(ejecutar())).toBe('/home');
+    });
+
+    it('sin sesión redirige a /login con la ruta de vuelta', () => {
+      expect(url(ejecutar())).toBe('/login?volver=%2Fadmin');
     });
   });
 });

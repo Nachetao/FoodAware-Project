@@ -30,9 +30,11 @@ class VaciaPage {}
 describe('BarraSuperiorComponent', () => {
   let fixture: ComponentFixture<PruebaPage>;
   let autenticado: ReturnType<typeof signal<boolean>>;
+  let esAdmin: ReturnType<typeof signal<boolean>>;
 
   beforeEach(async () => {
     autenticado = signal(false);
+    esAdmin = signal(false);
     await TestBed.configureTestingModule({
       imports: [IonicModule.forRoot(), PruebaPage],
       providers: [
@@ -41,8 +43,9 @@ describe('BarraSuperiorComponent', () => {
           { path: 'metricas', component: VaciaPage },
           { path: 'perfil', component: VaciaPage },
           { path: 'login', component: VaciaPage },
+          { path: 'admin', component: VaciaPage },
         ]),
-        { provide: AuthService, useValue: { autenticado } },
+        { provide: AuthService, useValue: { autenticado, esAdmin } },
       ],
     }).compileComponents();
     fixture = TestBed.createComponent(PruebaPage);
@@ -84,6 +87,29 @@ describe('BarraSuperiorComponent', () => {
 
     expect(etiquetas()).toEqual(['Buscar productos', 'Ver métricas', 'Mi perfil']);
     expect(boton('Ingresar')).toBeNull();
+  });
+
+  it('con sesión de administrador agrega "Administración" antes del perfil', () => {
+    autenticado.set(true);
+    esAdmin.set(true);
+
+    expect(etiquetas()).toEqual(['Buscar productos', 'Ver métricas', 'Administración', 'Mi perfil']);
+  });
+
+  it('un usuario sin rol de administrador no ve "Administración"', () => {
+    autenticado.set(true);
+
+    expect(boton('Administración')).toBeNull();
+  });
+
+  it('"Administración" navega a /admin y queda marcada como actual', async () => {
+    autenticado.set(true);
+    esAdmin.set(true);
+    boton('Administración')!.click();
+    await fixture.whenStable();
+
+    expect(TestBed.inject(Router).url).toBe('/admin');
+    expect(activo('Administración')).toBe(true);
   });
 
   it('los íconos son decorativos: el nombre del botón está en aria-label', () => {

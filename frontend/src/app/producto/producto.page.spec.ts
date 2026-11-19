@@ -112,7 +112,7 @@ describe('ProductoPage', () => {
       providers: [
         provideRouter([]),
         { provide: ProductsService, useValue: { obtener, compatibilidad } },
-        { provide: AuthService, useValue: { autenticado } },
+        { provide: AuthService, useValue: { autenticado, esAdmin: signal(false) } },
         {
           provide: ActivatedRoute,
           useValue: { paramMap: of(convertToParamMap({ codigo: '7801234000018' })) },
