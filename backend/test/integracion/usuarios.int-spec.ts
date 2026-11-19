@@ -6,6 +6,7 @@ import {
   ProductosEnMemoria,
   UsuariosEnMemoria,
   crearApp,
+  errorContrato,
   producto,
 } from "./app-de-prueba";
 import { AllergenCode } from "../../src/products/contrato/enums";
@@ -42,7 +43,8 @@ describe("Integración: perfil, alergias y compatibilidad (con JWT)", () => {
     await fastapi.apagar();
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    await fastapi.encender();
     fastapi.reiniciar();
     productos.productos.clear();
     usuarios.usuarios.clear();
@@ -104,104 +106,186 @@ describe("Integración: perfil, alergias y compatibilidad (con JWT)", () => {
     );
   });
 
-  it("compatibilidad: no_apto por un alérgeno; las trazas se informan", async () => {
+  describe("compatibilidad con el motor adaptativo", () => {
+    const RUTA_MOTOR = "/products/7801234000018/compatibility";
+    const compatibilidad = () =>
+      request(servidor())
+        .get("/api/products/7801234000018/compatibilidad")
+        .set("Authorization", token())
+        .set("X-Request-ID", "int-compat");
     const galletas = conAlergenos(
       "7801234000018",
       "Galletas de avena",
-      [AllergenCode.GLUTEN, AllergenCode.LACTEOS],
+      [AllergenCode.GLUTEN],
       [AllergenCode.MANI],
     );
-    fastapi.responder("/products/7801234000018", () => ({
-      status: 200,
-      cuerpo: galletas,
-    }));
-
-    const res = await request(servidor())
-      .get("/api/products/7801234000018/compatibilidad")
-      .set("Authorization", token());
-
-    expect(res.status).toBe(200);
-    expect(res.headers["x-fuente-datos"]).toBe("fastapi");
-    expect(res.body).toEqual({
-      veredicto: "no_apto",
-      apto: false,
-      alergenos_en_conflicto: ["lacteos"],
-      trazas_en_conflicto: ["mani"],
-      datos_suficientes: true,
-    });
-  });
-
-  it("compatibilidad: nunca apto con trazas en conflicto (apto_con_advertencia)", async () => {
-    fastapi.responder("/products/7801234000018", () => ({
-      status: 200,
-      cuerpo: conAlergenos(
-        "7801234000018",
-        "Galletas",
-        [AllergenCode.GLUTEN],
-        [AllergenCode.MANI],
-      ),
-    }));
-
-    const res = await request(servidor())
-      .get("/api/products/7801234000018/compatibilidad")
-      .set("Authorization", token());
-
-    expect(res.status).toBe(200);
-    expect(res.body).toEqual({
+    const veredictoMotor = {
+      codigo_barras: "7801234000018",
       veredicto: "apto_con_advertencia",
-      apto: false,
       alergenos_en_conflicto: [],
       trazas_en_conflicto: ["mani"],
+      dietas_no_confirmadas: [],
+      conflictos: [{ codigo: "mani", tipo: "traza", origen: "fuente" }],
+      motivos_no_apto: [],
       datos_suficientes: true,
-    });
-  });
+      explicacion: "Puede contener maní, que está en tu perfil.",
+      confianza: "alta",
+      motivos_confianza: [],
+      aviso:
+        "Clasificación orientativa según tu perfil y los datos de Open Food Facts. No es una garantía de que el producto sea seguro para ti: revisa siempre la etiqueta del envase.",
+    };
 
-  it("compatibilidad: apto sin conflictos y con datos suficientes", async () => {
-    fastapi.responder("/products/7801234000018", () => ({
-      status: 200,
-      cuerpo: conAlergenos("7801234000018", "Galletas", [AllergenCode.GLUTEN]),
-    }));
+    it("envía solo el perfil con la clave y responde el Veredicto del motor", async () => {
+      fastapi.responder(RUTA_MOTOR, () => ({
+        status: 200,
+        cuerpo: veredictoMotor,
+      }));
 
-    const res = await request(servidor())
-      .get("/api/products/7801234000018/compatibilidad")
-      .set("Authorization", token());
+      const res = await compatibilidad();
 
-    expect(res.status).toBe(200);
-    expect(res.body).toEqual({
-      veredicto: "apto",
-      apto: true,
-      alergenos_en_conflicto: [],
-      trazas_en_conflicto: [],
-      datos_suficientes: true,
-    });
-  });
+      expect(res.status).toBe(200);
+      expect(res.headers["x-fuente-datos"]).toBe("fastapi");
+      expect(res.body).toEqual({ ...veredictoMotor, apto: false });
 
-  it("compatibilidad: con datos insuficientes es apto_con_advertencia", async () => {
-    fastapi.responder("/products/7801234000018", () => ({
-      status: 200,
-      cuerpo: {
-        ...conAlergenos("7801234000018", "Galletas", [AllergenCode.GLUTEN]),
-        ingredientes_texto: null,
-        ingredientes: [],
-        calidad: {
-          es_valido: false,
-          problemas: ["sin_ingredientes"],
-          completitud: 0.4,
+      const [peticion] = fastapi.peticiones;
+      expect(peticion).toMatchObject({
+        metodo: "POST",
+        ruta: RUTA_MOTOR,
+        requestId: "int-compat",
+        claveServicio: "clave-de-integracion",
+        cuerpo: {
+          perfil: {
+            alergias: ["lacteos", "mani"],
+            dietas: [],
+            modo_estricto: false,
+          },
         },
+      });
+      // Nada que identifique a la persona.
+      const enviado = JSON.stringify(peticion.cuerpo);
+      expect(enviado).not.toContain(ANA_ID);
+      expect(enviado).not.toContain("ana@correo.cl");
+      expect(enviado).not.toContain("Ana");
+    });
+
+    it("apto es true solo si el motor responde apto", async () => {
+      fastapi.responder(RUTA_MOTOR, () => ({
+        status: 200,
+        cuerpo: {
+          ...veredictoMotor,
+          veredicto: "apto",
+          trazas_en_conflicto: [],
+          conflictos: [],
+        },
+      }));
+
+      const res = await compatibilidad();
+
+      expect(res.body.veredicto).toBe("apto");
+      expect(res.body.apto).toBe(true);
+    });
+
+    it("propaga el 404 del motor", async () => {
+      fastapi.responder(RUTA_MOTOR, () => ({
+        status: 404,
+        cuerpo: errorContrato("NOT_FOUND", "Producto no encontrado"),
+      }));
+      productos.productos.set(galletas.codigo_barras, galletas);
+
+      const res = await compatibilidad();
+
+      expect(res.status).toBe(404);
+      expect(res.body.error.codigo).toBe("NOT_FOUND");
+    });
+
+    it.each([
+      ["FastAPI caído", () => fastapi.apagar()],
+      [
+        "FastAPI sin respuesta (timeout)",
+        async () => fastapi.responder(RUTA_MOTOR, () => "colgado"),
+      ],
+      [
+        "un 503 del motor",
+        async () =>
+          fastapi.responder(RUTA_MOTOR, () => ({
+            status: 503,
+            cuerpo: errorContrato("SOURCE_UNAVAILABLE", "Sin fuente"),
+          })),
+      ],
+      [
+        "un 403 (clave rechazada)",
+        async () =>
+          fastapi.responder(RUTA_MOTOR, () => ({
+            status: 403,
+            cuerpo: errorContrato("FORBIDDEN", "Clave inválida"),
+          })),
+      ],
+    ])(
+      "con %s responde la regla local desde la base, nunca apto",
+      async (_caso, provocarFalla) => {
+        productos.productos.set(galletas.codigo_barras, galletas);
+        await provocarFalla();
+
+        const res = await compatibilidad();
+
+        expect(res.status).toBe(200);
+        expect(res.headers["x-fuente-datos"]).toBe("respaldo");
+        expect(res.body).toMatchObject({
+          codigo_barras: "7801234000018",
+          veredicto: "apto_con_advertencia",
+          apto: false,
+          alergenos_en_conflicto: [],
+          trazas_en_conflicto: ["mani"],
+          confianza: "baja",
+        });
+        expect(res.body.motivos_confianza).toContain("evaluacion_de_respaldo");
+        expect(res.body.explicacion).toContain(
+          "El servicio de evaluación no está disponible",
+        );
+        expect(res.body.aviso).toContain("Clasificación orientativa");
       },
-    }));
+    );
 
-    const res = await request(servidor())
-      .get("/api/products/7801234000018/compatibilidad")
-      .set("Authorization", token());
+    it("en respaldo, sin conflictos tampoco responde apto", async () => {
+      const avena = conAlergenos("7801234000018", "Avena", [
+        AllergenCode.GLUTEN,
+      ]);
+      productos.productos.set(avena.codigo_barras, avena);
+      await fastapi.apagar();
 
-    expect(res.status).toBe(200);
-    expect(res.body).toEqual({
-      veredicto: "apto_con_advertencia",
-      apto: false,
-      alergenos_en_conflicto: [],
-      trazas_en_conflicto: [],
-      datos_suficientes: false,
+      const res = await compatibilidad();
+
+      expect(res.headers["x-fuente-datos"]).toBe("respaldo");
+      expect(res.body.veredicto).toBe("apto_con_advertencia");
+      expect(res.body.apto).toBe(false);
+    });
+
+    it("en respaldo, un alérgeno del perfil es no_apto", async () => {
+      productos.productos.set(
+        "7801234000018",
+        conAlergenos("7801234000018", "Galletas con leche", [
+          AllergenCode.LACTEOS,
+        ]),
+      );
+      await fastapi.apagar();
+
+      const res = await compatibilidad();
+
+      expect(res.body).toMatchObject({
+        veredicto: "no_apto",
+        apto: false,
+        alergenos_en_conflicto: ["lacteos"],
+        motivos_no_apto: [{ tipo: "alergeno", codigo: "lacteos" }],
+      });
+    });
+
+    it("si el motor falla y el producto no está guardado, responde el error (503)", async () => {
+      await fastapi.apagar();
+
+      const res = await compatibilidad();
+
+      expect(res.status).toBe(503);
+      expect(res.body.error.codigo).toBe("SOURCE_UNAVAILABLE");
     });
   });
 

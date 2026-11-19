@@ -136,9 +136,9 @@ export class ProductsController {
   @Get(":codigo_barras/compatibilidad")
   @ApiBearerAuth()
   @ApiOperation({
-    summary: "Compatibilidad del producto con las alergias del usuario",
+    summary: "Veredicto del motor adaptativo para el perfil del usuario",
     description:
-      'Requiere token. veredicto es no_apto si algún alérgeno coincide, apto_con_advertencia si solo coinciden trazas o si, con alergias en el perfil, faltan datos (sin ingredientes o completitud menor que 0,5), y apto en otro caso. apto es true solo con veredicto "apto". El producto se obtiene como en el detalle (X-Fuente-Datos indica si vino del respaldo).',
+      'Requiere token. Envía al motor de FastAPI solo el perfil (alergias; dietas y modo estricto todavía vacíos) y responde su Veredicto (veredicto, explicacion, confianza, conflictos, aviso...) más apto, que es true solo con veredicto "apto". Si el motor falla (500, 502, 503 o 504 tras los reintentos), responde una revisión básica de las alergias sobre el producto guardado, con X-Fuente-Datos: respaldo, confianza baja y "evaluacion_de_respaldo" en motivos_confianza; en respaldo nunca es "apto".',
   })
   @ApiParam({ name: "codigo_barras", description: "De 8 a 14 dígitos." })
   @ApiOkResponse({ type: Compatibilidad, headers: HEADER_RESPUESTA })
@@ -146,6 +146,18 @@ export class ProductsController {
   @ApiNotFoundResponse({
     type: ErrorContrato,
     description: "El producto no existe (NOT_FOUND).",
+  })
+  @ApiUnprocessableEntityResponse({
+    type: ErrorContrato,
+    description: "Código de barras inválido (VALIDATION_ERROR).",
+  })
+  @ApiServiceUnavailableResponse({
+    type: ErrorContrato,
+    description: "Motor no disponible y el producto no está guardado.",
+  })
+  @ApiGatewayTimeoutResponse({
+    type: ErrorContrato,
+    description: "Motor sin respuesta a tiempo y el producto no está guardado.",
   })
   async compatibilidad(
     @Param() { codigo_barras }: CodigoBarrasParamDto,
