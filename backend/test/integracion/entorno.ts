@@ -6,3 +6,5 @@ process.env.JWT_SECRET = "secreto-de-integracion";
 // Timeout corto para que los casos de FastAPI colgado no alarguen la suite.
 process.env.PYTHON_API_TIMEOUT_MS = "300";
 process.env.PYTHON_API_REINTENTOS = "2";
+// Clave entre servicios: el FastAPI falso registra la que llega.
+process.env.CLAVE_SERVICIO = "clave-de-integracion";

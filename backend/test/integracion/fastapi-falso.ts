@@ -2,9 +2,14 @@ import { createServer, IncomingMessage, ServerResponse } from "http";
 import { AddressInfo, Socket } from "net";
 
 export interface PeticionRecibida {
+  metodo: string;
   ruta: string;
   query: URLSearchParams;
   requestId: string | undefined;
+  /** Valor del header X-Clave-Servicio, o undefined si no llegó. */
+  claveServicio: string | undefined;
+  /** Cuerpo JSON de un POST; undefined si no trae cuerpo. */
+  cuerpo: unknown;
 }
 
 /** Respuesta JSON con status, o "colgado" para no responder nunca. */
@@ -23,8 +28,9 @@ const SALUD_OK: Respuesta = {
 };
 
 /**
- * Servidor HTTP que imita a FastAPI (GET /search y GET /health) con
- * respuestas configurables por test. Registra cada petición recibida.
+ * Servidor HTTP que imita a FastAPI (GET /search, GET /health, los POST del
+ * motor adaptativo...) con respuestas configurables por test. Registra cada
+ * petición recibida, con su cuerpo y su X-Clave-Servicio.
  */
 export class FastApiFalso {
   readonly peticiones: PeticionRecibida[] = [];
@@ -60,7 +66,10 @@ export class FastApiFalso {
     if (!this.servidor.listening) await this.escuchar(this.puerto);
   }
 
-  /** Configura la respuesta de una ruta ("/search" o "/health"). */
+  /**
+   * Configura la respuesta de una ruta ("/search", "/health",
+   * "/search/personalized"...). Cada ruta del contrato tiene un solo método.
+   */
   responder(ruta: string, manejador: Manejador): void {
     this.manejadores.set(ruta, manejador);
   }
@@ -76,11 +85,26 @@ export class FastApiFalso {
   }
 
   private atender(req: IncomingMessage, res: ServerResponse): void {
+    const trozos: Buffer[] = [];
+    req.on("data", (trozo: Buffer) => trozos.push(trozo));
+    req.on("end", () =>
+      this.responder_(req, res, Buffer.concat(trozos).toString()),
+    );
+  }
+
+  private responder_(
+    req: IncomingMessage,
+    res: ServerResponse,
+    texto: string,
+  ): void {
     const url = new URL(req.url ?? "/", this.url);
     const peticion: PeticionRecibida = {
+      metodo: req.method ?? "GET",
       ruta: url.pathname,
       query: url.searchParams,
       requestId: req.headers["x-request-id"] as string | undefined,
+      claveServicio: req.headers["x-clave-servicio"] as string | undefined,
+      cuerpo: texto ? JSON.parse(texto) : undefined,
     };
     this.peticiones.push(peticion);
 

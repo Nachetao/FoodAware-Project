@@ -94,3 +94,88 @@ describe("formato de los logs", () => {
     jest.restoreAllMocks();
   });
 });
+
+describe("datos sensibles en los logs", () => {
+  it("redacta Authorization, Cookie y X-Clave-Servicio de una petición", () => {
+    const { logger, leer } = crearLogger();
+
+    logger.info(
+      {
+        req: {
+          method: "GET",
+          headers: {
+            authorization: "Bearer token-secreto",
+            cookie: "sesion=secreta",
+            "x-clave-servicio": "clave-secreta",
+            "x-request-id": "prueba-123",
+          },
+        },
+        res: { headers: { "set-cookie": "sesion=secreta" } },
+      },
+      "petición",
+    );
+
+    const [log] = leer();
+    expect(log.req.headers).toEqual({
+      authorization: "[REDACTADO]",
+      cookie: "[REDACTADO]",
+      "x-clave-servicio": "[REDACTADO]",
+      "x-request-id": "prueba-123",
+    });
+    expect(log.res.headers["set-cookie"]).toBe("[REDACTADO]");
+    expect(log.req.method).toBe("GET");
+  });
+
+  it("redacta X-Clave-Servicio en la configuración de un error de axios", () => {
+    const { logger, leer } = crearLogger();
+
+    logger.error(
+      {
+        err: {
+          config: {
+            headers: {
+              "X-Clave-Servicio": "clave-secreta",
+              "X-Request-ID": "prueba-123",
+            },
+          },
+        },
+      },
+      "falla",
+    );
+
+    expect(leer()[0].err.config.headers).toEqual({
+      "X-Clave-Servicio": "[REDACTADO]",
+      "X-Request-ID": "prueba-123",
+    });
+  });
+
+  it("redacta cualquier campo password hasta dos niveles de profundidad", () => {
+    const { logger, leer } = crearLogger();
+
+    logger.info(
+      {
+        password: "uno",
+        body: { correo: "ana@correo.cl", password: "dos" },
+        datos: { usuario: { password: "tres" } },
+      },
+      "registro",
+    );
+
+    const [log] = leer();
+    expect(log.password).toBe("[REDACTADO]");
+    expect(log.body).toEqual({
+      correo: "ana@correo.cl",
+      password: "[REDACTADO]",
+    });
+    expect(log.datos.usuario.password).toBe("[REDACTADO]");
+  });
+
+  it("no agrega campos cuando no hay datos sensibles", () => {
+    const { logger, leer } = crearLogger();
+
+    logger.info("hola");
+
+    expect(leer()[0]).not.toHaveProperty("password");
+    expect(leer()[0]).not.toHaveProperty("headers");
+  });
+});

@@ -12,6 +12,8 @@ import { Food } from "../foods/entities/food.entity";
 import { User } from "../users/user.entity";
 import { aCodigosAlergenos } from "../users/alergias";
 import { AllergenCode } from "../products/contrato/enums";
+import { headersFastApi } from "../products/fastapi.config";
+import { requestIdActual } from "../observabilidad/request-id";
 
 @Injectable()
 export class IaAnalysisService {
@@ -43,10 +45,16 @@ export class IaAnalysisService {
 
     try {
       const response = await firstValueFrom(
-        this.httpService.post(`${this.pythonApiUrl}/analizar`, {
-          nombre,
-          ingredientes,
-        }),
+        this.httpService.post(
+          `${this.pythonApiUrl}/analizar`,
+          { nombre, ingredientes },
+          {
+            headers: headersFastApi(
+              this.configService,
+              requestIdActual() ?? undefined,
+            ),
+          },
+        ),
       );
 
       this.logger.log("Análisis recibido exitosamente.");

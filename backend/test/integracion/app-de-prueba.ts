@@ -134,7 +134,10 @@ export async function crearApp(pythonApiUrl: string) {
     .overrideProvider(getRepositoryToken(User))
     .useValue(usuarios)
     .overrideProvider(getRepositoryToken(Food))
-    .useValue({})
+    .useValue({
+      create: (datos: Partial<Food>) => ({ ...datos }),
+      save: async (food: Food) => ({ ...food, id: "food-1" }),
+    })
     .overrideProvider(ProductsRepository)
     .useValue(productos)
     .compile();
