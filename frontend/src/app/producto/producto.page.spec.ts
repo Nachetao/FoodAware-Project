@@ -45,7 +45,14 @@ const PRODUCTO: Producto = {
   },
 };
 
-const APTO: Compatibilidad = { apto: true, alergenos_en_conflicto: [], trazas_en_conflicto: [] };
+const APTO: Compatibilidad = {
+  veredicto: 'apto',
+  apto: true,
+  alergenos_en_conflicto: [],
+  trazas_en_conflicto: [],
+  datos_suficientes: true,
+};
+const CON_ADVERTENCIA: Compatibilidad = { ...APTO, veredicto: 'apto_con_advertencia', apto: false };
 
 describe('ProductoPage', () => {
   let fixture: ComponentFixture<ProductoPage>;
@@ -210,6 +217,8 @@ describe('ProductoPage', () => {
       await crear(undefined, {
         conSesion: true,
         compatible: of<Compatibilidad>({
+          ...APTO,
+          veredicto: 'no_apto',
           apto: false,
           alergenos_en_conflicto: ['lacteos', 'soya'],
           trazas_en_conflicto: ['mani'],
@@ -219,16 +228,64 @@ describe('ProductoPage', () => {
       expect(texto('.franja.no-apto[role="alert"]')).toBe('No apto: contiene Lácteos, Soya');
       expect(texto('.franja.trazas-en-conflicto')).toBe('Puede contener Maní');
       expect(raiz().querySelector('.franja.apto')).toBeNull();
+      expect(raiz().querySelector('.franja.apto-con-advertencia')).toBeNull();
     });
 
-    it('las trazas en conflicto no quitan el "Apto para ti"', async () => {
+    it('con trazas en conflicto muestra "Apto con advertencia" en ámbar, nunca "Apto para ti"', async () => {
       await crear(undefined, {
         conSesion: true,
-        compatible: of<Compatibilidad>({ ...APTO, trazas_en_conflicto: ['mani'] }),
+        compatible: of<Compatibilidad>({ ...CON_ADVERTENCIA, trazas_en_conflicto: ['mani'] }),
       });
 
-      expect(texto('.franja.apto')).toBe('Apto para ti');
-      expect(texto('.franja.trazas-en-conflicto')).toBe('Puede contener Maní');
+      expect(texto('.franja.apto-con-advertencia[role="status"]')).toBe(
+        'Apto con advertencia: puede contener Maní',
+      );
+      expect(raiz().querySelector('.franja.apto')).toBeNull();
+      expect(raiz().querySelector('.franja.no-apto')).toBeNull();
+      expect(raiz().querySelector('.franja.trazas-en-conflicto')).toBeNull();
+    });
+
+    it('con datos insuficientes muestra "Apto con advertencia: datos insuficientes"', async () => {
+      await crear(undefined, {
+        conSesion: true,
+        compatible: of<Compatibilidad>({ ...CON_ADVERTENCIA, datos_suficientes: false }),
+      });
+
+      expect(texto('.franja.apto-con-advertencia')).toBe(
+        'Apto con advertencia: datos insuficientes',
+      );
+      expect(raiz().querySelector('.franja.apto')).toBeNull();
+    });
+
+    it('con trazas y datos insuficientes muestra los dos motivos', async () => {
+      await crear(undefined, {
+        conSesion: true,
+        compatible: of<Compatibilidad>({
+          ...CON_ADVERTENCIA,
+          trazas_en_conflicto: ['mani', 'soya'],
+          datos_suficientes: false,
+        }),
+      });
+
+      expect(texto('.franja.apto-con-advertencia')).toBe(
+        'Apto con advertencia: puede contener Maní, Soya; datos insuficientes',
+      );
+    });
+
+    it('sin veredicto en la respuesta (backend anterior), las trazas no dan "Apto para ti"', async () => {
+      await crear(undefined, {
+        conSesion: true,
+        compatible: of({
+          apto: true,
+          alergenos_en_conflicto: [],
+          trazas_en_conflicto: ['mani'],
+        } as unknown as Compatibilidad),
+      });
+
+      expect(texto('.franja.apto-con-advertencia')).toBe(
+        'Apto con advertencia: puede contener Maní',
+      );
+      expect(raiz().querySelector('.franja.apto')).toBeNull();
     });
 
     it('si falla, muestra el detalle sin franja', async () => {

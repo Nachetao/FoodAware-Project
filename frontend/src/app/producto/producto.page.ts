@@ -4,7 +4,7 @@ import { ActivatedRoute } from '@angular/router';
 import { AuthService } from '../auth/auth.service';
 import { ProductsService } from '../products/products.service';
 import { etiquetaAlergeno, etiquetaDieta } from '../products/models/alergenos';
-import { Compatibilidad } from '../products/models/compatibilidad';
+import { Compatibilidad, Veredicto } from '../products/models/compatibilidad';
 import { ErrorApi } from '../products/models/error';
 import { Producto } from '../products/models/producto';
 import { esProblemaDeAlergenos, explicarProblema } from '../products/models/problemas';
@@ -28,18 +28,25 @@ export class ProductoPage implements OnInit {
   readonly error = signal<ErrorApi | null>(null);
   readonly noEncontrado = computed(() => this.error()?.codigo === 'NOT_FOUND');
 
-  // Franja "Apto para ti" / "No apto": solo con sesión. Si la consulta falla,
-  // el detalle se muestra igual, sin franja.
+  // Franja de 3 estados (verde, ámbar, roja): solo con sesión. Si la consulta
+  // falla, el detalle se muestra igual, sin franja.
   private readonly compatibilidad = signal<Compatibilidad | null>(null);
   readonly franja = computed(() => {
     const c = this.auth.autenticado() ? this.compatibilidad() : null;
     if (!c) {
       return null;
     }
+    const trazas = c.trazas_en_conflicto.map(etiquetaAlergeno).join(', ');
+    // Ámbar: qué impide confirmar que es apto.
+    const advertencias = [
+      trazas ? `puede contener ${trazas}` : '',
+      c.datos_suficientes === false ? 'datos insuficientes' : '',
+    ].filter(Boolean);
     return {
-      apto: c.apto,
+      veredicto: veredictoDe(c),
       conflictos: c.alergenos_en_conflicto.map(etiquetaAlergeno).join(', '),
-      trazas: c.trazas_en_conflicto.map(etiquetaAlergeno).join(', '),
+      trazas,
+      advertencia: advertencias.join('; ') || 'no se pudo confirmar',
     };
   });
 
@@ -123,4 +130,18 @@ export class ProductoPage implements OnInit {
         error: () => undefined,
       });
   }
+}
+
+/**
+ * Veredicto de la respuesta. Si el backend todavía no lo envía (despliegue a
+ * medias), se deriva de forma conservadora: nunca "apto" con conflictos.
+ */
+function veredictoDe(c: Compatibilidad): Veredicto {
+  if (c.veredicto) {
+    return c.veredicto;
+  }
+  if (c.alergenos_en_conflicto.length > 0) {
+    return 'no_apto';
+  }
+  return c.apto && c.trazas_en_conflicto.length === 0 ? 'apto' : 'apto_con_advertencia';
 }
