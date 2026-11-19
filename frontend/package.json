@@ -8,6 +8,8 @@
     "start": "node scripts/generar-api-url.js && ng serve",
     "build": "node scripts/generar-api-url.js && ng build",
     "pwa:local": "node scripts/servir-pwa-local.js",
+    "android:sync": "node scripts/android.js sync",
+    "android:apk": "node scripts/android.js apk",
     "watch": "node scripts/generar-api-url.js && ng build --watch --configuration development",
     "test": "node scripts/generar-api-url.js && ng test",
     "lint": "ng lint"
@@ -22,6 +24,7 @@
     "@angular/platform-browser-dynamic": "22.0.1",
     "@angular/router": "22.0.1",
     "@angular/service-worker": "22.0.1",
+    "@capacitor/android": "8.5.0",
     "@capacitor/app": "8.1.1",
     "@capacitor/core": "8.5.0",
     "@capacitor/haptics": "8.0.2",
