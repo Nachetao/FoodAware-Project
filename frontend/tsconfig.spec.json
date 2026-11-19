@@ -3,6 +3,8 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "outDir": "./out-tsc/spec",
+    // pwa/ngsw-config.spec.ts lee ngsw-config.json.
+    "resolveJsonModule": true,
     "types": [
       "vitest/globals"
     ]

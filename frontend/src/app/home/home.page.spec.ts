@@ -16,6 +16,7 @@ import { AnalisisService, ResultadoAnalisis } from '../analisis/analisis.service
 import { CLAVE_PREFERENCIAS, leerPreferencias } from '../busqueda/preferencias-busqueda';
 import { AVISO_ORIENTATIVO } from '../compartido/aviso-orientativo';
 import { ErrorApi } from '../products/models/error';
+import { InstalacionService } from '../pwa/instalacion.service';
 
 @Component({ template: '' })
 class VaciaPage {}
@@ -27,6 +28,7 @@ describe('HomePage', () => {
   let analizar: ReturnType<typeof vi.fn<AnalisisService['analizar']>>;
   let crearAlerta: ReturnType<typeof vi.fn>;
   let cerrarCarga: ReturnType<typeof vi.fn>;
+  let instalacion: { disponible: ReturnType<typeof signal<boolean>>; instalar: ReturnType<typeof vi.fn> };
 
   beforeEach(async () => {
     localStorage.clear();
@@ -34,6 +36,7 @@ describe('HomePage', () => {
     analizar = vi.fn<AnalisisService['analizar']>();
     crearAlerta = vi.fn().mockResolvedValue({ present: vi.fn() });
     cerrarCarga = vi.fn().mockResolvedValue(true);
+    instalacion = { disponible: signal(false), instalar: vi.fn().mockResolvedValue(true) };
 
     await TestBed.configureTestingModule({
       // El módulo de la página trae FormsModule y la barra superior compartida.
@@ -47,6 +50,7 @@ describe('HomePage', () => {
         ]),
         { provide: AuthService, useValue: { autenticado, esAdmin: signal(false) } },
         { provide: AnalisisService, useValue: { analizar } },
+        { provide: InstalacionService, useValue: instalacion },
         { provide: AlertController, useValue: { create: crearAlerta } },
         {
           provide: LoadingController,
@@ -104,6 +108,23 @@ describe('HomePage', () => {
     expect(texto('.presentacion p')).toBe(
       'Busca alimentos y descubre si son aptos para ti según tus alergias. Para personas con alergias, intolerancias o dietas.',
     );
+  });
+
+  describe('instalar la app', () => {
+    const botonInstalar = () => raiz().querySelector<HTMLElement>('.presentacion ion-button.instalar');
+
+    it('no muestra el botón si el navegador no permite instalar', () => {
+      expect(botonInstalar()).toBeNull();
+    });
+
+    it('con la instalación disponible muestra "Instalar FoodAware" y la inicia', () => {
+      instalacion.disponible.set(true);
+
+      expect(botonInstalar()?.textContent?.trim()).toBe('Instalar FoodAware');
+      botonInstalar()!.click();
+
+      expect(instalacion.instalar).toHaveBeenCalled();
+    });
   });
 
   describe('buscador principal', () => {

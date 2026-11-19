@@ -11,6 +11,7 @@ import {
 } from '../busqueda/preferencias-busqueda';
 import { AVISO_ORIENTATIVO } from '../compartido/aviso-orientativo';
 import { ErrorApi } from '../products/models/error';
+import { InstalacionService } from '../pwa/instalacion.service';
 
 @Component({
   selector: 'app-home',
@@ -25,6 +26,7 @@ export class HomePage {
   private router = inject(Router);
   // El acceso "Personalizar según mi perfil" cambia según la sesión.
   readonly auth = inject(AuthService);
+  readonly instalacion = inject(InstalacionService);
 
   readonly aviso = AVISO_ORIENTATIVO;
 
@@ -39,6 +41,10 @@ export class HomePage {
   buscarProductos(): void {
     const q = this.textoBusqueda.trim();
     void this.router.navigate(['/busqueda'], q ? { queryParams: { q } } : {});
+  }
+
+  instalar(): void {
+    void this.instalacion.instalar();
   }
 
   /** Activa la búsqueda personalizada (preferencia recordada) y va a buscar. */

@@ -11,6 +11,13 @@
         Busca alimentos y descubre si son aptos para ti según tus alergias. Para personas
         con alergias, intolerancias o dietas.
       </p>
+      <!-- Solo si el navegador permite instalar la PWA (no en Safari ni en la app de Android). -->
+      @if (instalacion.disponible()) {
+        <ion-button class="instalar ion-margin-top" fill="outline" size="small" (click)="instalar()">
+          <ion-icon name="download-outline" slot="start" aria-hidden="true"></ion-icon>
+          Instalar FoodAware
+        </ion-button>
+      }
     </section>
 
     <!-- Buscador principal: lleva a /busqueda?q=... -->
