@@ -171,3 +171,29 @@ services:
       - path: /*
         name: Referrer-Policy
         value: strict-origin-when-cross-origin
+      # El service worker, su manifiesto y el index siempre se revalidan
+      # (lo mismo que frontend/nginx.conf, que Render no usa): si quedaran
+      # en caché HTTP, una versión nueva de la app tardaría en llegar. Son
+      # archivos reales del build, así que el rewrite de la SPA no los toca.
+      - path: /ngsw-worker.js
+        name: Cache-Control
+        value: no-cache
+      - path: /ngsw.json
+        name: Cache-Control
+        value: no-cache
+      - path: /safety-worker.js
+        name: Cache-Control
+        value: no-cache
+      - path: /worker-basic.min.js
+        name: Cache-Control
+        value: no-cache
+      - path: /manifest.webmanifest
+        name: Cache-Control
+        value: no-cache
+      - path: /index.html
+        name: Cache-Control
+        value: no-cache
+      # La raíz también sirve index.html.
+      - path: /
+        name: Cache-Control
+        value: no-cache
