@@ -8,6 +8,7 @@
 
 <ion-content class="ion-padding">
   <div class="contenedor">
+    <h1 class="solo-lectores">Métricas</h1>
     <!-- Calidad de datos -->
     <ion-card class="tarjeta-calidad">
       <ion-card-header>
@@ -125,7 +126,7 @@
 <!-- Carga y error de una tarjeta (el error trae el mensaje del contrato). -->
 <ng-template #estadoSeccion let-seccion>
   @if (seccion.cargando && !seccion.datos) {
-    <div class="estado"><ion-spinner name="crescent" aria-label="Cargando"></ion-spinner></div>
+    <app-cargando texto="Cargando…"></app-cargando>
   }
   @if (seccion.error) {
     <ion-text color="danger"><p class="error" role="alert">{{ seccion.error.mensaje }}</p></ion-text>

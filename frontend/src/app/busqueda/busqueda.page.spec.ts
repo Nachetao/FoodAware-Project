@@ -325,6 +325,40 @@ describe('BusquedaPage', () => {
     expect(textos('ion-item h2')).toEqual(['Pan integral']);
   });
 
+  describe('accesibilidad', () => {
+    // Ionic quita del DOM los atributos aria al hidratar: se leen de la plantilla.
+    const buscador = () => fixture.debugElement.query(By.css('ion-searchbar'));
+
+    it('el buscador tiene nombre y la "x" de limpiar va en español', () => {
+      expect(buscador().attributes['aria-label']).toBe('Buscar alimentos');
+      expect(buscador().attributes['appEtiquetaLimpiar']).toBe('Limpiar búsqueda');
+    });
+
+    it('tiene un h1 para lectores de pantalla', () => {
+      expect(textos('h1.solo-lectores')).toEqual(['Buscar productos']);
+    });
+
+    it('anuncia la búsqueda en curso en una región de estado', () => {
+      buscar.mockReturnValue(new Subject<BusquedaProductos>());
+
+      page.buscar('leche');
+
+      expect(textos('app-cargando [role="status"]')).toEqual(['Buscando productos…']);
+    });
+
+    it('"Cargar más" conserva un nombre mientras carga', () => {
+      buscar.mockReturnValue(of(respuesta(rango(1, 20), 50)));
+      page.buscar('leche');
+      buscar.mockReturnValue(new Subject<BusquedaProductos>());
+
+      page.cargarMas();
+
+      const boton = botonCargarMas()!;
+      expect(boton.querySelector('ion-spinner')?.getAttribute('aria-hidden')).toBe('true');
+      expect(boton.querySelector('.solo-lectores')?.textContent).toBe('Cargando más productos…');
+    });
+  });
+
   describe('aviso de respaldo', () => {
     const AVISO =
       'El servicio de búsqueda no está disponible; mostrando productos guardados anteriormente.';

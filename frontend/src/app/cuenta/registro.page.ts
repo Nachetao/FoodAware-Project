@@ -12,6 +12,7 @@ import { ErrorApi } from '../products/models/error';
     </ion-header>
     <ion-content class="ion-padding">
       <form class="formulario" (ngSubmit)="registrar()">
+        <h1 class="solo-lectores">Crear cuenta</h1>
         <ion-input name="nombre" label="Nombre" labelPlacement="floating"
           autocomplete="name" [(ngModel)]="nombre" required></ion-input>
         <ion-input name="correo" type="email" label="Correo" labelPlacement="floating"

@@ -87,6 +87,16 @@ import { AuthService } from '../auth/auth.service';
     .ingresar {
       font-weight: 600;
     }
+
+    // Pantallas estrechas: título a 16 px y con menos relleno. El ancho de los
+    // botones está en global.scss, porque también aplica a los botones que
+    // proyecta cada página (accionExtra).
+    @media (max-width: 480px) {
+      ion-title {
+        padding-inline: var(--app-espacio-1);
+        font-size: 16px;
+      }
+    }
   `,
   standalone: false,
 })

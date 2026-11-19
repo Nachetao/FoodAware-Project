@@ -2,7 +2,7 @@ import { Type, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, Router, convertToParamMap, provideRouter } from '@angular/router';
 import { AlertController, IonicModule } from '@ionic/angular/lazy';
-import { of, throwError } from 'rxjs';
+import { Subject, of, throwError } from 'rxjs';
 import { AuthService, Usuario } from '../auth/auth.service';
 import { CuentaModule } from './cuenta.module';
 import { LoginPage } from './login.page';
@@ -109,9 +109,9 @@ describe('Cuenta: login, registro y perfil', () => {
       const f = await crear(RegistroPage);
       Object.assign(f.componentInstance, { nombre: 'Ana', correo: 'ana@correo.cl', password: 'x1' });
 
-      html(f).querySelector<HTMLElement>('ion-chip[data-codigo="mani"]')!.click();
-      html(f).querySelector<HTMLElement>('ion-chip[data-codigo="lacteos"]')!.click();
-      expect(html(f).querySelector('ion-chip[data-codigo="mani"]')?.getAttribute('aria-pressed')).toBe('true');
+      html(f).querySelector<HTMLElement>('[data-codigo="mani"]')!.click();
+      html(f).querySelector<HTMLElement>('[data-codigo="lacteos"]')!.click();
+      expect(html(f).querySelector('[data-codigo="mani"]')?.getAttribute('aria-pressed')).toBe('true');
       f.componentInstance.registrar();
 
       expect(auth.registrar).toHaveBeenCalledWith({
@@ -125,7 +125,7 @@ describe('Cuenta: login, registro y perfil', () => {
 
     it('un chip elegido se puede quitar', async () => {
       const f = await crear(RegistroPage);
-      const chip = () => html(f).querySelector<HTMLElement>('ion-chip[data-codigo="soya"]')!;
+      const chip = () => html(f).querySelector<HTMLElement>('[data-codigo="soya"]')!;
 
       chip().click();
       chip().click();
@@ -147,8 +147,8 @@ describe('Cuenta: login, registro y perfil', () => {
 
       expect(html(f).querySelector('.nombre')?.textContent).toBe('Ana');
       expect(html(f).querySelector('.correo')?.textContent).toBe('ana@correo.cl');
-      expect(html(f).querySelector('ion-chip[data-codigo="mani"]')?.getAttribute('aria-pressed')).toBe('true');
-      expect(html(f).querySelector('ion-chip[data-codigo="vegano"]')?.getAttribute('aria-pressed')).toBe('true');
+      expect(html(f).querySelector('[data-codigo="mani"]')?.getAttribute('aria-pressed')).toBe('true');
+      expect(html(f).querySelector('[data-codigo="vegano"]')?.getAttribute('aria-pressed')).toBe('true');
       expect(f.componentInstance.modoEstricto()).toBe(true);
     });
 
@@ -162,7 +162,7 @@ describe('Cuenta: login, registro y perfil', () => {
       const f = await crear(PerfilPage);
       expect(botonGuardar(f).disabled).toBe(true);
 
-      html(f).querySelector<HTMLElement>('ion-chip[data-codigo="sin_gluten"]')!.click();
+      html(f).querySelector<HTMLElement>('[data-codigo="sin_gluten"]')!.click();
 
       expect(botonGuardar(f).disabled).toBe(false);
     });
@@ -171,8 +171,8 @@ describe('Cuenta: login, registro y perfil', () => {
       const f = await crear(PerfilPage);
 
       emitir(f, 'ion-input.campo-nombre', 'ionInput', { value: '  Ana María ' });
-      html(f).querySelector<HTMLElement>('ion-chip[data-codigo="gluten"]')!.click();
-      html(f).querySelector<HTMLElement>('ion-chip[data-codigo="vegetariano"]')!.click();
+      html(f).querySelector<HTMLElement>('[data-codigo="gluten"]')!.click();
+      html(f).querySelector<HTMLElement>('[data-codigo="vegetariano"]')!.click();
       emitir(f, 'ion-toggle.modo-estricto', 'ionChange', { checked: true });
       botonGuardar(f).click();
 
@@ -197,7 +197,7 @@ describe('Cuenta: login, registro y perfil', () => {
     it('muestra el error si no se pudo guardar', async () => {
       auth.actualizarPerfil.mockReturnValue(throwError(() => ({ mensaje: 'Cada dieta debe ser…' })));
       const f = await crear(PerfilPage);
-      html(f).querySelector<HTMLElement>('ion-chip[data-codigo="vegano"]')!.click();
+      html(f).querySelector<HTMLElement>('[data-codigo="vegano"]')!.click();
 
       f.componentInstance.guardar();
 
@@ -271,6 +271,47 @@ describe('Cuenta: login, registro y perfil', () => {
         );
         expect(navegar).not.toHaveBeenCalled();
       });
+    });
+  });
+
+  describe('accesibilidad', () => {
+    const opciones = (f: ComponentFixture<unknown>) =>
+      Array.from(html(f).querySelectorAll<HTMLElement>('[data-codigo]'));
+
+    it.each([
+      ['registro (alergias)', RegistroPage, 14],
+      ['perfil (alergias y dietas)', PerfilPage, 18],
+    ] as const)('en %s cada opción es un botón nativo con aria-pressed', async (_caso, pagina, cantidad) => {
+      const f = await crear(pagina as Type<unknown>);
+
+      const botones = opciones(f);
+      expect(botones).toHaveLength(cantidad);
+      for (const boton of botones) {
+        // Un <button> nativo recibe el foco y se activa con Enter y Espacio.
+        expect(boton.tagName).toBe('BUTTON');
+        expect(boton.getAttribute('type')).toBe('button');
+        expect(['true', 'false']).toContain(boton.getAttribute('aria-pressed'));
+        expect(boton.querySelector('ion-chip')?.textContent?.trim()).toBeTruthy();
+      }
+    });
+
+    it.each([
+      ['login', LoginPage, 'Ingresar'],
+      ['registro', RegistroPage, 'Crear cuenta'],
+    ] as const)('%s tiene un h1 para lectores de pantalla', async (_caso, pagina, titulo) => {
+      const f = await crear(pagina as Type<unknown>);
+
+      expect(html(f).querySelector('h1.solo-lectores')?.textContent).toBe(titulo);
+    });
+
+    it('anuncia la carga del perfil en una región de estado', async () => {
+      auth.usuario.set(null);
+      auth.cargarPerfil.mockReturnValue(new Subject<Usuario>());
+      const f = await crear(PerfilPage);
+
+      expect(html(f).querySelector('app-cargando [role="status"]')?.textContent?.trim()).toBe(
+        'Cargando perfil…',
+      );
     });
   });
 });

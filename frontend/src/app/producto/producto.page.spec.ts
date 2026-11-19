@@ -208,6 +208,9 @@ describe('ProductoPage', () => {
     await crear(new Subject<DetalleProducto>());
 
     expect(raiz().querySelector('ion-spinner')).not.toBeNull();
+    expect(raiz().querySelector('app-cargando [role="status"]')?.textContent?.trim()).toBe(
+      'Cargando producto…',
+    );
   });
 
   it('muestra "Producto no encontrado" ante un 404', async () => {

@@ -164,3 +164,144 @@ ion-thumbnail {
     color: var(--ion-color-primary);
   }
 }
+
+// ===== Accesibilidad =====
+
+// Texto que solo leen los lectores de pantalla (h1 de página, estados de carga).
+.solo-lectores {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+// Foco visible al navegar con teclado: contorno verde (9.6:1 sobre crema).
+a:focus-visible,
+button:focus-visible,
+[tabindex]:focus-visible {
+  outline: 3px solid var(--ion-color-primary);
+  outline-offset: 2px;
+}
+
+// Los controles de Ionic marcan .ion-focused solo cuando el foco llega con el teclado.
+ion-button.ion-focused,
+ion-back-button.ion-focused,
+ion-item.ion-focused,
+ion-toggle.ion-focused,
+ion-segment-button.ion-focused {
+  outline: 3px solid var(--ion-color-primary);
+  outline-offset: 2px;
+}
+
+// Áreas táctiles de al menos 44 px en el contenido (los botones de la barra
+// superior tienen su propio tamaño en barra-superior.component.ts).
+ion-content ion-button {
+  min-height: 44px;
+}
+
+ion-toggle {
+  padding-block: var(--app-espacio-3);
+}
+
+// Barra superior en pantallas estrechas: con hasta 6 botones (volver,
+// actualizar y las 4 acciones) el título no debe cortarse. Botones de 36 x 48
+// px, por encima de los 24 px de WCAG 2.2 AA (2.5.8). Aquí y no en el
+// componente: también aplica a los botones que proyecta cada página.
+@media (max-width: 480px) {
+  // Con estas tres clases supera a la regla de Ionic que fija 3rem
+  // (.sc-ion-buttons-md-s .button-has-icon-only.button-clear).
+  app-barra-superior ion-buttons ion-button.button-has-icon-only.button-clear.in-buttons,
+  app-barra-superior ion-back-button {
+    width: 36px;
+    min-width: 0;
+    --padding-start: 0;
+    --padding-end: 0;
+  }
+}
+
+// La "x" de ion-searchbar mide 22 px de ancho. Selector repetido para superar
+// a los de Ionic (.searchbar-clear-button.sc-ion-searchbar-md). El ícono queda
+// centrado donde estaba: 24 px desde el borde.
+// El campo (y con él la "x", que ocupa su alto) pasa de 42 a 44 px.
+ion-searchbar .searchbar-input.searchbar-input {
+  min-height: 44px;
+}
+
+ion-searchbar .searchbar-clear-button.searchbar-clear-button {
+  width: 44px;
+  inset-inline-end: 2px;
+
+  &:focus-visible {
+    outline: 3px solid var(--ion-color-primary);
+    outline-offset: -3px;
+  }
+}
+
+// Enlace que va solo en su línea (no dentro de una frase).
+.enlace-suelto {
+  display: inline-flex;
+  gap: var(--app-espacio-1);
+  align-items: center;
+  min-height: 44px;
+}
+
+// Segmentos: sin mayúsculas forzadas y en dos líneas si no caben.
+ion-segment-button {
+  min-height: 44px;
+  text-transform: none;
+  letter-spacing: normal;
+
+  ion-label {
+    white-space: normal;
+  }
+}
+
+// Opción seleccionable (alergias y dietas): un <button> nativo con el ion-chip
+// de siempre adentro. El botón aporta el foco, el teclado y los 44 px de
+// área táctil; el chip, el aspecto.
+.opcion-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+
+  ion-chip {
+    margin: 0;
+    pointer-events: none;
+  }
+
+  // El contorno de foco sigue la forma del chip.
+  &:focus-visible {
+    outline: none;
+
+    ion-chip {
+      outline: 3px solid var(--ion-color-primary);
+      outline-offset: 2px;
+    }
+  }
+}
+
+// Movimiento reducido: sin transiciones ni animaciones propias. Las de Ionic
+// se desactivan en app.module.ts (animated: false). Los spinners siguen
+// girando: su animación está dentro de su shadow DOM e indica que algo carga.
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

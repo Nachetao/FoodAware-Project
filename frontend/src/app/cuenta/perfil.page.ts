@@ -53,7 +53,7 @@ const mismos = <T>(a: readonly T[], b: readonly T[]) =>
             {{ guardando() ? 'Guardando…' : 'Guardar cambios' }}
           </ion-button>
         } @else {
-          <div class="estado"><ion-spinner name="crescent" aria-label="Cargando perfil"></ion-spinner></div>
+          <app-cargando texto="Cargando perfil…"></app-cargando>
           @if (error()) {
             <ion-text color="danger"><p role="alert">{{ error() }}</p></ion-text>
           }

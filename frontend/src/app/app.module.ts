@@ -6,6 +6,7 @@ import { provideServiceWorker } from '@angular/service-worker';
 import { Capacitor } from '@capacitor/core';
 import { authInterceptor } from './auth/auth.interceptor';
 import { PwaModule } from './pwa/pwa.module';
+import { movimientoReducido } from './compartido/movimiento';
 
 import { IonicModule, IonicRouteStrategy } from '@ionic/angular/lazy';
 
@@ -14,7 +15,13 @@ import { AppRoutingModule } from './app-routing.module';
 
 @NgModule({
   declarations: [AppComponent],
-  imports: [BrowserModule, IonicModule.forRoot(), AppRoutingModule, PwaModule],
+  imports: [
+    BrowserModule,
+    // Sin transiciones de página ni de diálogos si el usuario pidió reducir el movimiento.
+    IonicModule.forRoot({ animated: !movimientoReducido() }),
+    AppRoutingModule,
+    PwaModule,
+  ],
   providers: [
     { provide: RouteReuseStrategy, useClass: IonicRouteStrategy },
     provideHttpClient(withInterceptors([authInterceptor])),

@@ -1,7 +1,9 @@
 <ion-header>
-  <app-barra-superior titulo="Buscar productos" atras="/home"></app-barra-superior>
+  <app-barra-superior titulo="Buscar" atras="/home"></app-barra-superior>
   <ion-toolbar>
     <ion-searchbar
+      aria-label="Buscar alimentos"
+      appEtiquetaLimpiar="Limpiar búsqueda"
       placeholder="Ej. leche, galletas de avena"
       inputmode="search"
       [value]="textoBuscador()"
@@ -13,6 +15,7 @@
 
 <ion-content class="ion-padding">
   <div class="contenedor">
+    <h1 class="solo-lectores">Buscar productos</h1>
     @if (auth.autenticado()) {
       <ion-toggle
         class="personalizar"
@@ -48,9 +51,7 @@
     }
 
     @if (cargando()) {
-      <div class="estado">
-        <ion-spinner name="crescent" aria-label="Buscando productos"></ion-spinner>
-      </div>
+      <app-cargando texto="Buscando productos…"></app-cargando>
       @if (despertando()) {
         <p class="estado" role="status">Despertando el servidor…</p>
       }
@@ -159,7 +160,8 @@
           (click)="cargarMas()"
         >
           @if (cargandoMas()) {
-            <ion-spinner name="crescent" aria-label="Cargando más productos"></ion-spinner>
+            <ion-spinner name="crescent" aria-hidden="true"></ion-spinner>
+            <span class="solo-lectores">Cargando más productos…</span>
           } @else {
             Cargar más ({{ resultados().length }} de {{ total() }})
           }
