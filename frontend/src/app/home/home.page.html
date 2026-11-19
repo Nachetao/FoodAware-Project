@@ -3,85 +3,149 @@
 </ion-header>
 
 <ion-content [fullscreen]="true" class="ion-padding">
-  <div class="mobile-container">
+  <div class="contenedor">
 
-    <!-- Nombre del producto -->
-    <ion-item>
-      <ion-input [(ngModel)]="productoNombre" type="text" label="Nombre del Producto"
-        labelPlacement="floating" placeholder="Ej. Barrita energética"></ion-input>
-    </ion-item>
+    <section class="presentacion">
+      <h1>FoodAware</h1>
+      <p>
+        Busca alimentos y descubre si son aptos para ti según tus alergias. Para personas
+        con alergias, intolerancias o dietas.
+      </p>
+    </section>
 
-    <!-- Ingredientes -->
-    <ion-item>
-      <ion-textarea [(ngModel)]="ingredientesTexto" label="Ingredientes (separados por coma)"
-        labelPlacement="floating" placeholder="Ej. avena, maní, azúcar, miel" rows="3"></ion-textarea>
-    </ion-item>
+    <!-- Buscador principal: lleva a /busqueda?q=... -->
+    <form class="buscador" role="search" (ngSubmit)="buscarProductos()">
+      <ion-input
+        name="q"
+        [(ngModel)]="textoBusqueda"
+        type="text"
+        inputmode="search"
+        enterkeyhint="search"
+        fill="outline"
+        shape="round"
+        aria-label="Buscar alimentos"
+        placeholder="Ej. leche, galletas de avena"
+      ></ion-input>
+      <ion-button type="submit" color="secondary" class="buscar">
+        <ion-icon name="search-outline" slot="start" aria-hidden="true"></ion-icon>
+        Buscar
+      </ion-button>
+    </form>
 
-    <!-- Botón analizar -->
-    <ion-button expand="block" class="ion-margin-top" (click)="analizarProducto()"
-      [disabled]="!productoNombre.trim() || !ingredientesTexto.trim()">
-      <ion-icon name="search-outline" slot="start"></ion-icon>
-      Analizar
-    </ion-button>
+    <nav class="accesos" aria-label="Accesos rápidos">
+      @if (auth.autenticado()) {
+        <div class="acceso-grupo">
+          <button type="button" class="acceso personalizar" (click)="personalizarBusqueda()">
+            <ion-icon name="options-outline" aria-hidden="true"></ion-icon>
+            <span>
+              <span class="acceso-titulo">Personalizar según mi perfil</span>
+              <span class="acceso-frase">Busca con los resultados adaptados a tus alergias y dietas.</span>
+            </span>
+          </button>
+          <a class="enlace-secundario editar-alergias" routerLink="/perfil">Editar mis alergias</a>
+        </div>
+      } @else {
+        <a class="acceso iniciar-sesion" routerLink="/login">
+          <ion-icon name="person-circle-outline" aria-hidden="true"></ion-icon>
+          <span>
+            <span class="acceso-titulo">Inicia sesión para personalizar</span>
+            <span class="acceso-frase">Guarda tus alergias y adapta la búsqueda a tu perfil.</span>
+          </span>
+        </a>
+      }
+      <a class="acceso metricas" routerLink="/metricas">
+        <ion-icon name="stats-chart-outline" aria-hidden="true"></ion-icon>
+        <span>
+          <span class="acceso-titulo">Métricas</span>
+          <span class="acceso-frase">Calidad de los datos y de la búsqueda.</span>
+        </span>
+      </a>
+    </nav>
 
-    <!-- Error -->
-    @if (error()) {
-      <ion-card color="danger" class="ion-margin-top">
-        <ion-card-header>
-          <ion-card-title>Error</ion-card-title>
-        </ion-card-header>
-        <ion-card-content>
-          <p>{{ error() }}</p>
-        </ion-card-content>
-      </ion-card>
-    }
+    <p class="fila-icono aviso-orientativo" role="status">
+      <ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon>
+      <span>{{ aviso }}</span>
+    </p>
 
-    <!-- Resultado del análisis -->
-    @if (resultado(); as resultado) {
-      <ion-card [color]="resultado.aptoParaConsumo ? 'success' : 'danger'" class="ion-margin-top">
-        <ion-card-header>
-          <ion-card-subtitle>Resultado del Análisis</ion-card-subtitle>
-          <ion-card-title>{{ resultado.nombre }}</ion-card-title>
-        </ion-card-header>
-        <ion-card-content>
-          <ion-list lines="none" class="result-list">
-            <ion-item>
-              <ion-icon [name]="resultado.aptoParaConsumo ? 'checkmark-circle' : 'close-circle'" slot="start"
-              [color]="resultado.aptoParaConsumo ? 'success' : 'danger'"></ion-icon>
-              <div class="texto-resultado">
-                <strong>Apto para consumo:</strong> {{ resultado.aptoParaConsumo ? 'Sí' : 'No' }}
-              </div>
-            </ion-item>
-            <ion-item>
-              <ion-icon [name]="resultado.esNutricionalmenteSaludable ? 'heart-circle' : 'heart-dislike'"
-                slot="start"
-              [color]="resultado.esNutricionalmenteSaludable ? 'success' : 'warning'"></ion-icon>
-              <div class="texto-resultado">
-                <strong>Saludable:</strong> {{ resultado.esNutricionalmenteSaludable ? 'Sí' : 'No' }}
-              </div>
-            </ion-item>
-            @if (resultado.alergenosPresentes?.length) {
+    <!-- Análisis manual: secundario, para productos que no están en la base. -->
+    <section class="analisis" aria-labelledby="titulo-analisis">
+      <h2 id="titulo-analisis">¿No encuentras el producto? Analiza sus ingredientes</h2>
+
+      <ion-item>
+        <ion-input [(ngModel)]="productoNombre" type="text" label="Nombre del Producto"
+          labelPlacement="floating" placeholder="Ej. Barrita energética"></ion-input>
+      </ion-item>
+
+      <ion-item>
+        <ion-textarea [(ngModel)]="ingredientesTexto" label="Ingredientes (separados por coma)"
+          labelPlacement="floating" placeholder="Ej. avena, maní, azúcar, miel" rows="3"></ion-textarea>
+      </ion-item>
+
+      <ion-button expand="block" fill="outline" class="analizar ion-margin-top" (click)="analizarProducto()"
+        [disabled]="!productoNombre.trim() || !ingredientesTexto.trim()">
+        <ion-icon name="flask-outline" slot="start" aria-hidden="true"></ion-icon>
+        Analizar
+      </ion-button>
+
+      @if (error()) {
+        <ion-card color="danger" class="ion-margin-top">
+          <ion-card-header>
+            <ion-card-title>Error</ion-card-title>
+          </ion-card-header>
+          <ion-card-content>
+            <p>{{ error() }}</p>
+          </ion-card-content>
+        </ion-card>
+      }
+
+      @if (resultado(); as resultado) {
+        <ion-card [color]="resultado.aptoParaConsumo ? 'success' : 'danger'" class="ion-margin-top">
+          <ion-card-header>
+            <ion-card-subtitle>Resultado del Análisis</ion-card-subtitle>
+            <ion-card-title>{{ resultado.nombre }}</ion-card-title>
+          </ion-card-header>
+          <ion-card-content>
+            <ion-list lines="none" class="result-list">
               <ion-item>
-                <ion-icon name="warning" slot="start" color="warning"></ion-icon>
+                <ion-icon [name]="resultado.aptoParaConsumo ? 'checkmark-circle' : 'close-circle'" slot="start"
+                  [color]="resultado.aptoParaConsumo ? 'success' : 'danger'" aria-hidden="true"></ion-icon>
                 <div class="texto-resultado">
-                  <strong>Alérgenos detectados:</strong><br>
-                  {{ resultado.alergenosPresentes.join(', ') }}
+                  <strong>Apto para consumo:</strong> {{ resultado.aptoParaConsumo ? 'Sí' : 'No' }}
                 </div>
               </ion-item>
-            }
-            @if (resultado.ingredientes.length > 0) {
               <ion-item>
-                <ion-icon name="list" slot="start" color="medium"></ion-icon>
+                <ion-icon [name]="resultado.esNutricionalmenteSaludable ? 'heart-circle' : 'heart-dislike'"
+                  slot="start" [color]="resultado.esNutricionalmenteSaludable ? 'success' : 'warning'"
+                  aria-hidden="true"></ion-icon>
                 <div class="texto-resultado">
-                  <strong>Ingredientes:</strong><br>
-                  {{ resultado.ingredientes.join(', ') }}
+                  <strong>Saludable:</strong> {{ resultado.esNutricionalmenteSaludable ? 'Sí' : 'No' }}
                 </div>
               </ion-item>
-            }
-          </ion-list>
-        </ion-card-content>
-      </ion-card>
-    }
+              @if (resultado.alergenosPresentes?.length) {
+                <ion-item>
+                  <ion-icon name="warning" slot="start" color="warning" aria-hidden="true"></ion-icon>
+                  <div class="texto-resultado">
+                    <strong>Alérgenos detectados:</strong><br>
+                    {{ resultado.alergenosPresentes.join(', ') }}
+                  </div>
+                </ion-item>
+              }
+              @if (resultado.ingredientes.length > 0) {
+                <ion-item>
+                  <ion-icon name="list" slot="start" color="medium" aria-hidden="true"></ion-icon>
+                  <div class="texto-resultado">
+                    <strong>Ingredientes:</strong><br>
+                    {{ resultado.ingredientes.join(', ') }}
+                  </div>
+                </ion-item>
+              }
+            </ion-list>
+          </ion-card-content>
+        </ion-card>
+      }
+    </section>
+
+    <footer class="pie">Datos de Open Food Facts (ODbL)</footer>
 
   </div>
 </ion-content>

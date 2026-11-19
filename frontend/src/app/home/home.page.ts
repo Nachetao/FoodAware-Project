@@ -1,9 +1,15 @@
 import { Component, inject, signal } from '@angular/core';
+import { Router } from '@angular/router';
 import { AlertController, LoadingController } from '@ionic/angular/lazy';
 import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../auth/auth.service';
 import { AnalisisService, ResultadoAnalisis } from '../analisis/analisis.service';
 import { separarIngredientes } from '../analisis/ingredientes';
+import {
+  guardarPreferencias,
+  leerPreferencias,
+} from '../busqueda/preferencias-busqueda';
+import { AVISO_ORIENTATIVO } from '../compartido/aviso-orientativo';
 import { ErrorApi } from '../products/models/error';
 
 @Component({
@@ -16,12 +22,30 @@ export class HomePage {
   private analisis = inject(AnalisisService);
   private alertCtrl = inject(AlertController);
   private loadingCtrl = inject(LoadingController);
+  private router = inject(Router);
+  // El acceso "Personalizar según mi perfil" cambia según la sesión.
   readonly auth = inject(AuthService);
+
+  readonly aviso = AVISO_ORIENTATIVO;
+
+  textoBusqueda = '';
 
   productoNombre = '';
   ingredientesTexto = '';
   readonly resultado = signal<ResultadoAnalisis | null>(null);
   readonly error = signal('');
+
+  /** Lleva a la búsqueda con lo escrito; la búsqueda lo lee de ?q=. */
+  buscarProductos(): void {
+    const q = this.textoBusqueda.trim();
+    void this.router.navigate(['/busqueda'], q ? { queryParams: { q } } : {});
+  }
+
+  /** Activa la búsqueda personalizada (preferencia recordada) y va a buscar. */
+  personalizarBusqueda(): void {
+    guardarPreferencias({ ...leerPreferencias(), personalizar: true });
+    void this.router.navigate(['/busqueda']);
+  }
 
   async analizarProducto(): Promise<void> {
     const nombre = this.productoNombre.trim();

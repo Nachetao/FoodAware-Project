@@ -1,9 +1,15 @@
 import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
-import { RouterLink, provideRouter } from '@angular/router';
+import {
+  ActivatedRoute,
+  ParamMap,
+  RouterLink,
+  convertToParamMap,
+  provideRouter,
+} from '@angular/router';
 import { IonicModule } from '@ionic/angular/lazy';
-import { Subject, of, throwError } from 'rxjs';
+import { BehaviorSubject, Subject, of, throwError } from 'rxjs';
 import type { Mock } from 'vitest';
 
 import { BusquedaPage } from './busqueda.page';
@@ -709,5 +715,62 @@ describe('BusquedaPage', () => {
       .query(By.css('ion-item'))
       .injector.get(RouterLink);
     expect(enlace.urlTree?.toString()).toBe('/producto/7800000000001');
+  });
+});
+
+describe('BusquedaPage con ?q= en la URL', () => {
+  let fixture: ComponentFixture<BusquedaPage>;
+  let buscar: Mock<ProductsService['buscar']>;
+  let parametros: BehaviorSubject<ParamMap>;
+
+  async function crear(query: Record<string, string>) {
+    localStorage.clear();
+    buscar = vi.fn<ProductsService['buscar']>().mockReturnValue(of(respuesta(rango(1, 2))));
+    parametros = new BehaviorSubject(convertToParamMap(query));
+
+    await TestBed.configureTestingModule({
+      imports: [IonicModule.forRoot(), BusquedaPageModule],
+      providers: [
+        provideRouter([]),
+        { provide: ActivatedRoute, useValue: { queryParamMap: parametros } },
+        { provide: ProductsService, useValue: { buscar, buscarPersonalizado: vi.fn() } },
+        { provide: AuthService, useValue: { autenticado: signal(false) } },
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(BusquedaPage);
+    fixture.detectChanges();
+  }
+
+  // [value] es un binding: se lee como lo deja la plantilla, no del DOM de Ionic.
+  const valorBuscador = () => {
+    fixture.detectChanges();
+    return fixture.debugElement.query(By.css('ion-searchbar')).properties['value'];
+  };
+
+  it('rellena el buscador con q y busca, sin espacios', async () => {
+    await crear({ q: '  leche ' });
+
+    expect(valorBuscador()).toBe('leche');
+    expect(buscar).toHaveBeenCalledExactlyOnceWith('leche', 20, 0);
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain(
+      '2 resultados para «leche»',
+    );
+  });
+
+  it('sin q no busca y deja el buscador vacío', async () => {
+    await crear({});
+
+    expect(valorBuscador()).toBe('');
+    expect(buscar).not.toHaveBeenCalled();
+  });
+
+  it('vuelve a buscar si cambia q en la URL', async () => {
+    await crear({ q: 'leche' });
+
+    parametros.next(convertToParamMap({ q: 'avena' }));
+
+    expect(valorBuscador()).toBe('avena');
+    expect(buscar).toHaveBeenLastCalledWith('avena', 20, 0);
   });
 });
