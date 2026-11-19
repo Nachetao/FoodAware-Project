@@ -104,7 +104,7 @@ describe("Integración: perfil, alergias y compatibilidad (con JWT)", () => {
     );
   });
 
-  it("compatibilidad: no apto por un alérgeno; las trazas se informan", async () => {
+  it("compatibilidad: no_apto por un alérgeno; las trazas se informan", async () => {
     const galletas = conAlergenos(
       "7801234000018",
       "Galletas de avena",
@@ -123,13 +123,15 @@ describe("Integración: perfil, alergias y compatibilidad (con JWT)", () => {
     expect(res.status).toBe(200);
     expect(res.headers["x-fuente-datos"]).toBe("fastapi");
     expect(res.body).toEqual({
+      veredicto: "no_apto",
       apto: false,
       alergenos_en_conflicto: ["lacteos"],
       trazas_en_conflicto: ["mani"],
+      datos_suficientes: true,
     });
   });
 
-  it("compatibilidad: apto aunque haya trazas en conflicto", async () => {
+  it("compatibilidad: nunca apto con trazas en conflicto (apto_con_advertencia)", async () => {
     fastapi.responder("/products/7801234000018", () => ({
       status: 200,
       cuerpo: conAlergenos(
@@ -144,20 +146,78 @@ describe("Integración: perfil, alergias y compatibilidad (con JWT)", () => {
       .get("/api/products/7801234000018/compatibilidad")
       .set("Authorization", token());
 
+    expect(res.status).toBe(200);
     expect(res.body).toEqual({
-      apto: true,
+      veredicto: "apto_con_advertencia",
+      apto: false,
       alergenos_en_conflicto: [],
       trazas_en_conflicto: ["mani"],
+      datos_suficientes: true,
     });
   });
 
-  it("compatibles: excluye los productos con alérgenos del usuario", async () => {
+  it("compatibilidad: apto sin conflictos y con datos suficientes", async () => {
+    fastapi.responder("/products/7801234000018", () => ({
+      status: 200,
+      cuerpo: conAlergenos("7801234000018", "Galletas", [AllergenCode.GLUTEN]),
+    }));
+
+    const res = await request(servidor())
+      .get("/api/products/7801234000018/compatibilidad")
+      .set("Authorization", token());
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      veredicto: "apto",
+      apto: true,
+      alergenos_en_conflicto: [],
+      trazas_en_conflicto: [],
+      datos_suficientes: true,
+    });
+  });
+
+  it("compatibilidad: con datos insuficientes es apto_con_advertencia", async () => {
+    fastapi.responder("/products/7801234000018", () => ({
+      status: 200,
+      cuerpo: {
+        ...conAlergenos("7801234000018", "Galletas", [AllergenCode.GLUTEN]),
+        ingredientes_texto: null,
+        ingredientes: [],
+        calidad: {
+          es_valido: false,
+          problemas: ["sin_ingredientes"],
+          completitud: 0.4,
+        },
+      },
+    }));
+
+    const res = await request(servidor())
+      .get("/api/products/7801234000018/compatibilidad")
+      .set("Authorization", token());
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      veredicto: "apto_con_advertencia",
+      apto: false,
+      alergenos_en_conflicto: [],
+      trazas_en_conflicto: [],
+      datos_suficientes: false,
+    });
+  });
+
+  it("compatibles: excluye los productos con alérgenos o trazas del usuario", async () => {
     for (const p of [
       conAlergenos("7801234000018", "Galletas de avena con leche", [
         AllergenCode.LACTEOS,
       ]),
       conAlergenos("7801234000025", "Galletas de avena", [AllergenCode.GLUTEN]),
       conAlergenos("7801234000032", "Galletas sin nada", []),
+      conAlergenos(
+        "7801234000049",
+        "Galletas que pueden contener maní",
+        [AllergenCode.GLUTEN],
+        [AllergenCode.MANI],
+      ),
     ]) {
       productos.productos.set(p.codigo_barras, p);
     }

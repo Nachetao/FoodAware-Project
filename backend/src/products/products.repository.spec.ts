@@ -311,7 +311,7 @@ describe("ProductsRepository", () => {
   });
 
   describe("buscarCompatibles", () => {
-    it("excluye por las alergias del usuario con el índice GIN y pagina", async () => {
+    it("excluye por alérgenos y trazas del usuario con los índices GIN y pagina", async () => {
       typeormRepository.query
         .mockResolvedValueOnce([{ total: 3 }])
         .mockResolvedValueOnce([]);
@@ -323,7 +323,10 @@ describe("ProductsRepository", () => {
 
       const [[sqlTotal, paramsTotal], [sqlPagina, paramsPagina]] =
         typeormRepository.query.mock.calls;
-      expect(sqlTotal).toContain("NOT (p.alergenos && $2::text[])");
+      for (const sql of [sqlTotal, sqlPagina]) {
+        expect(sql).toContain("NOT (p.alergenos && $2::text[])");
+        expect(sql).toContain("NOT (p.trazas && $2::text[])");
+      }
       expect(paramsTotal).toEqual([["galleta", "avena"], ["mani"]]);
       expect(sqlPagina).toContain("LIMIT $3 OFFSET $4");
       expect(paramsPagina).toEqual([["galleta", "avena"], ["mani"], 20, 0]);
