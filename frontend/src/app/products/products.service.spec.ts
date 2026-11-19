@@ -246,20 +246,45 @@ describe('ProductsService', () => {
 
   describe('compatibilidad', () => {
     const URL = `${environment.apiUrl}/api/products/7801234000018/compatibilidad`;
+    const cuerpo = {
+      codigo_barras: '7801234000018',
+      veredicto: 'no_apto',
+      apto: false,
+      alergenos_en_conflicto: ['lacteos'],
+      trazas_en_conflicto: [],
+      dietas_no_confirmadas: [],
+      conflictos: [{ codigo: 'lacteos', tipo: 'alergeno', origen: 'fuente' }],
+      motivos_no_apto: [{ tipo: 'alergeno', codigo: 'lacteos' }],
+      datos_suficientes: true,
+      explicacion: 'Contiene lácteos, que está en tu perfil.',
+      confianza: 'alta',
+      motivos_confianza: [],
+      aviso: 'Clasificación orientativa según tu perfil y los datos de Open Food Facts.',
+    };
 
-    it('hace GET a /:codigo/compatibilidad', async () => {
-      const cuerpo = {
-        veredicto: 'no_apto',
-        apto: false,
-        alergenos_en_conflicto: ['lacteos'],
-        trazas_en_conflicto: [],
-        datos_suficientes: true,
-      };
+    it.each([
+      ['respaldo', true],
+      ['fastapi', false],
+    ])(
+      'hace GET a /:codigo/compatibilidad y marca desdeRespaldo con X-Fuente-Datos %s',
+      async (fuente, esperado) => {
+        const resultado = firstValueFrom(service.compatibilidad('7801234000018'));
+
+        httpMock.expectOne(URL).flush(cuerpo, { headers: { 'X-Fuente-Datos': fuente } });
+
+        await expect(resultado).resolves.toEqual({
+          compatibilidad: cuerpo,
+          desdeRespaldo: esperado,
+        });
+      },
+    );
+
+    it('sin el header X-Fuente-Datos no es respaldo', async () => {
       const resultado = firstValueFrom(service.compatibilidad('7801234000018'));
 
       httpMock.expectOne(URL).flush(cuerpo);
 
-      await expect(resultado).resolves.toEqual(cuerpo);
+      await expect(resultado).resolves.toMatchObject({ desdeRespaldo: false });
     });
 
     it('convierte el error en ErrorApi', async () => {
@@ -270,6 +295,71 @@ describe('ProductsService', () => {
         .flush(errorContrato('NOT_FOUND', 'No existe'), { status: 404, statusText: 'Not Found' });
 
       await expect(resultado).rejects.toMatchObject({ status: 404, codigo: 'NOT_FOUND' });
+    });
+  });
+
+  describe('buscarPersonalizado', () => {
+    const URL = `${environment.apiUrl}/api/products/search/personalizada`;
+    const respuesta = {
+      consulta: 'chocolate sin leche',
+      interpretacion: {
+        terminos: ['chocolate'],
+        restricciones: [{ texto: 'sin leche', tipo: 'alergeno', codigo: 'lacteos' }],
+        no_reconocidas: [],
+      },
+      perfil_aplicado: { alergias: ['lacteos'], dietas: [], modo_estricto: false },
+      modo: 'filtrar',
+      total: 0,
+      total_base: 3,
+      tiempo_ms: 2.1,
+      estado_fuente: 'online',
+      resultados: [],
+      no_aptos: { total: 3, ocultos: true, motivos: [], texto: '3 ocultos por contener lácteos.' },
+      comparacion: null,
+      aviso: 'Clasificación orientativa.',
+    };
+
+    it('hace GET a /search/personalizada con q, modo, limit y offset', async () => {
+      const resultado = firstValueFrom(
+        service.buscarPersonalizado('chocolate sin leche', 'reordenar', 20, 40),
+      );
+
+      const req = httpMock.expectOne((r) => r.url === URL);
+      expect(req.request.method).toBe('GET');
+      expect(req.request.params.get('q')).toBe('chocolate sin leche');
+      expect(req.request.params.get('modo')).toBe('reordenar');
+      expect(req.request.params.get('limit')).toBe('20');
+      expect(req.request.params.get('offset')).toBe('40');
+      req.flush(respuesta, { headers: { 'X-Fuente-Datos': 'fastapi' } });
+
+      await expect(resultado).resolves.toEqual({ respuesta, desdeRespaldo: false });
+    });
+
+    it('usa limit 10 y offset 0 por defecto y marca el respaldo', async () => {
+      const resultado = firstValueFrom(service.buscarPersonalizado('chocolate', 'filtrar'));
+
+      const req = httpMock.expectOne((r) => r.url === URL);
+      expect(req.request.params.get('limit')).toBe('10');
+      expect(req.request.params.get('offset')).toBe('0');
+      req.flush(respuesta, { headers: { 'X-Fuente-Datos': 'respaldo' } });
+
+      await expect(resultado).resolves.toMatchObject({ desdeRespaldo: true });
+    });
+
+    it('convierte el error en ErrorApi', async () => {
+      const resultado = firstValueFrom(service.buscarPersonalizado('chocolate', 'filtrar'));
+
+      httpMock
+        .expectOne((r) => r.url === URL)
+        .flush(errorContrato('SOURCE_UNAVAILABLE', 'No disponible'), {
+          status: 503,
+          statusText: 'Service Unavailable',
+        });
+
+      await expect(resultado).rejects.toMatchObject({
+        status: 503,
+        codigo: 'SOURCE_UNAVAILABLE',
+      });
     });
   });
 });

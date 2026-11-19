@@ -2,12 +2,18 @@ import { Injectable, inject } from '@angular/core';
 import {
   HttpClient,
   HttpErrorResponse,
+  HttpHeaders,
   HttpParams,
 } from '@angular/common/http';
 import { Observable, catchError, map, throwError } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { BusquedaProductos, RespuestaBusqueda } from './models/busqueda';
-import { Compatibilidad } from './models/compatibilidad';
+import {
+  BusquedaPersonalizada,
+  ModoBusqueda,
+  RespuestaBusquedaPersonalizada,
+} from './models/busqueda-personalizada';
+import { Compatibilidad, DetalleCompatibilidad } from './models/compatibilidad';
 import { ErrorApi, esErrorContrato } from './models/error';
 import { DetalleProducto, Producto } from './models/producto';
 
@@ -35,13 +41,53 @@ export class ProductsService {
     return this.buscarEn(`${this.productsUrl}/compatibles`, q, limit, offset);
   }
 
-  /** Compatibilidad del producto con las alergias del usuario. Requiere sesión. */
-  compatibilidad(codigoBarras: string): Observable<Compatibilidad> {
+  /**
+   * Veredicto del motor adaptativo para el perfil del usuario, y si vino de
+   * la revisión básica de respaldo. Requiere sesión.
+   */
+  compatibilidad(codigoBarras: string): Observable<DetalleCompatibilidad> {
     return this.http
       .get<Compatibilidad>(
         `${this.productsUrl}/${encodeURIComponent(codigoBarras)}/compatibilidad`,
+        { observe: 'response' },
       )
       .pipe(
+        map((respuesta) => ({
+          compatibilidad: respuesta.body as Compatibilidad,
+          desdeRespaldo: desdeRespaldo(respuesta.headers),
+        })),
+        catchError((error: HttpErrorResponse) =>
+          throwError(() => aErrorApi(error)),
+        ),
+      );
+  }
+
+  /**
+   * Búsqueda personalizada según el perfil del usuario: filtrar oculta los
+   * no aptos y reordenar los deja al final. Requiere sesión.
+   */
+  buscarPersonalizado(
+    q: string,
+    modo: ModoBusqueda,
+    limit = 10,
+    offset = 0,
+  ): Observable<BusquedaPersonalizada> {
+    const params = new HttpParams()
+      .set('q', q)
+      .set('modo', modo)
+      .set('limit', limit)
+      .set('offset', offset);
+
+    return this.http
+      .get<RespuestaBusquedaPersonalizada>(
+        `${this.productsUrl}/search/personalizada`,
+        { params, observe: 'response' },
+      )
+      .pipe(
+        map((respuesta) => ({
+          respuesta: respuesta.body as RespuestaBusquedaPersonalizada,
+          desdeRespaldo: desdeRespaldo(respuesta.headers),
+        })),
         catchError((error: HttpErrorResponse) =>
           throwError(() => aErrorApi(error)),
         ),
@@ -94,6 +140,10 @@ export class ProductsService {
         ),
       );
   }
+}
+
+function desdeRespaldo(headers: HttpHeaders): boolean {
+  return headers.get(HEADER_FUENTE_DATOS) === 'respaldo';
 }
 
 /** Convierte un error HTTP en ErrorApi (mensaje del contrato o uno genérico). */

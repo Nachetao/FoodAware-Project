@@ -121,7 +121,7 @@ export class ProductoPage implements OnInit {
       .compatibilidad(codigo)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: (compatibilidad) => {
+        next: ({ compatibilidad }) => {
           // Si la ruta ya cambió de producto, esta respuesta no le corresponde.
           if (this.codigo === codigo) {
             this.compatibilidad.set(compatibilidad);

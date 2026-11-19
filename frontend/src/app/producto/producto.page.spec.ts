@@ -2,7 +2,7 @@ import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { IonicModule } from '@ionic/angular/lazy';
-import { Subject, of, throwError } from 'rxjs';
+import { Subject, map, of, throwError } from 'rxjs';
 import type { Mock } from 'vitest';
 
 import { ProductoPage } from './producto.page';
@@ -46,11 +46,19 @@ const PRODUCTO: Producto = {
 };
 
 const APTO: Compatibilidad = {
+  codigo_barras: '7801234000018',
   veredicto: 'apto',
   apto: true,
   alergenos_en_conflicto: [],
   trazas_en_conflicto: [],
+  dietas_no_confirmadas: [],
+  conflictos: [],
+  motivos_no_apto: [],
   datos_suficientes: true,
+  explicacion: 'No contiene nada de tu perfil.',
+  confianza: 'alta',
+  motivos_confianza: [],
+  aviso: 'Clasificación orientativa según tu perfil y los datos de Open Food Facts.',
 };
 const CON_ADVERTENCIA: Compatibilidad = { ...APTO, veredicto: 'apto_con_advertencia', apto: false };
 
@@ -65,7 +73,9 @@ describe('ProductoPage', () => {
     { conSesion = false, compatible = of<Compatibilidad>(APTO) } = {},
   ) {
     obtener = vi.fn(() => respuesta);
-    compatibilidad = vi.fn(() => compatible);
+    compatibilidad = vi.fn(() =>
+      compatible.pipe(map((c) => ({ compatibilidad: c, desdeRespaldo: false }))),
+    );
     autenticado = signal(conSesion);
     await TestBed.configureTestingModule({
       imports: [IonicModule.forRoot(), ProductoPageModule],
