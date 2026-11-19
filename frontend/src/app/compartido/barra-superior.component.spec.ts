@@ -52,12 +52,16 @@ describe('BarraSuperiorComponent', () => {
     fixture.detectChanges();
     return fixture.nativeElement as HTMLElement;
   };
-  const boton = (etiqueta: string) =>
-    raiz().querySelector<HTMLElement>(`ion-toolbar ion-buttons[slot="end"] ion-button[aria-label="${etiqueta}"]`);
-  const etiquetas = () =>
-    Array.from(raiz().querySelectorAll('ion-buttons[slot="end"] ion-button')).map((b) =>
-      b.getAttribute('aria-label'),
-    );
+  // Al cargar, ion-button e ion-back-button le quitan los atributos aria al
+  // elemento exterior y los pasan al <button> de su shadowRoot. Cuándo ocurre
+  // depende del entorno, así que se busca en los dos lugares.
+  const aria = (el: Element, atributo: string) =>
+    el.getAttribute(atributo) ?? el.shadowRoot?.querySelector('button')?.getAttribute(atributo) ?? null;
+  const nombre = (el: Element) => aria(el, 'aria-label');
+  const botones = () =>
+    Array.from(raiz().querySelectorAll<HTMLElement>('ion-toolbar ion-buttons[slot="end"] ion-button'));
+  const boton = (etiqueta: string) => botones().find((b) => nombre(b) === etiqueta) ?? null;
+  const etiquetas = () => botones().map(nombre);
 
   it('muestra el título', () => {
     expect(raiz().querySelector('ion-title')?.textContent?.trim()).toBe('Métricas');
@@ -107,8 +111,8 @@ describe('BarraSuperiorComponent', () => {
     await TestBed.inject(Router).navigateByUrl('/metricas');
     await fixture.whenStable();
 
-    expect(boton('Ver métricas')?.getAttribute('aria-current')).toBe('page');
-    expect(boton('Buscar productos')?.hasAttribute('aria-current')).toBe(false);
+    expect(aria(boton('Ver métricas')!, 'aria-current')).toBe('page');
+    expect(aria(boton('Buscar productos')!, 'aria-current')).toBeNull();
   });
 
   it('con atras muestra el botón volver, con aria-label y la ruta por defecto', () => {
@@ -116,7 +120,7 @@ describe('BarraSuperiorComponent', () => {
       | (HTMLElement & { defaultHref?: string })
       | null;
 
-    expect(volver?.getAttribute('aria-label')).toBe('Volver');
+    expect(volver && nombre(volver)).toBe('Volver');
     expect(volver?.defaultHref).toBe('/home');
   });
 
