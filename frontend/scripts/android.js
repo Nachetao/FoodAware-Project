@@ -61,16 +61,23 @@ if (accion === 'apk') {
   }
 
   // 3. APK de depuración (firmado con la clave de depuración local).
-  // Ruta absoluta: cmd no siempre busca en la carpeta actual
-  // (NoDefaultCurrentDirectoryInExePath). Entre comillas por los espacios.
-  const windows = process.platform === 'win32';
-  const gradlew = path.join(ANDROID, windows ? 'gradlew.bat' : 'gradlew');
-  if (windows) {
-    // Con shell, el comando va entero en una cadena (sin argumentos aparte).
-    ejecutar(`"${gradlew}" assembleDebug`, [], { cwd: ANDROID, shell: true });
-  } else {
-    ejecutar(gradlew, ['assembleDebug'], { cwd: ANDROID });
-  }
+  // Lo mismo que hace gradlew(.bat), pero sin shell: el java de JAVA_HOME
+  // ejecuta el wrapper de Gradle con argumentos separados, así ninguna ruta
+  // (con espacios, &, %...) pasa por cmd ni por sh.
+  const java = path.join(process.env.JAVA_HOME, 'bin', process.platform === 'win32' ? 'java.exe' : 'java');
+  ejecutar(
+    java,
+    [
+      '-Xmx64m',
+      '-Xms64m',
+      '-Dorg.gradle.appname=gradlew',
+      '-classpath',
+      path.join(ANDROID, 'gradle', 'wrapper', 'gradle-wrapper.jar'),
+      'org.gradle.wrapper.GradleWrapperMain',
+      'assembleDebug',
+    ],
+    { cwd: ANDROID },
+  );
 
   const megas = (fs.statSync(APK).size / 1024 / 1024).toFixed(1);
   console.log(`\nAPK de depuración (${megas} MB): ${path.relative(RAIZ, APK)}`);

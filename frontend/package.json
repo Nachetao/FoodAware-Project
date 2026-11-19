@@ -12,6 +12,7 @@
     "android:apk": "node scripts/android.js apk",
     "watch": "node scripts/generar-api-url.js && ng build --watch --configuration development",
     "test": "node scripts/generar-api-url.js && ng test",
+    "test:scripts": "node --test scripts/*.test.js",
     "lint": "ng lint"
   },
   "private": true,

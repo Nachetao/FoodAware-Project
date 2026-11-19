@@ -53,6 +53,39 @@ function esDelBackend(ruta) {
   );
 }
 
+/**
+ * La petición tiene la forma normal de un navegador: un path que empieza con
+ * una sola "/" (no una URL absoluta, "//host" ni "/\host", que el parser de
+ * URL interpretaría como otro host).
+ */
+function esRutaRelativa(urlPeticion) {
+  return typeof urlPeticion === 'string' && /^\/(?![/\\])/.test(urlPeticion);
+}
+
+/**
+ * Destino del proxy: siempre el origen de BACKEND, con el path y la query de
+ * la petición (nunca su host). null si la petición no es una ruta relativa,
+ * si el destino no queda en BACKEND o si la ruta no es del backend.
+ */
+function destinoEnBackend(urlPeticion) {
+  if (!esRutaRelativa(urlPeticion)) {
+    return null;
+  }
+  let peticion;
+  try {
+    peticion = new URL(urlPeticion, 'http://local');
+  } catch {
+    return null;
+  }
+  const destino = new URL(BACKEND.origin);
+  destino.pathname = peticion.pathname;
+  destino.search = peticion.search;
+  if (destino.origin !== BACKEND.origin || !esDelBackend(destino.pathname)) {
+    return null;
+  }
+  return destino;
+}
+
 function compilar() {
   const entorno = { ...process.env, API_URL: `http://localhost:${PUERTO}` };
   const pasos = [
@@ -67,8 +100,17 @@ function compilar() {
   }
 }
 
+function responder400(res) {
+  res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+  res.end(JSON.stringify({ message: 'Petición no válida para este servidor local.' }));
+}
+
 function proxy(req, res) {
-  const destino = new URL(req.url, BACKEND);
+  const destino = destinoEnBackend(req.url);
+  if (!destino) {
+    responder400(res);
+    return;
+  }
   const peticion = http.request(
     destino,
     { method: req.method, headers: { ...req.headers, host: BACKEND.host } },
@@ -105,30 +147,44 @@ function servirArchivo(ruta, res) {
   fs.createReadStream(archivo).pipe(res);
 }
 
-if (!process.argv.includes('--sin-compilar')) {
-  compilar();
-}
-if (!fs.existsSync(path.join(WWW, 'index.html'))) {
-  console.error('No hay www/index.html: compila primero (sin --sin-compilar).');
-  process.exit(1);
+function iniciar() {
+  if (!process.argv.includes('--sin-compilar')) {
+    compilar();
+  }
+  if (!fs.existsSync(path.join(WWW, 'index.html'))) {
+    console.error('No hay www/index.html: compila primero (sin --sin-compilar).');
+    process.exit(1);
+  }
+
+  http
+    .createServer((req, res) => {
+      // Solo rutas relativas: una URL absoluta no es para este servidor.
+      if (!esRutaRelativa(req.url)) {
+        responder400(res);
+        return;
+      }
+      let ruta;
+      try {
+        ruta = decodeURIComponent(new URL(req.url, 'http://local').pathname);
+      } catch {
+        responder400(res);
+        return;
+      }
+      if (esDelBackend(ruta)) {
+        proxy(req, res);
+      } else {
+        servirArchivo(ruta, res);
+      }
+    })
+    .listen(PUERTO, () => {
+      console.log(`PWA en http://localhost:${PUERTO} (www/ compilado para producción)`);
+      console.log(`Proxy hacia ${BACKEND.origin}: ${PREFIJOS_BACKEND.map((p) => `${p}, ${p}/*`).join(', ')}, /docs-json y /docs-yaml`);
+    });
 }
 
-http
-  .createServer((req, res) => {
-    let ruta;
-    try {
-      ruta = decodeURIComponent(new URL(req.url, 'http://local').pathname);
-    } catch {
-      res.writeHead(400).end();
-      return;
-    }
-    if (esDelBackend(ruta)) {
-      proxy(req, res);
-    } else {
-      servirArchivo(ruta, res);
-    }
-  })
-  .listen(PUERTO, () => {
-    console.log(`PWA en http://localhost:${PUERTO} (www/ compilado para producción)`);
-    console.log(`Proxy hacia ${BACKEND.origin}: ${PREFIJOS_BACKEND.map((p) => `${p}, ${p}/*`).join(', ')}, /docs-json y /docs-yaml`);
-  });
+// Al importarlo (servir-pwa-local.test.js) solo expone las funciones.
+if (require.main === module) {
+  iniciar();
+}
+
+module.exports = { destinoEnBackend, esDelBackend, esRutaRelativa, BACKEND };
