@@ -19,11 +19,36 @@
   <div class="contenedor">
     @if (auth.autenticado()) {
       <ion-toggle
-        class="solo-aptos"
+        class="personalizar"
         justify="space-between"
-        [checked]="soloAptos()"
-        (ionChange)="cambiarSoloAptos($event.detail.checked)"
-      >Solo aptos para mí</ion-toggle>
+        aria-label="Personalizar según mi perfil"
+        [checked]="personalizar()"
+        (ionChange)="cambiarPersonalizar($event.detail.checked)"
+      >Personalizar según mi perfil</ion-toggle>
+
+      @if (personalizar()) {
+        <ion-segment
+          class="modo"
+          aria-label="Qué hacer con los productos no aptos"
+          [value]="modo()"
+          (ionChange)="cambiarModo($event.detail.value)"
+        >
+          <ion-segment-button value="filtrar">
+            <ion-label>Ocultar no aptos</ion-label>
+          </ion-segment-button>
+          <ion-segment-button value="reordenar">
+            <ion-label>Mostrar al final</ion-label>
+          </ion-segment-button>
+        </ion-segment>
+      }
+    } @else {
+      <p class="fila-icono invitar-sesion">
+        <ion-icon name="person-circle-outline" aria-hidden="true"></ion-icon>
+        <span>
+          <a routerLink="/login">Inicia sesión</a> para personalizar la búsqueda según
+          tus alergias.
+        </span>
+      </p>
     }
 
     @if (cargando()) {
@@ -33,20 +58,53 @@
       @if (despertando()) {
         <p class="estado" role="status">Despertando el servidor…</p>
       }
-    } @else if (buscado() && total() > 0) {
+    } @else if (buscado()) {
       @if (desdeRespaldo()) {
         <div class="aviso-respaldo" role="status">
           <ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon>
           <span>
-            El servicio de búsqueda no está disponible; mostrando productos guardados
-            anteriormente.
+            @if (buscandoPersonalizada()) {
+              El servicio de evaluación no está disponible: revisión básica con productos
+              guardados anteriormente.
+            } @else {
+              El servicio de búsqueda no está disponible; mostrando productos guardados
+              anteriormente.
+            }
           </span>
         </div>
       }
 
+      @if (resumen(); as r) {
+        @if (r.interpretacion) {
+          <p class="fila-icono interpretacion">
+            <ion-icon name="search-outline" aria-hidden="true"></ion-icon>
+            <span>{{ r.interpretacion }}</span>
+          </p>
+        }
+        @if (r.noReconocidas) {
+          <p class="fila-icono interpretacion">
+            <ion-icon name="help-circle-outline" aria-hidden="true"></ion-icon>
+            <span>{{ r.noReconocidas }}</span>
+          </p>
+        }
+        @if (r.noAptos) {
+          <p class="fila-icono no-aptos" role="status">
+            <ion-icon name="eye-off-outline" aria-hidden="true"></ion-icon>
+            <span>{{ r.noAptos }}</span>
+          </p>
+        }
+        <p class="fila-icono aviso-orientativo" role="status">
+          <ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon>
+          <span>{{ r.aviso }}</span>
+        </p>
+      }
+    }
+
+    @if (!cargando() && buscado() && total() > 0) {
       <p class="total">
-        {{ total() }} {{ total() === 1 ? 'resultado' : 'resultados' }}
-        {{ buscandoAptos() ? (total() === 1 ? 'apto' : 'aptos') + ' para ti' : '' }} para «{{ consulta() }}»
+        {{ total() }} {{ total() === 1 ? 'resultado' : 'resultados' }} para «{{ consulta() }}»{{
+          buscandoPersonalizada() ? ', según tu perfil' : ''
+        }}
       </p>
 
       <ion-list lines="full">
@@ -67,6 +125,12 @@
               <h2>{{ producto.nombre }}</h2>
               @if (producto.marca) {
                 <p class="marca">{{ producto.marca }}</p>
+              }
+              @if (resultado.veredicto; as v) {
+                <span class="chip-veredicto" [class]="v.clase">
+                  <ion-icon [name]="v.icono" aria-hidden="true"></ion-icon>
+                  <span>{{ v.chip }}</span>
+                </span>
               }
               @if (producto.alergenos.length > 0) {
                 <div class="alergenos" aria-label="Alérgenos">
@@ -105,15 +169,15 @@
           }
         </ion-button>
       }
-    } @else if (buscado()) {
+    } @else if (!cargando() && buscado()) {
       <p class="estado">
-        No se encontraron productos {{ buscandoAptos() ? 'aptos para ti' : '' }} para «{{ consulta() }}».
+        No se encontraron productos para «{{ consulta() }}»{{ buscandoPersonalizada() ? ' según tu perfil' : '' }}.
       </p>
-    } @else if (error(); as mensaje) {
+    } @else if (!cargando() && error(); as mensaje) {
       <ion-text color="danger">
         <p class="error" role="alert">{{ mensaje }}</p>
       </ion-text>
-    } @else {
+    } @else if (!cargando()) {
       <p class="estado">Escribe al menos {{ minCaracteres }} caracteres para buscar.</p>
     }
   </div>

@@ -11,13 +11,42 @@
   color: var(--ion-color-medium);
 }
 
-.solo-aptos {
+.personalizar {
   width: 100%;
   margin-bottom: var(--app-espacio-3);
   font-weight: 600;
 }
 
-// .aviso-respaldo y .chip-alergeno están en global.scss (compartidos con el detalle).
+.modo {
+  margin-bottom: var(--app-espacio-3);
+}
+
+.invitar-sesion {
+  color: var(--ion-color-medium);
+
+  a {
+    font-weight: 600;
+  }
+}
+
+// .aviso-respaldo, .chip-alergeno, .fila-icono, .aviso-orientativo y los
+// colores de los veredictos están en global.scss (compartidos con el detalle).
+
+// Veredicto de cada resultado: ícono y texto, además del color.
+.chip-veredicto {
+  display: inline-flex;
+  gap: var(--app-espacio-1);
+  align-items: center;
+  margin-top: var(--app-espacio-1);
+  padding: 2px var(--app-espacio-2);
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+
+  ion-icon {
+    font-size: 16px;
+  }
+}
 
 .total {
   margin: 0 0 var(--app-espacio-2);

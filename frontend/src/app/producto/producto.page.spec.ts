@@ -2,7 +2,7 @@ import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { IonicModule } from '@ionic/angular/lazy';
-import { Subject, of, throwError } from 'rxjs';
+import { Subject, map, of, throwError } from 'rxjs';
 import type { Mock } from 'vitest';
 
 import { ProductoPage } from './producto.page';
@@ -46,13 +46,45 @@ const PRODUCTO: Producto = {
 };
 
 const APTO: Compatibilidad = {
+  codigo_barras: '7801234000018',
   veredicto: 'apto',
   apto: true,
   alergenos_en_conflicto: [],
   trazas_en_conflicto: [],
+  dietas_no_confirmadas: [],
+  conflictos: [],
+  motivos_no_apto: [],
   datos_suficientes: true,
+  explicacion: 'No contiene nada de tu perfil.',
+  confianza: 'alta',
+  motivos_confianza: [],
+  aviso: 'Clasificación orientativa según tu perfil y los datos de Open Food Facts.',
 };
-const CON_ADVERTENCIA: Compatibilidad = { ...APTO, veredicto: 'apto_con_advertencia', apto: false };
+const CON_ADVERTENCIA: Compatibilidad = {
+  ...APTO,
+  veredicto: 'apto_con_advertencia',
+  apto: false,
+  trazas_en_conflicto: ['mani'],
+  conflictos: [{ codigo: 'mani', tipo: 'traza', origen: 'fuente' }],
+  explicacion: 'Puede contener maní, que está en tu perfil.',
+  confianza: 'media',
+  motivos_confianza: ['completitud_media'],
+};
+const NO_APTO: Compatibilidad = {
+  ...APTO,
+  veredicto: 'no_apto',
+  apto: false,
+  alergenos_en_conflicto: ['lacteos', 'soya'],
+  conflictos: [
+    { codigo: 'lacteos', tipo: 'alergeno', origen: 'fuente' },
+    { codigo: 'soya', tipo: 'alergeno', origen: 'fuente' },
+  ],
+  motivos_no_apto: [
+    { tipo: 'alergeno', codigo: 'lacteos' },
+    { tipo: 'alergeno', codigo: 'soya' },
+  ],
+  explicacion: 'Contiene lácteos y soya, que están en tu perfil.',
+};
 
 describe('ProductoPage', () => {
   let fixture: ComponentFixture<ProductoPage>;
@@ -62,10 +94,18 @@ describe('ProductoPage', () => {
 
   async function crear(
     respuesta = of<DetalleProducto>({ producto: PRODUCTO, desdeRespaldo: false }),
-    { conSesion = false, compatible = of<Compatibilidad>(APTO) } = {},
+    {
+      conSesion = false,
+      compatible = of<Compatibilidad>(APTO),
+      compatibilidadDesdeRespaldo = false,
+    } = {},
   ) {
     obtener = vi.fn(() => respuesta);
-    compatibilidad = vi.fn(() => compatible);
+    compatibilidad = vi.fn(() =>
+      compatible.pipe(
+        map((c) => ({ compatibilidad: c, desdeRespaldo: compatibilidadDesdeRespaldo })),
+      ),
+    );
     autenticado = signal(conSesion);
     await TestBed.configureTestingModule({
       imports: [IonicModule.forRoot(), ProductoPageModule],
@@ -196,114 +236,146 @@ describe('ProductoPage', () => {
     expect(texto('h1.nombre')).toBe('Galletas de avena');
   });
 
-  describe('compatibilidad con las alergias del usuario', () => {
-    it('sin sesión no la consulta ni muestra la franja', async () => {
+  describe('veredicto del motor para el perfil del usuario', () => {
+    // [name] asigna la propiedad del ion-icon, no el atributo.
+    const icono = (selector: string) =>
+      (raiz().querySelector(`${selector} ion-icon`) as (Element & { name?: string }) | null)
+        ?.name;
+
+    it('sin sesión no lo consulta e invita a iniciar sesión', async () => {
       await crear();
 
       expect(compatibilidad).not.toHaveBeenCalled();
       expect(raiz().querySelector('.franja')).toBeNull();
+      expect(raiz().querySelector('.aviso-orientativo')).toBeNull();
+      expect(texto('.invitar-sesion')).toBe('Inicia sesión para saber si es apto para ti.');
+      expect(raiz().querySelector('.invitar-sesion a')?.getAttribute('href')).toBe('/login');
       expect(texto('h1.nombre')).toBe('Galletas de avena');
     });
 
-    it('muestra "Apto para ti" en verde', async () => {
+    it('apto: título, ícono de visto bueno y la explicación del motor, en verde', async () => {
       await crear(undefined, { conSesion: true });
 
       expect(compatibilidad).toHaveBeenCalledWith('7801234000018');
-      expect(texto('.franja.apto[role="status"]')).toBe('Apto para ti');
-      expect(raiz().querySelector('.franja.no-apto')).toBeNull();
+      const franja = raiz().querySelector('.franja.apto[role="status"]');
+      expect(franja).not.toBeNull();
+      expect(texto('.franja .franja-titulo')).toBe('Apto para ti');
+      expect(texto('.franja .explicacion')).toBe('No contiene nada de tu perfil.');
+      expect(icono('.franja')).toBe('checkmark-circle-outline');
+      expect(raiz().querySelector('.invitar-sesion')).toBeNull();
     });
 
-    it('muestra "No apto" en rojo con los alérgenos en conflicto y las trazas aparte', async () => {
+    it('apto con advertencia: su título, ícono de advertencia y la explicación, en ámbar', async () => {
       await crear(undefined, {
         conSesion: true,
-        compatible: of<Compatibilidad>({
-          ...APTO,
-          veredicto: 'no_apto',
-          apto: false,
-          alergenos_en_conflicto: ['lacteos', 'soya'],
-          trazas_en_conflicto: ['mani'],
-        }),
+        compatible: of<Compatibilidad>(CON_ADVERTENCIA),
       });
 
-      expect(texto('.franja.no-apto[role="alert"]')).toBe('No apto: contiene Lácteos, Soya');
-      expect(texto('.franja.trazas-en-conflicto')).toBe('Puede contener Maní');
+      expect(raiz().querySelector('.franja.apto-con-advertencia[role="status"]')).not.toBeNull();
+      expect(texto('.franja .franja-titulo')).toBe('Apto con advertencia');
+      expect(texto('.franja .explicacion')).toBe('Puede contener maní, que está en tu perfil.');
+      expect(icono('.franja')).toBe('warning-outline');
       expect(raiz().querySelector('.franja.apto')).toBeNull();
-      expect(raiz().querySelector('.franja.apto-con-advertencia')).toBeNull();
     });
 
-    it('con trazas en conflicto muestra "Apto con advertencia" en ámbar, nunca "Apto para ti"', async () => {
-      await crear(undefined, {
-        conSesion: true,
-        compatible: of<Compatibilidad>({ ...CON_ADVERTENCIA, trazas_en_conflicto: ['mani'] }),
-      });
+    it('no apto: se anuncia como alerta, con su título, ícono y la explicación, en rojo', async () => {
+      await crear(undefined, { conSesion: true, compatible: of<Compatibilidad>(NO_APTO) });
 
-      expect(texto('.franja.apto-con-advertencia[role="status"]')).toBe(
-        'Apto con advertencia: puede contener Maní',
+      expect(raiz().querySelector('.franja.no-apto[role="alert"]')).not.toBeNull();
+      expect(texto('.franja .franja-titulo')).toBe('No apto para ti');
+      expect(texto('.franja .explicacion')).toBe(
+        'Contiene lácteos y soya, que están en tu perfil.',
       );
-      expect(raiz().querySelector('.franja.apto')).toBeNull();
-      expect(raiz().querySelector('.franja.no-apto')).toBeNull();
-      expect(raiz().querySelector('.franja.trazas-en-conflicto')).toBeNull();
+      expect(icono('.franja')).toBe('close-circle-outline');
+      expect(raiz().querySelector('.franja.apto, .franja.apto-con-advertencia')).toBeNull();
     });
 
-    it('con datos insuficientes muestra "Apto con advertencia: datos insuficientes"', async () => {
+    it.each([
+      ['alta', 'Confianza alta: Datos completos y declarados por la fuente.', 3],
+      ['media', 'Confianza media: Parte de la información está incompleta o se dedujo del texto.', 2],
+      ['baja', 'Confianza baja: Faltan datos o es una revisión básica: revisa la etiqueta.', 1],
+    ] as const)('muestra la confianza %s con su frase', async (confianza, frase, llenos) => {
       await crear(undefined, {
         conSesion: true,
-        compatible: of<Compatibilidad>({ ...CON_ADVERTENCIA, datos_suficientes: false }),
+        compatible: of<Compatibilidad>({ ...CON_ADVERTENCIA, confianza }),
       });
 
-      expect(texto('.franja.apto-con-advertencia')).toBe(
-        'Apto con advertencia: datos insuficientes',
+      expect(texto('.confianza')).toBe(frase);
+      expect(raiz().querySelectorAll('.confianza .punto.lleno')).toHaveLength(llenos);
+      expect(raiz().querySelector('.confianza .puntos')?.getAttribute('aria-hidden')).toBe(
+        'true',
       );
-      expect(raiz().querySelector('.franja.apto')).toBeNull();
     });
 
-    it('con trazas y datos insuficientes muestra los dos motivos', async () => {
+    it('muestra el aviso orientativo del motor, siempre', async () => {
+      await crear(undefined, { conSesion: true });
+
+      expect(texto('.aviso-orientativo[role="status"]')).toBe(
+        'Clasificación orientativa según tu perfil y los datos de Open Food Facts.',
+      );
+    });
+
+    it('enlaza a "Editar mis alergias" en el perfil', async () => {
+      await crear(undefined, { conSesion: true });
+
+      const enlace = raiz().querySelector('a.editar-alergias');
+      expect(enlace?.textContent?.trim()).toBe('Editar mis alergias');
+      expect(enlace?.getAttribute('href')).toBe('/perfil');
+    });
+
+    it('sin respaldo no muestra la revisión básica', async () => {
+      await crear(undefined, { conSesion: true });
+
+      expect(raiz().querySelector('.revision-basica')).toBeNull();
+    });
+
+    it('indica la revisión básica si el veredicto vino del respaldo', async () => {
       await crear(undefined, {
         conSesion: true,
         compatible: of<Compatibilidad>({
           ...CON_ADVERTENCIA,
-          trazas_en_conflicto: ['mani', 'soya'],
-          datos_suficientes: false,
+          confianza: 'baja',
+          motivos_confianza: ['evaluacion_de_respaldo'],
+        }),
+        compatibilidadDesdeRespaldo: true,
+      });
+
+      expect(texto('.revision-basica[role="status"]')).toBe(
+        'Revisión básica: el servicio de evaluación no estaba disponible.',
+      );
+    });
+
+    it('también la indica por el motivo evaluacion_de_respaldo, aunque falte el header', async () => {
+      await crear(undefined, {
+        conSesion: true,
+        compatible: of<Compatibilidad>({
+          ...CON_ADVERTENCIA,
+          motivos_confianza: ['evaluacion_de_respaldo'],
         }),
       });
 
-      expect(texto('.franja.apto-con-advertencia')).toBe(
-        'Apto con advertencia: puede contener Maní, Soya; datos insuficientes',
-      );
+      expect(raiz().querySelector('.revision-basica')).not.toBeNull();
     });
 
-    it('sin veredicto en la respuesta (backend anterior), las trazas no dan "Apto para ti"', async () => {
-      await crear(undefined, {
-        conSesion: true,
-        compatible: of({
-          apto: true,
-          alergenos_en_conflicto: [],
-          trazas_en_conflicto: ['mani'],
-        } as unknown as Compatibilidad),
-      });
-
-      expect(texto('.franja.apto-con-advertencia')).toBe(
-        'Apto con advertencia: puede contener Maní',
-      );
-      expect(raiz().querySelector('.franja.apto')).toBeNull();
-    });
-
-    it('si falla, muestra el detalle sin franja', async () => {
+    it('si falla, muestra el detalle sin veredicto ni alerta', async () => {
       const error: ErrorApi = { status: 500, codigo: null, mensaje: 'Error', requestId: null };
       await crear(undefined, { conSesion: true, compatible: throwError(() => error) });
 
       expect(raiz().querySelector('.franja')).toBeNull();
       expect(raiz().querySelector('[role="alert"]')).toBeNull();
+      expect(raiz().querySelector('.invitar-sesion')).toBeNull();
       expect(texto('h1.nombre')).toBe('Galletas de avena');
     });
 
-    it('quita la franja al cerrar la sesión', async () => {
+    it('al cerrar la sesión quita el veredicto e invita a iniciar sesión', async () => {
       await crear(undefined, { conSesion: true });
       expect(raiz().querySelector('.franja')).not.toBeNull();
 
       autenticado.set(false);
 
       expect(raiz().querySelector('.franja')).toBeNull();
+      expect(raiz().querySelector('.aviso-orientativo')).toBeNull();
+      expect(raiz().querySelector('.invitar-sesion')).not.toBeNull();
     });
   });
 });
