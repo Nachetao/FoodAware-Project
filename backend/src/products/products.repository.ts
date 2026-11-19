@@ -1,29 +1,28 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
-import { ParametrosBusqueda, ResultadoBusqueda } from "./contrato/busqueda";
+import { ParametrosBusqueda } from "./contrato/busqueda";
 import { Producto } from "./contrato/producto";
-import { AllergenCode } from "./contrato/enums";
 import { Product } from "./entities/product.entity";
 import { tokensRespaldo } from "./busqueda-respaldo";
 import { aFilaProducto, aProducto, FilaProducto } from "./producto.mapper";
-import { ModoBusqueda } from "./contrato/adaptativo";
-import { ConteoAlergeno } from "./compatibilidad-local";
+import { ModoBusqueda, PerfilRestricciones } from "./contrato/adaptativo";
+import {
+  Coincidencia,
+  ResultadoPersonalizadoRespaldo,
+  ResultadoRespaldo,
+  compatiblesDeRespaldo,
+  personalizadoDeRespaldo,
+} from "./respaldo-local";
 
-export interface ResultadoRespaldo {
-  total: number;
-  resultados: ResultadoBusqueda[];
-}
+export type { ResultadoPersonalizadoRespaldo, ResultadoRespaldo };
 
-/** Búsqueda personalizada desde la base (respaldo del motor adaptativo). */
-export interface ResultadoPersonalizadoRespaldo extends ResultadoRespaldo {
-  /** Todas las coincidencias, con los no aptos. */
-  total_base: number;
-  /** Coincidencias con algún alérgeno del usuario como ingrediente. */
-  no_aptos: number;
-  /** Cuántos no aptos hay por cada alérgeno del usuario. */
-  motivos: ConteoAlergeno[];
-}
+/**
+ * Tope de coincidencias que la búsqueda personalizada y /compatibles de
+ * respaldo evalúan con la regla local. La tabla guarda pocos miles de
+ * productos; si se alcanza, se evalúan las de mayor score.
+ */
+export const MAX_COINCIDENCIAS_RESPALDO = 1000;
 
 // Normalización de los campos en SQL, sin la extensión unaccent.
 const CON_TILDE = "áéíóúüñàèìòù";
@@ -58,47 +57,16 @@ const SQL_PAGINA = `SELECT p.*, s.score ${DESDE_PUNTUADOS}
   ORDER BY s.score DESC, p.completitud DESC, p.codigo_barras
   LIMIT $2 OFFSET $3`;
 
-// Compatibles: además, ningún alérgeno del usuario ($2), ni como ingrediente
-// ni como traza: "solo aptos" no muestra productos con advertencia. Usa los
-// índices GIN IDX_products_alergenos_gin e IDX_products_trazas_gin; con
-// $2 = '{}' no excluye nada.
-const SIN_ALERGIAS_DEL_USUARIO = `AND NOT (p.alergenos && $2::text[])
-  AND NOT (p.trazas && $2::text[])`;
-const SQL_TOTAL_COMPATIBLES = `${SQL_TOTAL} ${SIN_ALERGIAS_DEL_USUARIO}`;
-const SQL_PAGINA_COMPATIBLES = `SELECT p.*, s.score ${DESDE_PUNTUADOS}
-  ${SIN_ALERGIAS_DEL_USUARIO}
+// Todas las coincidencias en orden de score (hasta $2), para evaluarlas con
+// la regla local de compatibilidad-local.ts.
+const SQL_COINCIDENCIAS = `SELECT p.*, s.score ${DESDE_PUNTUADOS}
   ORDER BY s.score DESC, p.completitud DESC, p.codigo_barras
-  LIMIT $3 OFFSET $4`;
-
-// Personalizada de respaldo: misma regla local que compatibilidad-local.ts,
-// en SQL para ordenar y paginar en la base. Con las alergias del usuario ($2):
-// 0 sin conflictos, 1 con advertencia (traza, sin ingredientes o completitud
-// menor que 0,5) y 2 no apto (alérgeno como ingrediente).
-const NO_APTO = `p.alergenos && $2::text[]`;
-const RANGO_LOCAL = `CASE
-    WHEN ${NO_APTO} THEN 2
-    WHEN cardinality($2::text[]) > 0 AND (p.trazas && $2::text[]
-      OR cardinality(p.ingredientes) = 0 OR p.completitud < 0.5) THEN 1
-    ELSE 0
-  END`;
-const SQL_CONTEO_PERSONALIZADA = `SELECT count(*)::int AS total_base,
-    (count(*) FILTER (WHERE ${NO_APTO}))::int AS no_aptos
-  ${DESDE_PUNTUADOS}`;
-// Un producto con dos alérgenos del usuario cuenta en los dos.
-const SQL_MOTIVOS_NO_APTOS = `SELECT a.codigo, count(*)::int AS cantidad
-  FROM (SELECT p.alergenos ${DESDE_PUNTUADOS} AND ${NO_APTO}) x
-  CROSS JOIN LATERAL unnest(x.alergenos) AS a(codigo)
-  WHERE a.codigo = ANY($2::text[])
-  GROUP BY a.codigo
-  ORDER BY cantidad DESC, a.codigo`;
-const sqlPaginaPersonalizada = (modo: ModoBusqueda) =>
-  `SELECT p.*, s.score ${DESDE_PUNTUADOS}
-  ${modo === "filtrar" ? `AND NOT (${NO_APTO})` : ""}
-  ORDER BY ${RANGO_LOCAL}, s.score DESC, p.completitud DESC, p.codigo_barras
-  LIMIT $3 OFFSET $4`;
+  LIMIT $2`;
 
 @Injectable()
 export class ProductsRepository {
+  private readonly logger = new Logger(ProductsRepository.name);
+
   constructor(
     @InjectRepository(Product)
     private readonly repository: Repository<Product>,
@@ -165,41 +133,18 @@ export class ProductsRepository {
   }
 
   /**
-   * Productos guardados que coinciden con la búsqueda (mismo score que el
-   * respaldo) y no contienen ninguno de los alérgenos indicados.
+   * Respaldo de /compatibles: coincidencias guardadas que son "apto" para el
+   * perfil en modo estricto (ver compatiblesDeRespaldo).
    */
   async buscarCompatibles(
-    { q, limit, offset }: ParametrosBusqueda,
-    alergias: AllergenCode[],
+    params: ParametrosBusqueda,
+    perfil: PerfilRestricciones,
   ): Promise<ResultadoRespaldo> {
-    const tokens = tokensRespaldo(q);
-    if (tokens.length === 0) {
-      return { total: 0, resultados: [] };
-    }
-
-    const [{ total }] = await this.repository.query(SQL_TOTAL_COMPATIBLES, [
-      tokens,
-      alergias,
-    ]);
-    if (total === 0) {
-      return { total: 0, resultados: [] };
-    }
-
-    const filas: Array<FilaProducto & { score: number }> =
-      await this.repository.query(SQL_PAGINA_COMPATIBLES, [
-        tokens,
-        alergias,
-        limit,
-        offset,
-      ]);
-    return {
-      total,
-      resultados: filas.map((fila, i) => ({
-        producto: aProducto(fila),
-        score: fila.score,
-        posicion: offset + i + 1,
-      })),
-    };
+    return compatiblesDeRespaldo(
+      await this.coincidencias(params.q),
+      perfil,
+      params,
+    );
   }
 
   /**
@@ -209,49 +154,16 @@ export class ProductsRepository {
    * no aptos; total cuenta lo visible y total_base todas las coincidencias.
    */
   async buscarPersonalizadoRespaldo(
-    { q, limit, offset }: ParametrosBusqueda,
-    alergias: AllergenCode[],
+    params: ParametrosBusqueda,
+    perfil: PerfilRestricciones,
     modo: ModoBusqueda,
   ): Promise<ResultadoPersonalizadoRespaldo> {
-    const vacio = { total: 0, total_base: 0, no_aptos: 0, motivos: [] };
-    const tokens = tokensRespaldo(q);
-    if (tokens.length === 0) {
-      return { ...vacio, resultados: [] };
-    }
-
-    const [{ total_base, no_aptos }] = await this.repository.query(
-      SQL_CONTEO_PERSONALIZADA,
-      [tokens, alergias],
+    return personalizadoDeRespaldo(
+      await this.coincidencias(params.q),
+      perfil,
+      modo,
+      params,
     );
-    if (total_base === 0) {
-      return { ...vacio, resultados: [] };
-    }
-
-    const [motivos, filas]: [
-      ConteoAlergeno[],
-      Array<FilaProducto & { score: number }>,
-    ] = await Promise.all([
-      no_aptos > 0
-        ? this.repository.query(SQL_MOTIVOS_NO_APTOS, [tokens, alergias])
-        : Promise.resolve([]),
-      this.repository.query(sqlPaginaPersonalizada(modo), [
-        tokens,
-        alergias,
-        limit,
-        offset,
-      ]),
-    ]);
-    return {
-      total: modo === "filtrar" ? total_base - no_aptos : total_base,
-      total_base,
-      no_aptos,
-      motivos,
-      resultados: filas.map((fila, i) => ({
-        producto: aProducto(fila),
-        score: fila.score,
-        posicion: offset + i + 1,
-      })),
-    };
   }
 
   /** Producto guardado con ese código, o null; respaldo del detalle de producto. */
@@ -260,6 +172,28 @@ export class ProductsRepository {
       where: { codigo_barras: codigoBarras },
     });
     return fila ? aProducto(fila) : null;
+  }
+
+  /** Coincidencias guardadas en orden de score, hasta el tope. */
+  private async coincidencias(q: string): Promise<Coincidencia[]> {
+    const tokens = tokensRespaldo(q);
+    if (tokens.length === 0) {
+      return [];
+    }
+    const filas: Array<FilaProducto & { score: number }> =
+      await this.repository.query(SQL_COINCIDENCIAS, [
+        tokens,
+        MAX_COINCIDENCIAS_RESPALDO,
+      ]);
+    if (filas.length === MAX_COINCIDENCIAS_RESPALDO) {
+      this.logger.warn(
+        `El respaldo personalizado alcanzó el tope de ${MAX_COINCIDENCIAS_RESPALDO} coincidencias; se evalúan las de mayor score`,
+      );
+    }
+    return filas.map((fila) => ({
+      producto: aProducto(fila),
+      score: fila.score,
+    }));
   }
 
   // Postgres rechaza un ON CONFLICT DO UPDATE que toca la misma fila dos veces

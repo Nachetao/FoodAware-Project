@@ -9,12 +9,13 @@ import {
   errorContrato,
   producto,
 } from "./app-de-prueba";
-import { AllergenCode } from "../../src/products/contrato/enums";
+import { AllergenCode, DietLabel } from "../../src/products/contrato/enums";
+import { Rol } from "../../src/users/rol";
 import { Producto } from "../../src/products/contrato/producto";
 
 const ANA_ID = "3f2b8c1e-9d4a-4e7b-8a6f-1c2d3e4f5a6b";
 const token = () =>
-  `Bearer ${sign({ sub: ANA_ID, correo: "ana@correo.cl" }, process.env.JWT_SECRET!)}`;
+  `Bearer ${sign({ sub: ANA_ID, correo: "ana@correo.cl", rol: Rol.USUARIO }, process.env.JWT_SECRET!)}`;
 const AVISO =
   "Clasificación orientativa según tu perfil y los datos de Open Food Facts. No es una garantía de que el producto sea seguro para ti: revisa siempre la etiqueta del envase.";
 
@@ -136,6 +137,9 @@ describe("Integración: búsqueda personalizada y /compatibles con el motor", ()
       correo: "ana@correo.cl",
       password: "$2b$10$hash",
       alergias: [AllergenCode.LACTEOS, AllergenCode.MANI],
+      dietas: [],
+      modo_estricto: false,
+      rol: Rol.USUARIO,
     });
   });
 
@@ -366,6 +370,72 @@ describe("Integración: búsqueda personalizada y /compatibles con el motor", ()
           (r: { producto: Producto }) => r.producto.codigo_barras,
         ),
       ).toEqual(["7801234000018"]);
+    });
+
+    describe("con dietas en el perfil", () => {
+      beforeEach(() => {
+        Object.assign(usuarios.usuarios.get(ANA_ID)!, {
+          dietas: [DietLabel.VEGANO],
+          modo_estricto: false,
+        });
+      });
+
+      it("envía las dietas reales y cuenta solo los apto aunque ocupen varias páginas", async () => {
+        // 75 apto y después 15 apto_con_advertencia (dieta no declarada).
+        const TOTAL_APTOS = 75;
+        fastapi.responder("/search/personalized", ({ cuerpo }) => {
+          const { offset, limit } = cuerpo as { offset: number; limit: number };
+          const indices = Array.from(
+            { length: Math.max(0, Math.min(limit, 90 - offset)) },
+            (_, i) => offset + i,
+          );
+          return {
+            status: 200,
+            cuerpo: {
+              ...respuestaMotor(
+                indices.map((i) => [
+                  avena,
+                  i < TOTAL_APTOS ? "apto" : "apto_con_advertencia",
+                ]),
+              ),
+              total: 90,
+            },
+          };
+        });
+
+        const res = await get("/api/products/compatibles?q=galletas&limit=10");
+
+        expect(res.status).toBe(200);
+        expect(res.body.total).toBe(TOTAL_APTOS);
+        expect(res.body.resultados).toHaveLength(10);
+        const cuerpos = fastapi.peticiones.map(
+          (p) => p.cuerpo as { offset: number; perfil: object },
+        );
+        expect(cuerpos.map((c) => c.offset)).toEqual([0, 10, 60]);
+        expect(cuerpos[0].perfil).toEqual({
+          alergias: ["lacteos", "mani"],
+          dietas: ["vegano"],
+          modo_estricto: true,
+        });
+      });
+
+      it("sin motor, el respaldo exige la etiqueta de la dieta", async () => {
+        const vegana = {
+          ...galleta("7801234000049", "Galletas veganas", []),
+          etiquetas_dieta: [DietLabel.VEGANO],
+        };
+        guardar(avena, conLeche, vegana);
+        await fastapi.apagar();
+
+        const res = await get("/api/products/compatibles?q=galletas");
+
+        expect(res.headers["x-fuente-datos"]).toBe("respaldo");
+        expect(
+          res.body.resultados.map(
+            (r: { producto: Producto }) => r.producto.codigo_barras,
+          ),
+        ).toEqual(["7801234000049"]);
+      });
     });
 
     it.each(fallas)(

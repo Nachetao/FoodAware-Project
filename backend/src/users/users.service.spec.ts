@@ -3,7 +3,8 @@ import { QueryFailedError } from "typeorm";
 import { UsersService } from "./users.service";
 import { User } from "./user.entity";
 import { CreateUserDto } from "./dto/create-user.dto";
-import { AllergenCode } from "../products/contrato/enums";
+import { AllergenCode, DietLabel } from "../products/contrato/enums";
+import { Rol } from "./rol";
 
 const DATOS: CreateUserDto = {
   nombre: "Ana",
@@ -14,11 +15,19 @@ const DATOS: CreateUserDto = {
 
 describe("UsersService.createTestUser", () => {
   let service: UsersService;
-  let repo: { findOne: jest.Mock; create: jest.Mock; save: jest.Mock };
+  let repo: {
+    findOne: jest.Mock;
+    find: jest.Mock;
+    create: jest.Mock;
+    save: jest.Mock;
+    delete: jest.Mock;
+  };
 
   beforeEach(() => {
     repo = {
       findOne: jest.fn().mockResolvedValue(null),
+      find: jest.fn().mockResolvedValue([]),
+      delete: jest.fn().mockResolvedValue({ affected: 1 }),
       create: jest.fn((datos) => datos),
       save: jest.fn(async (u) => ({ ...u, id: "uuid-1" }) as User),
     };
@@ -33,6 +42,9 @@ describe("UsersService.createTestUser", () => {
       nombre: "Ana",
       correo: "ana@correo.cl",
       alergias: ["mani"],
+      dietas: [],
+      modo_estricto: false,
+      rol: "usuario",
     });
     expect(usuario).not.toHaveProperty("password");
     const guardado = repo.save.mock.calls[0][0];
@@ -67,6 +79,12 @@ describe("UsersService.createTestUser", () => {
     );
   });
 
+  it("el registro siempre crea el rol usuario", async () => {
+    await service.createTestUser(DATOS);
+
+    expect(repo.save.mock.calls[0][0].rol).toBe(Rol.USUARIO);
+  });
+
   it("guarda alergias vacías si no vienen", async () => {
     const sinAlergias = { ...DATOS, alergias: undefined };
 
@@ -83,6 +101,9 @@ describe("UsersService.createTestUser", () => {
       correo: "ana@correo.cl",
       password: "$2b$10$hash",
       alergias: [AllergenCode.MANI],
+      dietas: [DietLabel.VEGANO],
+      modo_estricto: true,
+      rol: Rol.USUARIO,
     } as User;
 
     it("perfil devuelve el usuario sin password", async () => {
@@ -96,6 +117,9 @@ describe("UsersService.createTestUser", () => {
         nombre: "Ana",
         correo: "ana@correo.cl",
         alergias: [AllergenCode.MANI],
+        dietas: [DietLabel.VEGANO],
+        modo_estricto: true,
+        rol: "usuario",
       });
     });
 
@@ -115,15 +139,108 @@ describe("UsersService.createTestUser", () => {
       expect(perfil).not.toHaveProperty("password");
     });
 
-    it.each(["perfil", "actualizarAlergias"] as const)(
+    it("actualizarPerfil cambia solo los campos que vienen, sin repetir", async () => {
+      repo.findOne.mockResolvedValue({ ...guardado });
+
+      const perfil = await service.actualizarPerfil("u1", {
+        dietas: [DietLabel.VEGANO, DietLabel.VEGANO, DietLabel.SIN_GLUTEN],
+        modo_estricto: false,
+      });
+
+      const guardadoAhora = repo.save.mock.calls[0][0];
+      expect(guardadoAhora).toMatchObject({
+        nombre: "Ana",
+        alergias: [AllergenCode.MANI],
+        dietas: [DietLabel.VEGANO, DietLabel.SIN_GLUTEN],
+        modo_estricto: false,
+        rol: Rol.USUARIO,
+      });
+      expect(perfil).not.toHaveProperty("password");
+    });
+
+    it("actualizarPerfil cambia el nombre y las alergias", async () => {
+      repo.findOne.mockResolvedValue({ ...guardado });
+
+      await service.actualizarPerfil("u1", {
+        nombre: "Ana María",
+        alergias: [],
+      });
+
+      expect(repo.save.mock.calls[0][0]).toMatchObject({
+        nombre: "Ana María",
+        alergias: [],
+        dietas: [DietLabel.VEGANO],
+        modo_estricto: true,
+      });
+    });
+
+    it.each(["perfil", "actualizarAlergias", "actualizarPerfil"] as const)(
       "%s responde 404 si el usuario ya no existe",
       async (metodo) => {
         repo.findOne.mockResolvedValue(null);
 
-        await expect(service[metodo]("u1", [])).rejects.toBeInstanceOf(
-          NotFoundException,
-        );
+        await expect(
+          (service[metodo] as (id: string, datos: never) => Promise<unknown>)(
+            "u1",
+            [] as never,
+          ),
+        ).rejects.toBeInstanceOf(NotFoundException);
       },
     );
+  });
+
+  describe("borrarCuenta", () => {
+    it("borra la fila del usuario", async () => {
+      await service.borrarCuenta("u1");
+
+      expect(repo.delete).toHaveBeenCalledWith({ id: "u1" });
+    });
+
+    it("responde 404 si el usuario ya no existe", async () => {
+      repo.delete.mockResolvedValue({ affected: 0 });
+
+      await expect(service.borrarCuenta("u1")).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe("buscarPorId y listar", () => {
+    it("buscarPorId devuelve el usuario o null", async () => {
+      repo.findOne
+        .mockResolvedValueOnce({ id: "u1" })
+        .mockResolvedValueOnce(null);
+
+      await expect(service.buscarPorId("u1")).resolves.toEqual({ id: "u1" });
+      await expect(service.buscarPorId("u2")).resolves.toBeNull();
+      expect(repo.findOne).toHaveBeenCalledWith({ where: { id: "u1" } });
+    });
+
+    it("listar devuelve id, nombre, correo y rol, sin password ni alergias", async () => {
+      repo.find.mockResolvedValue([
+        {
+          id: "u1",
+          nombre: "Ana",
+          correo: "ana@correo.cl",
+          password: "$2b$10$hash",
+          alergias: [AllergenCode.MANI],
+          rol: Rol.ADMINISTRADOR,
+        },
+      ]);
+
+      const lista = await service.listar();
+
+      expect(repo.find).toHaveBeenCalledWith({
+        order: { nombre: "ASC", correo: "ASC" },
+      });
+      expect(lista).toEqual([
+        {
+          id: "u1",
+          nombre: "Ana",
+          correo: "ana@correo.cl",
+          rol: "administrador",
+        },
+      ]);
+    });
   });
 });

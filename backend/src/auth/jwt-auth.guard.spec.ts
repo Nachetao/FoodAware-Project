@@ -8,19 +8,29 @@ import { PassportModule } from "@nestjs/passport";
 import { Test } from "@nestjs/testing";
 import { JwtAuthGuard } from "./jwt-auth.guard";
 import { JwtStrategy } from "./jwt.strategy";
+import { RolesGuard } from "./roles.guard";
 import { FoodsController } from "../foods/foods.controller";
 import { FoodsService } from "../foods/foods.service";
 import { IaController } from "../ia/ia.controller";
 import { IaAnalysisService } from "../ia/ia.service";
+import { Rol } from "../users/rol";
+import { User } from "../users/user.entity";
+import { UsersService } from "../users/users.service";
 
 const SECRETO = "secreto-de-prueba";
 const USUARIO_ID = "3f2b8c1e-9d4a-4e7b-8a6f-1c2d3e4f5a6b";
+const ADMIN_ID = "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
 
-describe("JwtAuthGuard (guard global)", () => {
+describe("JwtAuthGuard y RolesGuard (guards globales)", () => {
   let app: INestApplication;
   let base: string;
   const foodsService = { findAll: jest.fn().mockResolvedValue([]) };
   const iaService = { analizarProducto: jest.fn().mockResolvedValue({}) };
+  // La "base": JwtStrategy busca aquí al usuario del token en cada petición.
+  const usuarios = new Map<string, Partial<User>>();
+  const usersService = {
+    buscarPorId: jest.fn(async (id: string) => usuarios.get(id) ?? null),
+  };
 
   beforeAll(async () => {
     const module = await Test.createTestingModule({
@@ -28,8 +38,11 @@ describe("JwtAuthGuard (guard global)", () => {
       controllers: [FoodsController, IaController],
       providers: [
         JwtStrategy,
+        // Mismo orden que AuthModule: primero el JWT, después los roles.
         { provide: APP_GUARD, useClass: JwtAuthGuard },
+        { provide: APP_GUARD, useClass: RolesGuard },
         { provide: ConfigService, useValue: { getOrThrow: () => SECRETO } },
+        { provide: UsersService, useValue: usersService },
         { provide: FoodsService, useValue: foodsService },
         { provide: IaAnalysisService, useValue: iaService },
       ],
@@ -48,35 +61,83 @@ describe("JwtAuthGuard (guard global)", () => {
   });
 
   afterAll(() => app.close());
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    usuarios.clear();
+    usuarios.set(USUARIO_ID, {
+      id: USUARIO_ID,
+      correo: "ana@correo.cl",
+      rol: Rol.USUARIO,
+    });
+    usuarios.set(ADMIN_ID, {
+      id: ADMIN_ID,
+      correo: "admin@correo.cl",
+      rol: Rol.ADMINISTRADOR,
+    });
+  });
 
+  const firmar = (
+    payload: object,
+    opciones: SignOptions = {},
+    secreto = SECRETO,
+  ) => sign(payload, secreto, opciones);
   const token = (opciones: SignOptions = {}, secreto = SECRETO) =>
-    sign({ sub: USUARIO_ID, correo: "ana@correo.cl" }, secreto, opciones);
+    firmar(
+      { sub: USUARIO_ID, correo: "ana@correo.cl", rol: Rol.USUARIO },
+      opciones,
+      secreto,
+    );
+  const tokenAdmin = (opciones: SignOptions = {}, secreto = SECRETO) =>
+    firmar(
+      { sub: ADMIN_ID, correo: "admin@correo.cl", rol: Rol.ADMINISTRADOR },
+      opciones,
+      secreto,
+    );
   const conToken = (t: string) => ({ Authorization: `Bearer ${t}` });
+  const estado = async (t?: string) =>
+    (await fetch(base, t ? { headers: conToken(t) } : {})).status;
 
-  describe("ruta protegida: GET /api/food", () => {
+  describe("ruta solo para administradores: GET /api/food", () => {
     it("responde 401 sin token", async () => {
-      expect((await fetch(base)).status).toBe(401);
+      expect(await estado()).toBe(401);
       expect(foodsService.findAll).not.toHaveBeenCalled();
     });
 
     it.each([
-      ["inválido", "no.es.un.jwt"],
-      ["firmado con otro secreto", "OTRO"],
-      ["expirado", "EXPIRADO"],
-    ])("responde 401 con un token %s", async (_caso, valor) => {
-      const t =
-        valor === "OTRO"
-          ? token({}, "otro")
-          : valor === "EXPIRADO"
-            ? token({ expiresIn: -10 })
-            : valor;
-      expect((await fetch(base, { headers: conToken(t) })).status).toBe(401);
+      ["inválido", () => "no.es.un.jwt"],
+      ["firmado con otro secreto", () => tokenAdmin({}, "otro")],
+      ["expirado", () => tokenAdmin({ expiresIn: -10 })],
+    ])("responde 401 con un token %s", async (_caso, crear) => {
+      expect(await estado(crear())).toBe(401);
     });
 
-    it("responde 200 con un token válido", async () => {
-      const res = await fetch(base, { headers: conToken(token()) });
-      expect(res.status).toBe(200);
+    it("responde 200 con el token de un administrador", async () => {
+      expect(await estado(tokenAdmin())).toBe(200);
+      expect(foodsService.findAll).toHaveBeenCalled();
+    });
+
+    it("responde 403 con el token válido de un usuario sin ese rol", async () => {
+      expect(await estado(token())).toBe(403);
+      expect(foodsService.findAll).not.toHaveBeenCalled();
+    });
+
+    it("responde 401 si al administrador le quitaron el rol después del login", async () => {
+      usuarios.set(ADMIN_ID, { ...usuarios.get(ADMIN_ID), rol: Rol.USUARIO });
+
+      expect(await estado(tokenAdmin())).toBe(401);
+      expect(foodsService.findAll).not.toHaveBeenCalled();
+    });
+
+    it("responde 401 si el token es anterior a los roles (sin rol)", async () => {
+      expect(
+        await estado(firmar({ sub: ADMIN_ID, correo: "admin@correo.cl" })),
+      ).toBe(401);
+    });
+
+    it("responde 401 si el usuario del token ya no existe", async () => {
+      usuarios.delete(ADMIN_ID);
+
+      expect(await estado(tokenAdmin())).toBe(401);
     });
   });
 
@@ -104,6 +165,19 @@ describe("JwtAuthGuard (guard global)", () => {
         "Barrita",
         ["avena", "maní"],
         USUARIO_ID,
+      );
+    });
+
+    it("con el token de un usuario que ya no existe analiza sin usuario", async () => {
+      usuarios.delete(USUARIO_ID);
+
+      const res = await analizar(producto, conToken(token()));
+
+      expect(res.status).toBe(201);
+      expect(iaService.analizarProducto).toHaveBeenCalledWith(
+        "Barrita",
+        ["avena", "maní"],
+        undefined,
       );
     });
 

@@ -1,0 +1,64 @@
+.contenedor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-espacio-6);
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+h2 {
+  margin: 0 0 var(--app-espacio-1);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.resumen {
+  margin: 0 0 var(--app-espacio-3);
+  font-size: 14px;
+  color: var(--ion-color-medium);
+}
+
+.lista {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  li {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: var(--app-espacio-3) 0;
+    border-bottom: 1px solid var(--ion-border-color);
+  }
+}
+
+.nombre {
+  font-weight: 600;
+}
+
+.detalle {
+  font-size: 14px;
+  color: var(--ion-color-medium);
+}
+
+// Texto, no solo color: "Administrador" en verde sobre salvia (8.2:1).
+.etiqueta-rol {
+  align-self: flex-start;
+  margin-top: var(--app-espacio-1);
+  padding: 2px var(--app-espacio-2);
+  border-radius: var(--app-radio-pildora);
+  background: var(--ion-color-tertiary);
+  color: var(--ion-color-primary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.cargando {
+  display: flex;
+  justify-content: center;
+  padding: var(--app-espacio-4) 0;
+}
+
+.error {
+  margin: var(--app-espacio-2) 0 0;
+}

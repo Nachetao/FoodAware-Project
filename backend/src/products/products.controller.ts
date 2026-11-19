@@ -122,7 +122,7 @@ export class ProductsController {
     summary:
       "Búsqueda personalizada con el perfil del usuario (motor adaptativo)",
     description:
-      'Requiere token. Envía al motor de FastAPI (POST /search/personalized) la consulta y solo el perfil del usuario (alergias; dietas y modo estricto todavía vacíos), y responde su ranking: aptos, después apto_con_advertencia y después no_apto (ocultos en modo filtrar), con no_aptos, comparacion con /search y el aviso. Si el motor falla (500, 502, 503 o 504 tras los reintentos), ordena los productos guardados con una revisión básica de las alergias: X-Fuente-Datos: respaldo, estado_fuente "cache", veredictos con confianza baja y nunca "apto", sin interpretar restricciones de la consulta y con comparacion null.',
+      'Requiere token. Envía al motor de FastAPI (POST /search/personalized) la consulta y solo el perfil del usuario (alergias, dietas y modo estricto; nunca su identidad), y responde su ranking: aptos, después apto_con_advertencia y después no_apto (ocultos en modo filtrar), con no_aptos, comparacion con /search y el aviso. Si el motor falla (500, 502, 503 o 504 tras los reintentos), ordena los productos guardados con una revisión básica del perfil (alergias, dietas y modo estricto): X-Fuente-Datos: respaldo, estado_fuente "cache", veredictos con confianza baja y nunca "apto", sin interpretar restricciones de la consulta y con comparacion null.',
   })
   @ApiOkResponse({ type: BusquedaPersonalizada, headers: HEADER_RESPUESTA })
   @ApiUnauthorizedResponse({ description: "Falta el token o no es válido." })
@@ -167,7 +167,7 @@ export class ProductsController {
   @ApiOperation({
     summary: 'Solo los productos "apto" para el usuario',
     description:
-      'Requiere token. Usa la búsqueda personalizada del motor en modo filtrar y con modo estricto (solo en esta llamada), así se ocultan también las trazas y los datos insuficientes, y responde solo los "apto" con la forma de /search. Si el motor falla (500, 502, 503 o 504 tras los reintentos), busca en los productos guardados y excluye los que tienen alguno de los alérgenos del usuario como ingrediente o como traza, con X-Fuente-Datos: respaldo y estado_fuente "cache".',
+      'Requiere token. Usa la búsqueda personalizada del motor en modo filtrar, con las dietas del usuario y con modo estricto (solo en esta llamada), así se ocultan también las trazas y los datos insuficientes, y responde solo los "apto" con la forma de /search. Con dietas el motor también devuelve apto_con_advertencia (dieta no declarada): se ocultan, y total cuenta solo los "apto" pidiendo como máximo 5 páginas extra al motor (si se alcanza el tope, total es lo contado). Si el motor falla (500, 502, 503 o 504 tras los reintentos), aplica la misma regla en modo estricto a los productos guardados, con X-Fuente-Datos: respaldo y estado_fuente "cache".',
   })
   @ApiOkResponse({ type: RespuestaBusqueda, headers: HEADER_RESPUESTA })
   @ApiUnauthorizedResponse({ description: "Falta el token o no es válido." })
@@ -195,7 +195,7 @@ export class ProductsController {
   @ApiOperation({
     summary: "Veredicto del motor adaptativo para el perfil del usuario",
     description:
-      'Requiere token. Envía al motor de FastAPI solo el perfil (alergias; dietas y modo estricto todavía vacíos) y responde su Veredicto (veredicto, explicacion, confianza, conflictos, aviso...) más apto, que es true solo con veredicto "apto". Si el motor falla (500, 502, 503 o 504 tras los reintentos), responde una revisión básica de las alergias sobre el producto guardado, con X-Fuente-Datos: respaldo, confianza baja y "evaluacion_de_respaldo" en motivos_confianza; en respaldo nunca es "apto".',
+      'Requiere token. Envía al motor de FastAPI solo el perfil (alergias, dietas y modo estricto; nunca su identidad) y responde su Veredicto (veredicto, explicacion, confianza, conflictos, aviso...) más apto, que es true solo con veredicto "apto". Si el motor falla (500, 502, 503 o 504 tras los reintentos), responde una revisión básica del perfil sobre el producto guardado, con X-Fuente-Datos: respaldo, confianza baja y "evaluacion_de_respaldo" en motivos_confianza; en respaldo nunca es "apto".',
   })
   @ApiParam({ name: "codigo_barras", description: "De 8 a 14 dígitos." })
   @ApiOkResponse({ type: Compatibilidad, headers: HEADER_RESPUESTA })

@@ -1,10 +1,13 @@
 import { Logger } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
-import { ProductsService } from "./products.service";
+import {
+  MAX_PAGINAS_TOTAL_COMPATIBLES,
+  ProductsService,
+} from "./products.service";
 import { FastApiClientService } from "./fastapi-client.service";
 import { ProductsRepository } from "./products.repository";
 import { UsersService } from "../users/users.service";
-import { AllergenCode } from "./contrato/enums";
+import { AllergenCode, DietLabel } from "./contrato/enums";
 import { ContratoHttpException } from "./contrato-http.exception";
 import { RespuestaBusqueda, ResultadoBusqueda } from "./contrato/busqueda";
 import { CodigoError } from "./contrato/enums";
@@ -317,6 +320,9 @@ describe("ProductsService", () => {
         nombre: "Ana",
         correo: "ana@correo.cl",
         alergias: [AllergenCode.LACTEOS, AllergenCode.MANI],
+        dietas: [],
+        modo_estricto: false,
+        rol: "usuario",
       });
     });
 
@@ -337,6 +343,50 @@ describe("ProductsService", () => {
         REQUEST_ID,
       );
       expect(fastApiClient.obtenerProducto).not.toHaveBeenCalled();
+    });
+
+    it("envía las dietas y el modo estricto reales del usuario, nunca su identidad", async () => {
+      usersService.perfil.mockResolvedValue({
+        id: "u1",
+        nombre: "Ana",
+        correo: "ana@correo.cl",
+        alergias: [AllergenCode.MANI],
+        dietas: [DietLabel.VEGANO],
+        modo_estricto: true,
+        rol: "usuario",
+      });
+
+      await compatibilidadDeGalletas();
+
+      const perfil = fastApiClient.compatibilidad.mock.calls[0][1];
+      expect(perfil).toEqual({
+        alergias: [AllergenCode.MANI],
+        dietas: [DietLabel.VEGANO],
+        modo_estricto: true,
+      });
+    });
+
+    it("en respaldo aplica las dietas del perfil", async () => {
+      usersService.perfil.mockResolvedValue({
+        id: "u1",
+        nombre: "Ana",
+        correo: "ana@correo.cl",
+        alergias: [],
+        dietas: [DietLabel.VEGANO],
+        modo_estricto: false,
+        rol: "usuario",
+      });
+      fastApiClient.compatibilidad.mockRejectedValue(
+        errorFastApi(503, CodigoError.SOURCE_UNAVAILABLE),
+      );
+      productsRepository.buscarPorCodigo.mockResolvedValue(galletas);
+
+      const { respuesta } = await compatibilidadDeGalletas();
+
+      expect(respuesta.veredicto).toBe("no_apto");
+      expect(respuesta.motivos_no_apto).toEqual([
+        { tipo: "dieta", codigo: DietLabel.VEGANO },
+      ]);
     });
 
     it("responde el Veredicto del motor completo más apto, con fuente fastapi", async () => {
@@ -503,6 +553,9 @@ describe("ProductsService", () => {
         nombre: "Ana",
         correo: "ana@correo.cl",
         alergias: ALERGIAS,
+        dietas: [],
+        modo_estricto: false,
+        rol: "usuario",
       });
     });
 
@@ -539,8 +592,8 @@ describe("ProductsService", () => {
           total_base: 3,
           no_aptos: 2,
           motivos: [
-            { codigo: AllergenCode.LACTEOS, cantidad: 2 },
-            { codigo: AllergenCode.MANI, cantidad: 1 },
+            { tipo: "alergeno", codigo: AllergenCode.LACTEOS, cantidad: 2 },
+            { tipo: "alergeno", codigo: AllergenCode.MANI, cantidad: 1 },
           ],
           resultados: [{ producto: galletas, score: 3, posicion: 1 }],
         });
@@ -557,7 +610,7 @@ describe("ProductsService", () => {
           productsRepository.buscarPersonalizadoRespaldo,
         ).toHaveBeenCalledWith(
           { q: "Galletas de AVENA", limit: 10, offset: 0 },
-          ALERGIAS,
+          { alergias: ALERGIAS, dietas: [], modo_estricto: false },
           "filtrar",
         );
         expect(respuesta).toMatchObject({
@@ -608,7 +661,9 @@ describe("ProductsService", () => {
           total: 2,
           total_base: 2,
           no_aptos: 1,
-          motivos: [{ codigo: AllergenCode.LACTEOS, cantidad: 1 }],
+          motivos: [
+            { tipo: "alergeno", codigo: AllergenCode.LACTEOS, cantidad: 1 },
+          ],
           resultados: [
             { producto: galletas, score: 3, posicion: 1 },
             { producto: conLeche, score: 3, posicion: 2 },
@@ -724,12 +779,11 @@ describe("ProductsService", () => {
           respuesta.resultados.map((r) => r.producto.codigo_barras),
         ).toEqual(["7801234000018"]);
         expect(respuesta.total).toBe(1);
-        expect(logWarn).toHaveBeenCalledWith(
-          expect.stringContaining("se ocultan"),
-        );
+        // La página ya muestra dónde terminan los apto: no pide más.
+        expect(fastApiClient.buscarPersonalizado).toHaveBeenCalledTimes(1);
       });
 
-      it("si el motor falla, busca en la base sin alérgenos ni trazas del usuario", async () => {
+      it("si el motor falla, busca en la base con el perfil en modo estricto", async () => {
         fastApiClient.buscarPersonalizado.mockRejectedValue(caido());
         productsRepository.buscarCompatibles.mockResolvedValue({
           total: 7,
@@ -744,7 +798,7 @@ describe("ProductsService", () => {
 
         expect(productsRepository.buscarCompatibles).toHaveBeenCalledWith(
           PARAMETROS,
-          ALERGIAS,
+          { alergias: ALERGIAS, dietas: [], modo_estricto: true },
         );
         expect(resultado).toEqual({
           respuesta: {
@@ -768,6 +822,146 @@ describe("ProductsService", () => {
         await expect(
           service.compatibles(PARAMS, "u1", REQUEST_ID),
         ).rejects.toBe(error);
+      });
+
+      describe("total con dietas (apto primero, después advertencias)", () => {
+        // Página del motor: `aptos` apto seguidos de `resto` advertencias,
+        // con `total` visibles en modo filtrar.
+        const pagina = (
+          aptos: number,
+          resto: number,
+          total: number,
+        ): RespuestaBusquedaPersonalizada => {
+          const tipos = [
+            ...Array<Veredicto["veredicto"]>(aptos).fill("apto"),
+            ...Array<Veredicto["veredicto"]>(resto).fill(
+              "apto_con_advertencia",
+            ),
+          ];
+          return {
+            ...respuestaMotor(tipos.map((tipo) => [galletas, tipo])),
+            total,
+          };
+        };
+        const offsetsPedidos = () =>
+          fastApiClient.buscarPersonalizado.mock.calls.map(
+            ([cuerpo]) => cuerpo.offset,
+          );
+
+        beforeEach(() => {
+          usersService.perfil.mockResolvedValue({
+            id: "u1",
+            nombre: "Ana",
+            correo: "ana@correo.cl",
+            alergias: ALERGIAS,
+            dietas: [DietLabel.VEGANO],
+            modo_estricto: false,
+            rol: "usuario",
+          });
+        });
+
+        it("envía las dietas reales y fuerza el modo estricto", async () => {
+          fastApiClient.buscarPersonalizado.mockResolvedValue(pagina(1, 0, 1));
+
+          await service.compatibles(PARAMS, "u1", REQUEST_ID);
+
+          expect(
+            fastApiClient.buscarPersonalizado.mock.calls[0][0].perfil,
+          ).toEqual({
+            alergias: ALERGIAS,
+            dietas: [DietLabel.VEGANO],
+            modo_estricto: true,
+          });
+        });
+
+        it("con la página llena de apto, pide más páginas de 50 hasta el primero que no lo es", async () => {
+          fastApiClient.buscarPersonalizado
+            .mockResolvedValueOnce(pagina(10, 0, 200))
+            .mockResolvedValueOnce(pagina(50, 0, 200))
+            .mockResolvedValueOnce(pagina(7, 43, 200));
+
+          const { respuesta } = await service.compatibles(
+            PARAMS,
+            "u1",
+            REQUEST_ID,
+          );
+
+          expect(respuesta.resultados).toHaveLength(10);
+          expect(respuesta.total).toBe(67);
+          expect(offsetsPedidos()).toEqual([0, 10, 60]);
+          expect(fastApiClient.buscarPersonalizado.mock.calls[1][0].limit).toBe(
+            50,
+          );
+        });
+
+        it(`se detiene tras ${MAX_PAGINAS_TOTAL_COMPATIBLES} páginas extra, responde lo contado y avisa en el log`, async () => {
+          fastApiClient.buscarPersonalizado
+            .mockResolvedValueOnce(pagina(10, 0, 1000))
+            .mockResolvedValue(pagina(50, 0, 1000));
+
+          const { respuesta } = await service.compatibles(
+            PARAMS,
+            "u1",
+            REQUEST_ID,
+          );
+
+          expect(fastApiClient.buscarPersonalizado).toHaveBeenCalledTimes(
+            1 + MAX_PAGINAS_TOTAL_COMPATIBLES,
+          );
+          expect(respuesta.total).toBe(10 + 50 * MAX_PAGINAS_TOTAL_COMPATIBLES);
+          expect(logWarn).toHaveBeenCalledWith(
+            expect.stringContaining("alcanzó el tope"),
+          );
+        });
+
+        it("si los apto terminan justo al final de los resultados, no pide más", async () => {
+          fastApiClient.buscarPersonalizado.mockResolvedValue(
+            pagina(10, 0, 10),
+          );
+
+          const { respuesta } = await service.compatibles(
+            PARAMS,
+            "u1",
+            REQUEST_ID,
+          );
+
+          expect(respuesta.total).toBe(10);
+          expect(fastApiClient.buscarPersonalizado).toHaveBeenCalledTimes(1);
+        });
+
+        it("una página pedida después de los apto vuelve a contarlos desde el inicio", async () => {
+          fastApiClient.buscarPersonalizado
+            .mockResolvedValueOnce(pagina(0, 10, 40))
+            .mockResolvedValueOnce(pagina(12, 28, 40));
+
+          const { respuesta } = await service.compatibles(
+            { q: "galletas", limit: 10, offset: 20 },
+            "u1",
+            REQUEST_ID,
+          );
+
+          expect(respuesta.resultados).toEqual([]);
+          expect(respuesta.total).toBe(12);
+          expect(offsetsPedidos()).toEqual([20, 0]);
+        });
+
+        it("si falla una página extra, responde lo contado y avisa en el log", async () => {
+          fastApiClient.buscarPersonalizado
+            .mockResolvedValueOnce(pagina(10, 0, 100))
+            .mockRejectedValueOnce(caido());
+
+          const { respuesta, fuente } = await service.compatibles(
+            PARAMS,
+            "u1",
+            REQUEST_ID,
+          );
+
+          expect(fuente).toBe("fastapi");
+          expect(respuesta.total).toBe(10);
+          expect(logWarn).toHaveBeenCalledWith(
+            expect.stringContaining("no pudo contar todos los apto"),
+          );
+        });
       });
     });
   });

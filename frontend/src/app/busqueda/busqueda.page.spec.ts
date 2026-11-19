@@ -163,7 +163,7 @@ describe('BusquedaPage', () => {
       providers: [
         provideRouter([]),
         { provide: ProductsService, useValue: { buscar, buscarPersonalizado } },
-        { provide: AuthService, useValue: { autenticado } },
+        { provide: AuthService, useValue: { autenticado, esAdmin: signal(false) } },
       ],
     }).compileComponents();
 
@@ -734,7 +734,7 @@ describe('BusquedaPage con ?q= en la URL', () => {
         provideRouter([]),
         { provide: ActivatedRoute, useValue: { queryParamMap: parametros } },
         { provide: ProductsService, useValue: { buscar, buscarPersonalizado: vi.fn() } },
-        { provide: AuthService, useValue: { autenticado: signal(false) } },
+        { provide: AuthService, useValue: { autenticado: signal(false), esAdmin: signal(false) } },
       ],
     }).compileComponents();
 

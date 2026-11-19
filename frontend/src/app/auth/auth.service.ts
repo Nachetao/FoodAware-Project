@@ -2,23 +2,52 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Observable, catchError, switchMap, tap, throwError } from 'rxjs';
 import { environment } from '../../environments/environment';
-import { AllergenCode } from '../products/models/enums';
+import { AllergenCode, DietLabel } from '../products/models/enums';
 import { aErrorApi } from '../products/products.service';
 
 const CLAVE_TOKEN = 'foodaware.token';
+
+export type Rol = 'usuario' | 'administrador';
 
 export interface Usuario {
   id: string;
   nombre: string;
   correo: string;
   alergias: AllergenCode[];
+  dietas: DietLabel[];
+  modo_estricto: boolean;
+  rol: Rol;
 }
+
+/** Lo que el usuario puede cambiar de su perfil. */
+export type CambiosPerfil = Partial<
+  Pick<Usuario, 'nombre' | 'alergias' | 'dietas' | 'modo_estricto'>
+>;
 
 export interface DatosRegistro {
   nombre: string;
   correo: string;
   password: string;
   alergias: AllergenCode[];
+}
+
+/**
+ * Rol que viene en el payload del JWT, o null si el token no se puede leer.
+ * Solo decide qué muestra la interfaz: el backend lo valida en cada petición.
+ */
+export function rolDelToken(token: string | null): Rol | null {
+  const payload = token?.split('.')[1];
+  if (!payload) {
+    return null;
+  }
+  try {
+    const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+    const { rol } = JSON.parse(new TextDecoder().decode(bytes)) as { rol?: unknown };
+    return rol === 'usuario' || rol === 'administrador' ? rol : null;
+  } catch {
+    return null;
+  }
 }
 
 // localStorage puede no existir o fallar (modo privado, almacenamiento bloqueado).
@@ -51,6 +80,8 @@ export class AuthService {
   readonly token = signal<string | null>(leerToken());
   readonly usuario = signal<Usuario | null>(null);
   readonly autenticado = computed(() => this.token() !== null);
+  readonly rol = computed(() => rolDelToken(this.token()));
+  readonly esAdmin = computed(() => this.rol() === 'administrador');
 
   constructor() {
     // Con un token guardado se recupera el perfil (si expiró, se cierra la sesión).
@@ -90,13 +121,20 @@ export class AuthService {
     );
   }
 
-  actualizarAlergias(alergias: AllergenCode[]): Observable<Usuario> {
-    return this.http
-      .put<Usuario>(`${this.api}/usuarios/me/alergias`, { alergias })
-      .pipe(
-        tap((usuario) => this.usuario.set(usuario)),
-        catchError((error: HttpErrorResponse) => throwError(() => aErrorApi(error))),
-      );
+  /** Edita el perfil (PATCH): solo cambian los campos que vienen. */
+  actualizarPerfil(cambios: CambiosPerfil): Observable<Usuario> {
+    return this.http.patch<Usuario>(`${this.api}/usuarios/me`, cambios).pipe(
+      tap((usuario) => this.usuario.set(usuario)),
+      catchError((error: HttpErrorResponse) => throwError(() => aErrorApi(error))),
+    );
+  }
+
+  /** Borra la cuenta y sus datos en el backend, y cierra la sesión. */
+  borrarCuenta(): Observable<void> {
+    return this.http.delete<void>(`${this.api}/usuarios/me`).pipe(
+      tap(() => this.cerrarSesion()),
+      catchError((error: HttpErrorResponse) => throwError(() => aErrorApi(error))),
+    );
   }
 
   cerrarSesion(): void {

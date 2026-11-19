@@ -9,6 +9,7 @@ import { LoginPage } from './login.page';
 import { PerfilPage } from './perfil.page';
 import { RegistroPage } from './registro.page';
 import { SelectorAlergiasComponent } from './selector-alergias.component';
+import { SelectorDietasComponent } from './selector-dietas.component';
 
 /** /login, /registro y /perfil (privada), cargadas juntas en un módulo lazy. */
 @NgModule({
@@ -23,6 +24,12 @@ import { SelectorAlergiasComponent } from './selector-alergias.component';
       { path: 'perfil', component: PerfilPage, canActivate: [authGuard] },
     ]),
   ],
-  declarations: [LoginPage, RegistroPage, PerfilPage, SelectorAlergiasComponent],
+  declarations: [
+    LoginPage,
+    RegistroPage,
+    PerfilPage,
+    SelectorAlergiasComponent,
+    SelectorDietasComponent,
+  ],
 })
 export class CuentaModule {}

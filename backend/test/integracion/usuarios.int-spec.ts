@@ -1,6 +1,7 @@
 import { INestApplication } from "@nestjs/common";
 import request from "supertest";
-import { sign } from "jsonwebtoken";
+import * as bcrypt from "bcrypt";
+import { decode, sign } from "jsonwebtoken";
 import { FastApiFalso } from "./fastapi-falso";
 import {
   ProductosEnMemoria,
@@ -11,12 +12,15 @@ import {
 } from "./app-de-prueba";
 import { AllergenCode } from "../../src/products/contrato/enums";
 import { Producto } from "../../src/products/contrato/producto";
+import { Rol } from "../../src/users/rol";
 
 const ANA_ID = "3f2b8c1e-9d4a-4e7b-8a6f-1c2d3e4f5a6b";
+const ADMIN_ID = "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
 
 // Mismo payload que firma AuthService en el login, con el JWT_SECRET de prueba.
-const token = (id = ANA_ID) =>
-  `Bearer ${sign({ sub: id, correo: "ana@correo.cl" }, process.env.JWT_SECRET!)}`;
+const token = (id = ANA_ID, rol = Rol.USUARIO) =>
+  `Bearer ${sign({ sub: id, correo: "ana@correo.cl", rol }, process.env.JWT_SECRET!)}`;
+const tokenAdmin = () => token(ADMIN_ID, Rol.ADMINISTRADOR);
 
 function conAlergenos(
   codigo: string,
@@ -54,6 +58,19 @@ describe("Integración: perfil, alergias y compatibilidad (con JWT)", () => {
       correo: "ana@correo.cl",
       password: "$2b$10$hash",
       alergias: [AllergenCode.LACTEOS, AllergenCode.MANI],
+      dietas: [],
+      modo_estricto: false,
+      rol: Rol.USUARIO,
+    });
+    usuarios.usuarios.set(ADMIN_ID, {
+      id: ADMIN_ID,
+      nombre: "Admin",
+      correo: "admin@correo.cl",
+      password: "$2b$10$hash",
+      alergias: [AllergenCode.GLUTEN],
+      dietas: [],
+      modo_estricto: false,
+      rol: Rol.ADMINISTRADOR,
     });
   });
 
@@ -62,6 +79,8 @@ describe("Integración: perfil, alergias y compatibilidad (con JWT)", () => {
   it.each([
     ["get", "/api/usuarios/me"],
     ["put", "/api/usuarios/me/alergias"],
+    ["patch", "/api/usuarios/me"],
+    ["delete", "/api/usuarios/me"],
     ["get", "/api/products/7801234000018/compatibilidad"],
     ["get", "/api/products/compatibles?q=galletas"],
   ] as const)("%s %s responde 401 sin token", async (metodo, ruta) => {
@@ -80,6 +99,211 @@ describe("Integración: perfil, alergias y compatibilidad (con JWT)", () => {
       nombre: "Ana",
       correo: "ana@correo.cl",
       alergias: ["lacteos", "mani"],
+      dietas: [],
+      modo_estricto: false,
+      rol: "usuario",
+    });
+  });
+
+  describe("PATCH /api/usuarios/me", () => {
+    const editar = (cuerpo: object) =>
+      request(servidor())
+        .patch("/api/usuarios/me")
+        .set("Authorization", token())
+        .send(cuerpo);
+
+    it("cambia nombre, alergias, dietas y modo estricto, y solo esos", async () => {
+      const res = await editar({
+        nombre: "  Ana María ",
+        alergias: ["gluten"],
+        dietas: ["vegano", "sin_gluten"],
+        modo_estricto: true,
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({
+        id: ANA_ID,
+        nombre: "Ana María",
+        correo: "ana@correo.cl",
+        alergias: ["gluten"],
+        dietas: ["vegano", "sin_gluten"],
+        modo_estricto: true,
+        rol: "usuario",
+      });
+    });
+
+    it("un cambio parcial conserva lo demás", async () => {
+      const res = await editar({ modo_estricto: true });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        nombre: "Ana",
+        alergias: ["lacteos", "mani"],
+        dietas: [],
+        modo_estricto: true,
+      });
+    });
+
+    it.each([
+      ["el rol", { rol: "administrador" }],
+      ["el correo", { correo: "otra@correo.cl" }],
+      ["la contraseña", { password: "nueva" }],
+      ["una dieta desconocida", { dietas: ["paleo"] }],
+      ["un nombre vacío", { nombre: "   " }],
+      ["un modo estricto que no es booleano", { modo_estricto: "si" }],
+    ])("rechaza con 400 %s", async (_caso, cuerpo) => {
+      const res = await editar(cuerpo);
+
+      expect(res.status).toBe(400);
+      expect(usuarios.usuarios.get(ANA_ID)).toMatchObject({
+        nombre: "Ana",
+        correo: "ana@correo.cl",
+        rol: Rol.USUARIO,
+      });
+    });
+
+    it("el motor recibe las dietas y el modo estricto guardados, sin datos personales", async () => {
+      await editar({ dietas: ["vegetariano"], modo_estricto: true });
+      fastapi.responder("/products/7801234000018/compatibility", () => ({
+        status: 200,
+        cuerpo: {
+          codigo_barras: "7801234000018",
+          veredicto: "apto",
+          alergenos_en_conflicto: [],
+          trazas_en_conflicto: [],
+          dietas_no_confirmadas: [],
+          conflictos: [],
+          motivos_no_apto: [],
+          datos_suficientes: true,
+          explicacion: "Sin conflictos con tu perfil.",
+          confianza: "alta",
+          motivos_confianza: [],
+          aviso: "Clasificación orientativa.",
+        },
+      }));
+
+      await request(servidor())
+        .get("/api/products/7801234000018/compatibilidad")
+        .set("Authorization", token());
+
+      const enviado = fastapi.peticiones[0].cuerpo as { perfil: object };
+      expect(enviado).toEqual({
+        perfil: {
+          alergias: ["lacteos", "mani"],
+          dietas: ["vegetariano"],
+          modo_estricto: true,
+        },
+      });
+      expect(JSON.stringify(enviado)).not.toMatch(/ana@correo|Ana|usuario/);
+    });
+  });
+
+  describe("DELETE /api/usuarios/me", () => {
+    it("borra la cuenta y desde ese momento el token responde 401", async () => {
+      const borrar = await request(servidor())
+        .delete("/api/usuarios/me")
+        .set("Authorization", token());
+      const despues = await request(servidor())
+        .get("/api/usuarios/me")
+        .set("Authorization", token());
+
+      expect(borrar.status).toBe(204);
+      expect(usuarios.usuarios.has(ANA_ID)).toBe(false);
+      expect(usuarios.usuarios.has(ADMIN_ID)).toBe(true);
+      expect(despues.status).toBe(401);
+    });
+  });
+
+  describe("roles", () => {
+    it("el login firma el rol en el JWT y ese token sirve en las rutas privadas", async () => {
+      usuarios.usuarios.get(ADMIN_ID)!.password = await bcrypt.hash(
+        "clave-admin",
+        4,
+      );
+
+      const login = await request(servidor())
+        .post("/api/auth/login")
+        .send({ correo: "admin@correo.cl", password: "clave-admin" });
+
+      expect(login.status).toBe(201);
+      expect(decode(login.body.access_token)).toMatchObject({
+        sub: ADMIN_ID,
+        rol: "administrador",
+      });
+      const lista = await request(servidor())
+        .get("/api/usuarios")
+        .set("Authorization", `Bearer ${login.body.access_token}`);
+      expect(lista.status).toBe(200);
+    });
+
+    it("el registro crea siempre un usuario y rechaza elegir el rol", async () => {
+      const datos = {
+        nombre: "Bea",
+        correo: "bea@correo.cl",
+        password: "clave-bea",
+      };
+
+      const conRol = await request(servidor())
+        .post("/api/users")
+        .send({ ...datos, rol: "administrador" });
+      const normal = await request(servidor()).post("/api/users").send(datos);
+
+      expect(conRol.status).toBe(400);
+      expect(normal.status).toBe(201);
+      expect(normal.body.rol).toBe("usuario");
+    });
+
+    it.each([["/api/usuarios"], ["/api/food"]])(
+      "GET %s: 401 sin token, 403 a un usuario y 200 a un administrador",
+      async (ruta) => {
+        const sinToken = await request(servidor()).get(ruta);
+        const usuario = await request(servidor())
+          .get(ruta)
+          .set("Authorization", token());
+        const admin = await request(servidor())
+          .get(ruta)
+          .set("Authorization", tokenAdmin());
+
+        expect(sinToken.status).toBe(401);
+        expect(usuario.status).toBe(403);
+        expect(admin.status).toBe(200);
+      },
+    );
+
+    it("la lista de usuarios no incluye contraseñas ni datos de salud", async () => {
+      const res = await request(servidor())
+        .get("/api/usuarios")
+        .set("Authorization", tokenAdmin());
+
+      expect(res.body).toEqual([
+        {
+          id: ADMIN_ID,
+          nombre: "Admin",
+          correo: "admin@correo.cl",
+          rol: "administrador",
+        },
+        { id: ANA_ID, nombre: "Ana", correo: "ana@correo.cl", rol: "usuario" },
+      ]);
+    });
+
+    it("un token con un rol que ya no coincide con la base responde 401", async () => {
+      usuarios.usuarios.get(ADMIN_ID)!.rol = Rol.USUARIO;
+
+      const res = await request(servidor())
+        .get("/api/usuarios/me")
+        .set("Authorization", tokenAdmin());
+
+      expect(res.status).toBe(401);
+    });
+
+    it("un token de un usuario que ya no existe responde 401", async () => {
+      usuarios.usuarios.delete(ANA_ID);
+
+      const res = await request(servidor())
+        .get("/api/usuarios/me")
+        .set("Authorization", token());
+
+      expect(res.status).toBe(401);
     });
   });
 

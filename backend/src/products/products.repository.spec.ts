@@ -1,6 +1,11 @@
+import { Logger } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import { getRepositoryToken } from "@nestjs/typeorm";
-import { ProductsRepository } from "./products.repository";
+import {
+  MAX_COINCIDENCIAS_RESPALDO,
+  ProductsRepository,
+} from "./products.repository";
+import { PerfilRestricciones } from "./contrato/adaptativo";
 import { Product } from "./entities/product.entity";
 import { Producto } from "./contrato/producto";
 import { AllergenCode, DietLabel } from "./contrato/enums";
@@ -310,161 +315,202 @@ describe("ProductsRepository", () => {
     });
   });
 
-  describe("buscarCompatibles", () => {
-    it("excluye por alérgenos y trazas del usuario con los índices GIN y pagina", async () => {
-      typeormRepository.query
-        .mockResolvedValueOnce([{ total: 3 }])
-        .mockResolvedValueOnce([]);
+  describe("respaldo con la regla local", () => {
+    const { LACTEOS, MANI } = AllergenCode;
+    const perfil = (
+      alergias: AllergenCode[],
+      cambios: Partial<PerfilRestricciones> = {},
+    ): PerfilRestricciones => ({
+      alergias,
+      dietas: [],
+      modo_estricto: false,
+      ...cambios,
+    });
+    // Filas en orden de score, como las devuelve SQL_COINCIDENCIAS.
+    const fila = (
+      codigo: string,
+      score: number,
+      cambios: Partial<ReturnType<typeof filaGuardada>> = {},
+    ) => ({ ...filaGuardada(codigo, score), ...cambios });
+    const conLeche = fila("7800000000011", 6);
+    const conTrazaDeMani = fila("7800000000028", 5, {
+      alergenos: [],
+      trazas: ["mani"],
+    });
+    const sinConflictos = fila("7800000000035", 4, { alergenos: [] });
+    const sinIngredientes = fila("7800000000042", 3, {
+      alergenos: [],
+      ingredientes: [],
+    });
+    const codigos = (r: { resultados: Array<{ producto: Producto }> }) =>
+      r.resultados.map((x) => x.producto.codigo_barras);
+
+    it("pide todas las coincidencias por score, con el tope, en una sola consulta", async () => {
+      typeormRepository.query.mockResolvedValueOnce([]);
 
       await repository.buscarCompatibles(
         { q: "Galletas de AVENA", limit: 20, offset: 0 },
-        [AllergenCode.MANI],
+        perfil([MANI]),
       );
 
-      const [[sqlTotal, paramsTotal], [sqlPagina, paramsPagina]] =
-        typeormRepository.query.mock.calls;
-      for (const sql of [sqlTotal, sqlPagina]) {
-        expect(sql).toContain("NOT (p.alergenos && $2::text[])");
-        expect(sql).toContain("NOT (p.trazas && $2::text[])");
-      }
-      expect(paramsTotal).toEqual([["galleta", "avena"], ["mani"]]);
-      expect(sqlPagina).toContain("LIMIT $3 OFFSET $4");
-      expect(paramsPagina).toEqual([["galleta", "avena"], ["mani"], 20, 0]);
+      const [[sql, params]] = typeormRepository.query.mock.calls;
+      expect(sql).toContain(
+        "ORDER BY s.score DESC, p.completitud DESC, p.codigo_barras",
+      );
+      expect(sql).toContain("LIMIT $2");
+      expect(params).toEqual([
+        ["galleta", "avena"],
+        MAX_COINCIDENCIAS_RESPALDO,
+      ]);
     });
 
-    it("no consulta la base si la consulta no tiene tokens útiles", async () => {
-      const resultado = await repository.buscarCompatibles(
-        { q: "de la", limit: 20, offset: 0 },
-        [],
+    it.each(["buscarCompatibles", "buscarPersonalizadoRespaldo"] as const)(
+      "%s no consulta la base si la consulta no tiene tokens útiles",
+      async (metodo) => {
+        const resultado = await repository[metodo](
+          { q: "de la", limit: 20, offset: 0 },
+          perfil([]),
+          "filtrar",
+        );
+
+        expect(resultado.total).toBe(0);
+        expect(typeormRepository.query).not.toHaveBeenCalled();
+      },
+    );
+
+    it("avisa en el log si se alcanza el tope de coincidencias", async () => {
+      const warn = jest.spyOn(Logger.prototype, "warn").mockImplementation();
+      typeormRepository.query.mockResolvedValueOnce(
+        Array.from({ length: MAX_COINCIDENCIAS_RESPALDO }, (_, i) =>
+          fila(String(7800000000000 + i), 1),
+        ),
       );
 
-      expect(resultado).toEqual({ total: 0, resultados: [] });
-      expect(typeormRepository.query).not.toHaveBeenCalled();
+      await repository.buscarCompatibles(
+        { q: "galletas", limit: 20, offset: 0 },
+        perfil([]),
+      );
+
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("alcanzó el tope"),
+      );
+      warn.mockRestore();
     });
-  });
 
-  describe("buscarPersonalizadoRespaldo", () => {
-    const PARAMS = { q: "Galletas de AVENA", limit: 10, offset: 20 };
-    const ALERGIAS = [AllergenCode.LACTEOS, AllergenCode.MANI];
+    describe("buscarCompatibles", () => {
+      it("deja solo los apto en modo estricto: sin trazas evitadas ni datos insuficientes", async () => {
+        typeormRepository.query.mockResolvedValueOnce([
+          conLeche,
+          conTrazaDeMani,
+          sinConflictos,
+          sinIngredientes,
+        ]);
 
-    it("cuenta, agrupa los no aptos por alérgeno y ordena por la regla local", async () => {
-      typeormRepository.query
-        .mockResolvedValueOnce([{ total_base: 5, no_aptos: 2 }])
-        .mockResolvedValueOnce([
-          { codigo: "lacteos", cantidad: 2 },
-          { codigo: "mani", cantidad: 1 },
-        ])
-        .mockResolvedValueOnce([filaGuardada("7801234000018", 4)]);
+        const resultado = await repository.buscarCompatibles(
+          { q: "galletas", limit: 20, offset: 0 },
+          perfil([MANI]),
+        );
 
-      const resultado = await repository.buscarPersonalizadoRespaldo(
-        PARAMS,
-        ALERGIAS,
-        "filtrar",
-      );
-
-      const [
-        [sqlConteo, paramsConteo],
-        [sqlMotivos],
-        [sqlPagina, paramsPagina],
-      ] = typeormRepository.query.mock.calls;
-      expect(sqlConteo).toContain("FILTER (WHERE p.alergenos && $2::text[])");
-      expect(paramsConteo).toEqual([
-        ["galleta", "avena"],
-        ["lacteos", "mani"],
-      ]);
-      expect(sqlMotivos).toContain("unnest(x.alergenos)");
-      expect(sqlMotivos).toContain("GROUP BY a.codigo");
-      expect(sqlPagina).toContain("AND NOT (p.alergenos && $2::text[])");
-      expect(sqlPagina).toMatch(/ORDER BY CASE[\s\S]*THEN 2[\s\S]*THEN 1/);
-      expect(sqlPagina).toContain("p.trazas && $2::text[]");
-      expect(sqlPagina).toContain("p.completitud < 0.5");
-      expect(sqlPagina).toContain("LIMIT $3 OFFSET $4");
-      expect(paramsPagina).toEqual([
-        ["galleta", "avena"],
-        ["lacteos", "mani"],
-        10,
-        20,
-      ]);
-      expect(resultado).toMatchObject({
-        total: 3,
-        total_base: 5,
-        no_aptos: 2,
-        motivos: [
-          { codigo: "lacteos", cantidad: 2 },
-          { codigo: "mani", cantidad: 1 },
-        ],
+        expect(resultado.total).toBe(2);
+        expect(codigos(resultado)).toEqual(["7800000000011", "7800000000035"]);
       });
-      expect(resultado.resultados).toEqual([
-        expect.objectContaining({ score: 4, posicion: 21 }),
-      ]);
-      expect(resultado.resultados[0].producto.codigo_barras).toBe(
-        "7801234000018",
-      );
-    });
 
-    it("en reordenar no excluye los no aptos y total cuenta todas las coincidencias", async () => {
-      typeormRepository.query
-        .mockResolvedValueOnce([{ total_base: 5, no_aptos: 2 }])
-        .mockResolvedValueOnce([{ codigo: "lacteos", cantidad: 2 }])
-        .mockResolvedValueOnce([]);
+      it("con dietas excluye lo que las contradice o no las declara", async () => {
+        const vegano = fila("7800000000059", 2, {
+          alergenos: [],
+          etiquetas_dieta: ["vegano"],
+        });
+        typeormRepository.query.mockResolvedValueOnce([
+          conLeche,
+          sinConflictos,
+          vegano,
+        ]);
 
-      const resultado = await repository.buscarPersonalizadoRespaldo(
-        PARAMS,
-        ALERGIAS,
-        "reordenar",
-      );
+        const resultado = await repository.buscarCompatibles(
+          { q: "galletas", limit: 20, offset: 0 },
+          perfil([], { dietas: [DietLabel.VEGANO] }),
+        );
 
-      const sqlPagina = typeormRepository.query.mock.calls[2][0];
-      expect(sqlPagina).not.toContain("AND NOT (p.alergenos");
-      expect(resultado.total).toBe(5);
-    });
+        expect(codigos(resultado)).toEqual(["7800000000059"]);
+      });
 
-    it("sin no aptos no consulta los motivos", async () => {
-      typeormRepository.query
-        .mockResolvedValueOnce([{ total_base: 1, no_aptos: 0 }])
-        .mockResolvedValueOnce([filaGuardada("7801234000018", 4)]);
+      it("pagina sobre los apto con la posición global", async () => {
+        typeormRepository.query.mockResolvedValueOnce([
+          conLeche,
+          sinConflictos,
+        ]);
 
-      const resultado = await repository.buscarPersonalizadoRespaldo(
-        PARAMS,
-        ALERGIAS,
-        "filtrar",
-      );
+        const resultado = await repository.buscarCompatibles(
+          { q: "galletas", limit: 1, offset: 1 },
+          perfil([MANI]),
+        );
 
-      expect(typeormRepository.query).toHaveBeenCalledTimes(2);
-      expect(resultado.motivos).toEqual([]);
-      expect(resultado.total).toBe(1);
-    });
-
-    it("sin coincidencias no busca la página", async () => {
-      typeormRepository.query.mockResolvedValueOnce([
-        { total_base: 0, no_aptos: 0 },
-      ]);
-
-      const resultado = await repository.buscarPersonalizadoRespaldo(
-        PARAMS,
-        ALERGIAS,
-        "filtrar",
-      );
-
-      expect(typeormRepository.query).toHaveBeenCalledTimes(1);
-      expect(resultado).toEqual({
-        total: 0,
-        total_base: 0,
-        no_aptos: 0,
-        motivos: [],
-        resultados: [],
+        expect(resultado.total).toBe(2);
+        expect(resultado.resultados).toEqual([
+          expect.objectContaining({ score: 4, posicion: 2 }),
+        ]);
       });
     });
 
-    it("no consulta la base si la consulta no tiene tokens útiles", async () => {
-      const resultado = await repository.buscarPersonalizadoRespaldo(
-        { q: "de la", limit: 10, offset: 0 },
-        ALERGIAS,
-        "filtrar",
-      );
+    describe("buscarPersonalizadoRespaldo", () => {
+      const filas = [conLeche, conTrazaDeMani, sinConflictos, sinIngredientes];
 
-      expect(resultado.total_base).toBe(0);
-      expect(typeormRepository.query).not.toHaveBeenCalled();
+      it("en reordenar: sin conflictos, con advertencia y no aptos, cada grupo por score", async () => {
+        typeormRepository.query.mockResolvedValueOnce(filas);
+
+        const resultado = await repository.buscarPersonalizadoRespaldo(
+          { q: "galletas", limit: 10, offset: 0 },
+          perfil([LACTEOS, MANI]),
+          "reordenar",
+        );
+
+        expect(codigos(resultado)).toEqual([
+          "7800000000035",
+          "7800000000028",
+          "7800000000042",
+          "7800000000011",
+        ]);
+        expect(resultado).toMatchObject({
+          total: 4,
+          total_base: 4,
+          no_aptos: 1,
+          motivos: [{ tipo: "alergeno", codigo: "lacteos", cantidad: 1 }],
+        });
+      });
+
+      it("en filtrar oculta los no aptos y pagina con la posición global", async () => {
+        typeormRepository.query.mockResolvedValueOnce(filas);
+
+        const resultado = await repository.buscarPersonalizadoRespaldo(
+          { q: "galletas", limit: 2, offset: 1 },
+          perfil([LACTEOS, MANI]),
+          "filtrar",
+        );
+
+        expect(resultado.total).toBe(3);
+        expect(resultado.total_base).toBe(4);
+        expect(resultado.resultados.map((r) => r.posicion)).toEqual([2, 3]);
+        expect(codigos(resultado)).toEqual(["7800000000028", "7800000000042"]);
+      });
+
+      it("con modo estricto y dietas cuenta cada motivo de los no aptos", async () => {
+        typeormRepository.query.mockResolvedValueOnce(filas);
+
+        const resultado = await repository.buscarPersonalizadoRespaldo(
+          { q: "galletas", limit: 10, offset: 0 },
+          perfil([MANI], { dietas: [DietLabel.VEGANO], modo_estricto: true }),
+          "filtrar",
+        );
+
+        expect(resultado.no_aptos).toBe(3);
+        expect(resultado.motivos).toEqual([
+          { tipo: "datos_insuficientes", codigo: null, cantidad: 1 },
+          { tipo: "dieta", codigo: "vegano", cantidad: 1 },
+          { tipo: "traza", codigo: "mani", cantidad: 1 },
+        ]);
+        // sinConflictos no declara la dieta vegana: advertencia, no oculto.
+        expect(codigos(resultado)).toEqual(["7800000000035"]);
+      });
     });
   });
 });
