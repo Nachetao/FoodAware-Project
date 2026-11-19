@@ -1,15 +1,9 @@
 <ion-header>
-  <ion-toolbar>
-    <ion-buttons slot="start">
-      <ion-back-button defaultHref="/home" text=""></ion-back-button>
-    </ion-buttons>
-    <ion-title>Métricas</ion-title>
-    <ion-buttons slot="end">
-      <ion-button aria-label="Actualizar métricas" (click)="actualizar()">
-        <ion-icon slot="icon-only" name="refresh-outline" aria-hidden="true"></ion-icon>
-      </ion-button>
-    </ion-buttons>
-  </ion-toolbar>
+  <app-barra-superior titulo="Métricas" atras="/home">
+    <ion-button accionExtra aria-label="Actualizar métricas" (click)="actualizar()">
+      <ion-icon slot="icon-only" name="refresh-outline" aria-hidden="true"></ion-icon>
+    </ion-button>
+  </app-barra-superior>
 </ion-header>
 
 <ion-content class="ion-padding">

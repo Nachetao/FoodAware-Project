@@ -1,9 +1,9 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
-import { FormsModule } from '@angular/forms';
 import { IonicModule } from '@ionic/angular/lazy';
+import { provideRouter } from '@angular/router';
 
 import { HomePage } from './home.page';
+import { HomePageModule } from './home.module';
 import { AuthService } from '../auth/auth.service';
 
 describe('HomePage', () => {
@@ -12,9 +12,9 @@ describe('HomePage', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      declarations: [HomePage],
-      imports: [IonicModule.forRoot(), FormsModule],
-      schemas: [CUSTOM_ELEMENTS_SCHEMA]
+      // El módulo de la página trae FormsModule y la barra superior compartida.
+      imports: [IonicModule.forRoot(), HomePageModule],
+      providers: [provideRouter([])],
     }).compileComponents();
 
     fixture = TestBed.createComponent(HomePage);

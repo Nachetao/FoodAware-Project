@@ -8,10 +8,7 @@ import { ErrorApi } from '../products/models/error';
   selector: 'app-perfil',
   template: `
     <ion-header>
-      <ion-toolbar>
-        <ion-buttons slot="start"><ion-back-button defaultHref="/home" text=""></ion-back-button></ion-buttons>
-        <ion-title>Mi perfil</ion-title>
-      </ion-toolbar>
+      <app-barra-superior titulo="Mi perfil" atras="/home"></app-barra-superior>
     </ion-header>
     <ion-content class="ion-padding">
       <div class="formulario">

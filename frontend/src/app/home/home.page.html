@@ -1,24 +1,5 @@
 <ion-header [translucent]="true">
-  <ion-toolbar>
-    <ion-title>
-      FoodAware
-    </ion-title>
-    <ion-buttons slot="end">
-      <ion-button routerLink="/metricas" aria-label="Ver métricas">
-        <ion-icon slot="icon-only" name="stats-chart-outline" aria-hidden="true"></ion-icon>
-      </ion-button>
-      <ion-button routerLink="/busqueda" aria-label="Buscar productos">
-        <ion-icon slot="icon-only" name="search-outline" aria-hidden="true"></ion-icon>
-      </ion-button>
-      @if (auth.autenticado()) {
-        <ion-button routerLink="/perfil" aria-label="Mi perfil">
-          <ion-icon slot="icon-only" name="person-circle-outline" aria-hidden="true"></ion-icon>
-        </ion-button>
-      } @else {
-        <ion-button class="ingresar" routerLink="/login">Ingresar</ion-button>
-      }
-    </ion-buttons>
-  </ion-toolbar>
+  <app-barra-superior titulo="FoodAware"></app-barra-superior>
 </ion-header>
 
 <ion-content [fullscreen]="true" class="ion-padding">

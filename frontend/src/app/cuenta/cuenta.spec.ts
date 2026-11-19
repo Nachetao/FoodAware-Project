@@ -14,6 +14,7 @@ const ANA: Usuario = { id: 'u1', nombre: 'Ana', correo: 'ana@correo.cl', alergia
 describe('Cuenta: login, registro y perfil', () => {
   let auth: {
     usuario: ReturnType<typeof signal<Usuario | null>>;
+    autenticado: () => boolean;
     login: ReturnType<typeof vi.fn>;
     registrar: ReturnType<typeof vi.fn>;
     cargarPerfil: ReturnType<typeof vi.fn>;
@@ -48,6 +49,8 @@ describe('Cuenta: login, registro y perfil', () => {
   beforeEach(() => {
     auth = {
       usuario: signal<Usuario | null>(ANA),
+      // La barra superior muestra "Mi perfil" o "Ingresar" según la sesión.
+      autenticado: () => auth.usuario() !== null,
       login: vi.fn(() => of(ANA)),
       registrar: vi.fn(() => of(ANA)),
       cargarPerfil: vi.fn(() => of(ANA)),
