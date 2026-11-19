@@ -1,5 +1,5 @@
 import { ConfigService } from "@nestjs/config";
-import { leerEntero } from "./fastapi.config";
+import { headersFastApi, leerEntero } from "./fastapi.config";
 
 function configCon(valor: unknown): ConfigService {
   return { get: () => valor } as unknown as ConfigService;
@@ -26,5 +26,30 @@ describe("leerEntero", () => {
 
   it("usa el valor por defecto si es menor que el mínimo", () => {
     expect(leerEntero(configCon("0"), "CLAVE", 2000, 1)).toBe(2000);
+  });
+});
+
+describe("headersFastApi", () => {
+  it("envía X-Request-ID y X-Clave-Servicio si CLAVE_SERVICIO tiene valor", () => {
+    expect(headersFastApi(configCon("clave-123"), "req-1")).toEqual({
+      "X-Request-ID": "req-1",
+      "X-Clave-Servicio": "clave-123",
+    });
+  });
+
+  it.each([
+    ["no está definida", undefined],
+    ["está vacía", ""],
+    ["solo tiene espacios", "   "],
+  ])("no envía X-Clave-Servicio si CLAVE_SERVICIO %s", (_caso, valor) => {
+    expect(headersFastApi(configCon(valor), "req-1")).toEqual({
+      "X-Request-ID": "req-1",
+    });
+  });
+
+  it("sin request id solo envía la clave", () => {
+    expect(headersFastApi(configCon("clave-123"))).toEqual({
+      "X-Clave-Servicio": "clave-123",
+    });
   });
 });

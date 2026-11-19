@@ -14,12 +14,57 @@ import { ContratoHttpException } from "./contrato-http.exception";
 import { RespuestaBusqueda } from "./contrato/busqueda";
 import { AllergenCode, CodigoError, DietLabel } from "./contrato/enums";
 import { ErrorContrato } from "./contrato/error";
+import {
+  PerfilRestricciones,
+  SolicitudBusquedaPersonalizada,
+  Veredicto,
+} from "./contrato/adaptativo";
 
 const PYTHON_API_URL = "http://python-service:8000";
 const REQUEST_ID = "prueba-123";
 const PARAMETROS = { q: "leche", limit: 10, offset: 0 };
 
 const config = { headers: new AxiosHeaders() } as InternalAxiosRequestConfig;
+
+const PERFIL: PerfilRestricciones = {
+  alergias: [AllergenCode.LACTEOS],
+  dietas: [],
+  modo_estricto: false,
+};
+
+const SOLICITUD_PERSONALIZADA: SolicitudBusquedaPersonalizada = {
+  consulta: "galletas",
+  perfil: PERFIL,
+  modo: "filtrar",
+  limit: 10,
+  offset: 0,
+};
+
+const VEREDICTO: Veredicto = {
+  codigo_barras: "7801234000018",
+  veredicto: "no_apto",
+  alergenos_en_conflicto: [AllergenCode.LACTEOS],
+  trazas_en_conflicto: [],
+  dietas_no_confirmadas: [],
+  conflictos: [
+    { codigo: AllergenCode.LACTEOS, tipo: "alergeno", origen: "fuente" },
+  ],
+  motivos_no_apto: [{ tipo: "alergeno", codigo: AllergenCode.LACTEOS }],
+  datos_suficientes: true,
+  explicacion: "Contiene lácteos, que está en tu perfil.",
+  confianza: "alta",
+  motivos_confianza: [],
+  aviso:
+    "Clasificación orientativa según tu perfil y los datos de Open Food Facts.",
+};
+
+const ERROR_403 = {
+  error: {
+    codigo: "FORBIDDEN",
+    mensaje: "Se requiere una clave de servicio válida",
+    request_id: REQUEST_ID,
+  },
+};
 
 const respuestaBusqueda: RespuestaBusqueda = {
   consulta: "leche",
@@ -80,8 +125,9 @@ function errorHttpContrato(status: number, codigo: CodigoError): AxiosError {
 
 describe("FastApiClientService", () => {
   let service: FastApiClientService;
-  let httpService: { get: jest.Mock };
+  let httpService: { get: jest.Mock; post: jest.Mock };
   let logWarn: jest.SpyInstance;
+  let logError: jest.SpyInstance;
   let intentos: number;
 
   async function crearServicio(variables: Record<string, string> = {}) {
@@ -103,10 +149,10 @@ describe("FastApiClientService", () => {
   }
 
   beforeEach(async () => {
-    httpService = { get: jest.fn() };
+    httpService = { get: jest.fn(), post: jest.fn() };
     // Los errores simulados generan logs esperados; se silencian en la salida.
     logWarn = jest.spyOn(Logger.prototype, "warn").mockImplementation();
-    jest.spyOn(Logger.prototype, "error").mockImplementation();
+    logError = jest.spyOn(Logger.prototype, "error").mockImplementation();
     await crearServicio();
     jest.useFakeTimers();
   });
@@ -122,13 +168,13 @@ describe("FastApiClientService", () => {
    */
   function responderEnOrden(...pasos: Array<AxiosResponse | Error>) {
     intentos = 0;
-    httpService.get.mockReturnValue(
-      defer(() => {
-        const paso = pasos[Math.min(intentos, pasos.length - 1)];
-        intentos++;
-        return paso instanceof Error ? throwError(() => paso) : of(paso);
-      }),
-    );
+    const peticion = defer(() => {
+      const paso = pasos[Math.min(intentos, pasos.length - 1)];
+      intentos++;
+      return paso instanceof Error ? throwError(() => paso) : of(paso);
+    });
+    httpService.get.mockReturnValue(peticion);
+    httpService.post.mockReturnValue(peticion);
   }
 
   async function buscarConEsperas(): Promise<RespuestaBusqueda> {
@@ -446,6 +492,162 @@ describe("FastApiClientService", () => {
 
       expect(intentos).toBe(1);
       expect((error as ContratoHttpException).getStatus()).toBe(404);
+    });
+  });
+
+  describe("X-Clave-Servicio", () => {
+    it("se envía en cada llamada si CLAVE_SERVICIO tiene valor", async () => {
+      await crearServicio({ CLAVE_SERVICIO: "clave-123" });
+      responderEnOrden(respuestaHttp(200, respuestaBusqueda));
+
+      await service.buscar(PARAMETROS, REQUEST_ID);
+
+      expect(httpService.get).toHaveBeenCalledWith(`${PYTHON_API_URL}/search`, {
+        params: PARAMETROS,
+        headers: {
+          "X-Request-ID": REQUEST_ID,
+          "X-Clave-Servicio": "clave-123",
+        },
+      });
+    });
+
+    it("no se envía si CLAVE_SERVICIO está vacía", async () => {
+      await crearServicio({ CLAVE_SERVICIO: "" });
+      responderEnOrden(respuestaHttp(200, respuestaBusqueda));
+
+      await service.buscar(PARAMETROS, REQUEST_ID);
+
+      expect(httpService.get.mock.calls[0][1].headers).toEqual({
+        "X-Request-ID": REQUEST_ID,
+      });
+    });
+
+    it.each([
+      ["GET", () => service.buscar(PARAMETROS, REQUEST_ID)],
+      [
+        "POST",
+        () => service.buscarPersonalizado(SOLICITUD_PERSONALIZADA, REQUEST_ID),
+      ],
+    ])(
+      "un 403 de FastAPI (%s) es 502 INTERNAL_ERROR, sin reintentos y con log de error",
+      async (_metodo, llamar: () => Promise<unknown>) => {
+        responderEnOrden(
+          errorAxios("ERR_BAD_REQUEST", respuestaHttp(403, ERROR_403)),
+        );
+
+        const error = (await llamar().catch(
+          (e: ContratoHttpException) => e,
+        )) as ContratoHttpException;
+
+        expect(intentos).toBe(1);
+        expect(error.getStatus()).toBe(502);
+        expect(error.getResponse()).toEqual(
+          errorContrato(
+            CodigoError.INTERNAL_ERROR,
+            "Respuesta inesperada del servicio de búsqueda",
+          ),
+        );
+        expect(logError).toHaveBeenCalledWith(
+          expect.stringContaining("revisar CLAVE_SERVICIO"),
+        );
+      },
+    );
+  });
+
+  describe("motor adaptativo", () => {
+    it("compatibilidad hace POST con solo el perfil, X-Request-ID y la clave", async () => {
+      await crearServicio({ CLAVE_SERVICIO: "clave-123" });
+      responderEnOrden(respuestaHttp(200, VEREDICTO));
+
+      const veredicto = await service.compatibilidad(
+        "7801234000018",
+        PERFIL,
+        REQUEST_ID,
+      );
+
+      expect(veredicto).toEqual(VEREDICTO);
+      expect(httpService.post).toHaveBeenCalledWith(
+        `${PYTHON_API_URL}/products/7801234000018/compatibility`,
+        { perfil: PERFIL },
+        {
+          headers: {
+            "X-Request-ID": REQUEST_ID,
+            "X-Clave-Servicio": "clave-123",
+          },
+        },
+      );
+      expect(httpService.get).not.toHaveBeenCalled();
+    });
+
+    it("buscarPersonalizado hace POST a /search/personalized con la solicitud", async () => {
+      const respuesta = { consulta: "galletas", total: 0, resultados: [] };
+      responderEnOrden(respuestaHttp(200, respuesta));
+
+      const resultado = await service.buscarPersonalizado(
+        SOLICITUD_PERSONALIZADA,
+        REQUEST_ID,
+      );
+
+      expect(resultado).toEqual(respuesta);
+      expect(httpService.post).toHaveBeenCalledWith(
+        `${PYTHON_API_URL}/search/personalized`,
+        SOLICITUD_PERSONALIZADA,
+        { headers: { "X-Request-ID": REQUEST_ID } },
+      );
+    });
+
+    it("reintenta un POST ante un error transitorio e indica el método en el log", async () => {
+      jest.spyOn(Math, "random").mockReturnValue(0);
+      responderEnOrden(
+        errorAxios("ECONNREFUSED"),
+        respuestaHttp(200, VEREDICTO),
+      );
+
+      const resultado = service.compatibilidad(
+        "7801234000018",
+        PERFIL,
+        REQUEST_ID,
+      );
+      await jest.runAllTimersAsync();
+
+      expect(await resultado).toEqual(VEREDICTO);
+      expect(intentos).toBe(2);
+      expect(logWarn).toHaveBeenCalledWith(
+        "[prueba-123] Reintento 1/2 de POST /products/7801234000018/compatibility tras ECONNREFUSED; espera 250 ms",
+      );
+    });
+
+    it.each([
+      [404, CodigoError.NOT_FOUND],
+      [503, CodigoError.SOURCE_UNAVAILABLE],
+      [504, CodigoError.SOURCE_TIMEOUT],
+    ])("compatibilidad propaga un %i del contrato", async (status, codigo) => {
+      responderEnOrden(errorHttpContrato(status, codigo));
+
+      const resultado = service
+        .compatibilidad("7801234000018", PERFIL, REQUEST_ID)
+        .catch((e: ContratoHttpException) => e);
+      await jest.runAllTimersAsync();
+      const error = (await resultado) as ContratoHttpException;
+
+      expect(error.getStatus()).toBe(status);
+      expect(error.getResponse()).toEqual(
+        errorContrato(codigo, "Error de FastAPI"),
+      );
+    });
+
+    it("un 422 en un POST es 502 (el cuerpo es nuestro) y queda en el log", async () => {
+      responderEnOrden(errorHttpContrato(422, CodigoError.VALIDATION_ERROR));
+
+      const error = (await service
+        .buscarPersonalizado(SOLICITUD_PERSONALIZADA, REQUEST_ID)
+        .catch((e: ContratoHttpException) => e)) as ContratoHttpException;
+
+      expect(intentos).toBe(1);
+      expect(error.getStatus()).toBe(502);
+      expect(logError).toHaveBeenCalledWith(
+        expect.stringContaining("el cuerpo enviado no cumple el contrato"),
+      );
     });
   });
 });

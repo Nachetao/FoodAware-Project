@@ -1,49 +1,44 @@
-import { ApiProperty } from "@nestjs/swagger";
-import { AllergenCode } from "../contrato/enums";
+import { ApiProperty, OmitType } from "@nestjs/swagger";
+import { MOTIVOS_CONFIANZA, Veredicto } from "../contrato/adaptativo";
 
-/** Mismos valores que el campo veredicto del contrato de FastAPI. */
-export const VEREDICTOS = ["apto", "apto_con_advertencia", "no_apto"] as const;
-export type TipoVeredicto = (typeof VEREDICTOS)[number];
+/**
+ * Motivo propio de NestJS (no está en el contrato de FastAPI): el veredicto
+ * salió de la regla local porque el motor no estaba disponible.
+ */
+export const EVALUACION_DE_RESPALDO = "evaluacion_de_respaldo";
 
-/** Compatibilidad de un producto con las alergias del usuario autenticado. */
-export class Compatibilidad {
+export const MOTIVOS_CONFIANZA_BACKEND = [
+  ...MOTIVOS_CONFIANZA,
+  EVALUACION_DE_RESPALDO,
+] as const;
+export type MotivoConfianzaBackend = (typeof MOTIVOS_CONFIANZA_BACKEND)[number];
+
+/**
+ * Veredicto que responde el backend: el del motor adaptativo o, si el motor
+ * no está disponible, el de la regla local (con "evaluacion_de_respaldo").
+ */
+export class VeredictoBackend extends OmitType(Veredicto, [
+  "motivos_confianza",
+] as const) {
   @ApiProperty({
-    enum: VEREDICTOS,
+    enum: MOTIVOS_CONFIANZA_BACKEND,
+    isArray: true,
     description:
-      "no_apto si algún alérgeno coincide; apto_con_advertencia si solo coinciden trazas o si, con alergias en el perfil, los datos no alcanzan (sin ingredientes o completitud menor que 0,5); apto en otro caso. Ante la duda nunca es apto.",
-    example: "apto_con_advertencia",
+      'Por qué la confianza no es alta; vacío si lo es. Además de los motivos del motor, "evaluacion_de_respaldo" indica que el motor no estaba disponible y el veredicto salió de una revisión básica de las alergias (X-Fuente-Datos: respaldo).',
+    example: [],
   })
-  veredicto: TipoVeredicto;
+  motivos_confianza: MotivoConfianzaBackend[];
+}
 
+/**
+ * Respuesta de GET /api/products/:codigo_barras/compatibilidad: el veredicto
+ * más el campo apto que ya usaba el frontend.
+ */
+export class Compatibilidad extends VeredictoBackend {
   @ApiProperty({
     description:
       'true solo si veredicto es "apto": nunca con alérgenos o trazas en conflicto, ni con datos insuficientes.',
     example: false,
   })
   apto: boolean;
-
-  @ApiProperty({
-    enum: AllergenCode,
-    enumName: "AllergenCode",
-    isArray: true,
-    description: "Alérgenos del producto que el usuario no puede consumir.",
-    example: [AllergenCode.LACTEOS],
-  })
-  alergenos_en_conflicto: AllergenCode[];
-
-  @ApiProperty({
-    enum: AllergenCode,
-    enumName: "AllergenCode",
-    isArray: true,
-    description: 'Trazas ("puede contener") que coinciden con sus alergias.',
-    example: [AllergenCode.MANI],
-  })
-  trazas_en_conflicto: AllergenCode[];
-
-  @ApiProperty({
-    description:
-      "false si el producto no tiene ingredientes o su completitud es menor que 0,5.",
-    example: true,
-  })
-  datos_suficientes: boolean;
 }

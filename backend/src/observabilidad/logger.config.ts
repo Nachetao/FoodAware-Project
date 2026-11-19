@@ -7,6 +7,31 @@ export const SERVICIO = "backend";
 // Mismos nombres de nivel que FastAPI (Python usa "warning").
 const NIVELES: Record<string, string> = { warn: "warning" };
 
+// Valores que nunca deben quedar en un log. Hoy ningún log incluye la
+// petición ni sus headers (autoLogging está apagado y los mensajes son
+// texto), así que esto es una defensa extra: si mañana alguien registra un
+// objeto req, headers o un error de axios, el valor sale como [REDACTADO].
+// Los headers de Node llegan en minúsculas; los de axios, como se escribieron.
+const HEADERS_SENSIBLES = [
+  ".authorization",
+  ".Authorization",
+  ".cookie",
+  '["set-cookie"]',
+  '["x-clave-servicio"]',
+  '["X-Clave-Servicio"]',
+];
+export const RUTAS_REDACTADAS = [
+  ...HEADERS_SENSIBLES.flatMap((h) => [
+    `headers${h}`,
+    `*.headers${h}`,
+    `*.*.headers${h}`,
+  ]),
+  "password",
+  "*.password",
+  "*.*.password",
+];
+export const CENSURA = "[REDACTADO]";
+
 /**
  * Formato acordado con FastAPI, una línea JSON por evento: timestamp (ISO
  * 8601 UTC), level, service, request_id y message. pino siempre escribe
@@ -19,6 +44,7 @@ export const opcionesPino: LoggerOptions = {
   timestamp: () => `,"timestamp":"${new Date().toISOString()}"`,
   // Reemplaza pid y hostname.
   base: { service: SERVICIO },
+  redact: { paths: RUTAS_REDACTADAS, censor: CENSURA },
   formatters: {
     level: (nivel) => ({ level: NIVELES[nivel] ?? nivel }),
   },

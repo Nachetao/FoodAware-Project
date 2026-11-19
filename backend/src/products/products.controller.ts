@@ -36,6 +36,10 @@ import { HEADER_FUENTE_DATOS } from "./fuente-datos";
 import { Public, UsuarioActual } from "../auth/decoradores";
 import { UsuarioToken } from "../auth/jwt.strategy";
 import { Compatibilidad } from "./dto/compatibilidad.dto";
+import {
+  BuscarPersonalizadoQueryDto,
+  BusquedaPersonalizada,
+} from "./dto/busqueda-personalizada.dto";
 
 const HEADER_RESPUESTA = {
   [HEADER_REQUEST_ID]: {
@@ -112,33 +116,86 @@ export class ProductsController {
     return respuesta;
   }
 
-  // Antes de ":codigo_barras": si no, "compatibles" se tomaría como un código.
-  @Get("compatibles")
+  @Get("search/personalizada")
   @ApiBearerAuth()
   @ApiOperation({
-    summary: "Productos guardados compatibles con las alergias del usuario",
+    summary:
+      "Búsqueda personalizada con el perfil del usuario (motor adaptativo)",
     description:
-      'Requiere token. Busca en los productos guardados (mismo ranking que el respaldo) y excluye los que tienen alguno de los alérgenos del usuario como ingrediente o como traza. Misma forma que /search, con estado_fuente "cache".',
+      'Requiere token. Envía al motor de FastAPI (POST /search/personalized) la consulta y solo el perfil del usuario (alergias; dietas y modo estricto todavía vacíos), y responde su ranking: aptos, después apto_con_advertencia y después no_apto (ocultos en modo filtrar), con no_aptos, comparacion con /search y el aviso. Si el motor falla (500, 502, 503 o 504 tras los reintentos), ordena los productos guardados con una revisión básica de las alergias: X-Fuente-Datos: respaldo, estado_fuente "cache", veredictos con confianza baja y nunca "apto", sin interpretar restricciones de la consulta y con comparacion null.',
   })
-  @ApiOkResponse({ type: RespuestaBusqueda })
+  @ApiOkResponse({ type: BusquedaPersonalizada, headers: HEADER_RESPUESTA })
   @ApiUnauthorizedResponse({ description: "Falta el token o no es válido." })
   @ApiUnprocessableEntityResponse({
     type: ErrorContrato,
     description: "Parámetros inválidos (VALIDATION_ERROR).",
   })
-  compatibles(
+  @ApiBadGatewayResponse({
+    type: ErrorContrato,
+    description:
+      "El motor respondió fuera del contrato (INTERNAL_ERROR)." + SIN_RESPALDO,
+  })
+  @ApiServiceUnavailableResponse({
+    type: ErrorContrato,
+    description: "Motor no disponible (SOURCE_UNAVAILABLE)." + SIN_RESPALDO,
+  })
+  @ApiGatewayTimeoutResponse({
+    type: ErrorContrato,
+    description:
+      "Motor sin respuesta a tiempo (SOURCE_TIMEOUT)." + SIN_RESPALDO,
+  })
+  async buscarPersonalizado(
+    @Query() { q, limit, offset, modo }: BuscarPersonalizadoQueryDto,
+    @UsuarioActual() usuario: UsuarioToken,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<BusquedaPersonalizada> {
+    const { respuesta, fuente } =
+      await this.productsService.buscarPersonalizado(
+        { q, limit, offset },
+        modo,
+        usuario.id,
+        requestIdDe(req),
+      );
+    res.setHeader(HEADER_FUENTE_DATOS, fuente);
+    return respuesta;
+  }
+
+  // Antes de ":codigo_barras": si no, "compatibles" se tomaría como un código.
+  @Get("compatibles")
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Solo los productos "apto" para el usuario',
+    description:
+      'Requiere token. Usa la búsqueda personalizada del motor en modo filtrar y con modo estricto (solo en esta llamada), así se ocultan también las trazas y los datos insuficientes, y responde solo los "apto" con la forma de /search. Si el motor falla (500, 502, 503 o 504 tras los reintentos), busca en los productos guardados y excluye los que tienen alguno de los alérgenos del usuario como ingrediente o como traza, con X-Fuente-Datos: respaldo y estado_fuente "cache".',
+  })
+  @ApiOkResponse({ type: RespuestaBusqueda, headers: HEADER_RESPUESTA })
+  @ApiUnauthorizedResponse({ description: "Falta el token o no es válido." })
+  @ApiUnprocessableEntityResponse({
+    type: ErrorContrato,
+    description: "Parámetros inválidos (VALIDATION_ERROR).",
+  })
+  async compatibles(
     @Query() query: BuscarProductosQueryDto,
     @UsuarioActual() usuario: UsuarioToken,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
   ): Promise<RespuestaBusqueda> {
-    return this.productsService.compatibles(query, usuario.id);
+    const { respuesta, fuente } = await this.productsService.compatibles(
+      query,
+      usuario.id,
+      requestIdDe(req),
+    );
+    res.setHeader(HEADER_FUENTE_DATOS, fuente);
+    return respuesta;
   }
 
   @Get(":codigo_barras/compatibilidad")
   @ApiBearerAuth()
   @ApiOperation({
-    summary: "Compatibilidad del producto con las alergias del usuario",
+    summary: "Veredicto del motor adaptativo para el perfil del usuario",
     description:
-      'Requiere token. veredicto es no_apto si algún alérgeno coincide, apto_con_advertencia si solo coinciden trazas o si, con alergias en el perfil, faltan datos (sin ingredientes o completitud menor que 0,5), y apto en otro caso. apto es true solo con veredicto "apto". El producto se obtiene como en el detalle (X-Fuente-Datos indica si vino del respaldo).',
+      'Requiere token. Envía al motor de FastAPI solo el perfil (alergias; dietas y modo estricto todavía vacíos) y responde su Veredicto (veredicto, explicacion, confianza, conflictos, aviso...) más apto, que es true solo con veredicto "apto". Si el motor falla (500, 502, 503 o 504 tras los reintentos), responde una revisión básica de las alergias sobre el producto guardado, con X-Fuente-Datos: respaldo, confianza baja y "evaluacion_de_respaldo" en motivos_confianza; en respaldo nunca es "apto".',
   })
   @ApiParam({ name: "codigo_barras", description: "De 8 a 14 dígitos." })
   @ApiOkResponse({ type: Compatibilidad, headers: HEADER_RESPUESTA })
@@ -146,6 +203,18 @@ export class ProductsController {
   @ApiNotFoundResponse({
     type: ErrorContrato,
     description: "El producto no existe (NOT_FOUND).",
+  })
+  @ApiUnprocessableEntityResponse({
+    type: ErrorContrato,
+    description: "Código de barras inválido (VALIDATION_ERROR).",
+  })
+  @ApiServiceUnavailableResponse({
+    type: ErrorContrato,
+    description: "Motor no disponible y el producto no está guardado.",
+  })
+  @ApiGatewayTimeoutResponse({
+    type: ErrorContrato,
+    description: "Motor sin respuesta a tiempo y el producto no está guardado.",
   })
   async compatibilidad(
     @Param() { codigo_barras }: CodigoBarrasParamDto,

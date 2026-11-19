@@ -9,6 +9,11 @@ import { ContratoHttpException } from "./contrato-http.exception";
 import { RespuestaBusqueda, ResultadoBusqueda } from "./contrato/busqueda";
 import { CodigoError } from "./contrato/enums";
 import { Producto } from "./contrato/producto";
+import {
+  RespuestaBusquedaPersonalizada,
+  Veredicto,
+} from "./contrato/adaptativo";
+import { AVISO } from "./compatibilidad-local";
 
 const REQUEST_ID = "prueba-123";
 const PARAMETROS = { q: "leche", limit: 10, offset: 0 };
@@ -42,12 +47,18 @@ function errorFastApi(status: number, codigo: CodigoError) {
 
 describe("ProductsService", () => {
   let service: ProductsService;
-  let fastApiClient: { buscar: jest.Mock; obtenerProducto: jest.Mock };
+  let fastApiClient: {
+    buscar: jest.Mock;
+    obtenerProducto: jest.Mock;
+    compatibilidad: jest.Mock;
+    buscarPersonalizado: jest.Mock;
+  };
   let productsRepository: {
     guardar: jest.Mock;
     buscarRespaldo: jest.Mock;
     buscarPorCodigo: jest.Mock;
     buscarCompatibles: jest.Mock;
+    buscarPersonalizadoRespaldo: jest.Mock;
   };
   let logWarn: jest.SpyInstance;
   let logError: jest.SpyInstance;
@@ -57,11 +68,14 @@ describe("ProductsService", () => {
     fastApiClient = {
       buscar: jest.fn().mockResolvedValue(respuestaBusqueda),
       obtenerProducto: jest.fn().mockResolvedValue(leche),
+      compatibilidad: jest.fn(),
+      buscarPersonalizado: jest.fn(),
     };
     productsRepository = {
       guardar: jest.fn().mockResolvedValue(undefined),
       buscarPorCodigo: jest.fn().mockResolvedValue(null),
       buscarCompatibles: jest.fn(),
+      buscarPersonalizadoRespaldo: jest.fn(),
       buscarRespaldo: jest
         .fn()
         .mockResolvedValue({ total: 7, resultados: resultadosRespaldo }),
@@ -278,169 +292,482 @@ describe("ProductsService", () => {
       trazas: [AllergenCode.MANI],
       calidad: { es_valido: true, problemas: [], completitud: 0.9 },
     } as Producto;
-    const conDatos = (cambios: Partial<Producto>) =>
-      ({ ...galletas, ...cambios }) as Producto;
+    const veredictoMotor: Veredicto = {
+      codigo_barras: "7801234000018",
+      veredicto: "no_apto",
+      alergenos_en_conflicto: [AllergenCode.LACTEOS],
+      trazas_en_conflicto: [AllergenCode.MANI],
+      dietas_no_confirmadas: [],
+      conflictos: [
+        { codigo: AllergenCode.LACTEOS, tipo: "alergeno", origen: "fuente" },
+        { codigo: AllergenCode.MANI, tipo: "traza", origen: "fuente" },
+      ],
+      motivos_no_apto: [{ tipo: "alergeno", codigo: AllergenCode.LACTEOS }],
+      datos_suficientes: true,
+      explicacion: "Contiene lácteos, que está en tu perfil.",
+      confianza: "alta",
+      motivos_confianza: [],
+      aviso: AVISO,
+    };
 
     beforeEach(() => {
-      fastApiClient.obtenerProducto.mockResolvedValue(galletas);
+      fastApiClient.compatibilidad.mockResolvedValue(veredictoMotor);
       usersService.perfil.mockResolvedValue({
         id: "u1",
+        nombre: "Ana",
+        correo: "ana@correo.cl",
         alergias: [AllergenCode.LACTEOS, AllergenCode.MANI],
       });
     });
 
-    const conAlergias = (alergias: AllergenCode[]) =>
-      usersService.perfil.mockResolvedValue({ id: "u1", alergias });
     const compatibilidadDeGalletas = () =>
       service.compatibilidad("7801234000018", "u1", REQUEST_ID);
-    const calidad = (completitud: number, problemas: string[] = []) => ({
-      es_valido: problemas.length === 0,
-      problemas,
-      completitud,
-    });
 
-    it("no_apto si un alérgeno coincide, aunque también haya trazas en conflicto", async () => {
-      const resultado = await compatibilidadDeGalletas();
+    it("envía al motor solo el perfil (sin id, nombre ni correo)", async () => {
+      await compatibilidadDeGalletas();
 
       expect(usersService.perfil).toHaveBeenCalledWith("u1");
-      expect(resultado).toEqual({
-        respuesta: {
-          veredicto: "no_apto",
-          apto: false,
-          alergenos_en_conflicto: [AllergenCode.LACTEOS],
-          trazas_en_conflicto: [AllergenCode.MANI],
-          datos_suficientes: true,
+      expect(fastApiClient.compatibilidad).toHaveBeenCalledWith(
+        "7801234000018",
+        {
+          alergias: [AllergenCode.LACTEOS, AllergenCode.MANI],
+          dietas: [],
+          modo_estricto: false,
         },
+        REQUEST_ID,
+      );
+      expect(fastApiClient.obtenerProducto).not.toHaveBeenCalled();
+    });
+
+    it("responde el Veredicto del motor completo más apto, con fuente fastapi", async () => {
+      const resultado = await compatibilidadDeGalletas();
+
+      expect(resultado).toEqual({
+        respuesta: { ...veredictoMotor, apto: false },
         fuente: "fastapi",
       });
-    });
-
-    it("no_apto por alérgeno aunque los datos sean insuficientes", async () => {
-      fastApiClient.obtenerProducto.mockResolvedValue(
-        conDatos({ calidad: calidad(0.2) }),
-      );
-
-      const { respuesta } = await compatibilidadDeGalletas();
-
-      expect(respuesta.veredicto).toBe("no_apto");
-      expect(respuesta.apto).toBe(false);
-      expect(respuesta.datos_suficientes).toBe(false);
-    });
-
-    it("las trazas en conflicto nunca dan apto: apto_con_advertencia", async () => {
-      conAlergias([AllergenCode.MANI]);
-
-      const { respuesta } = await compatibilidadDeGalletas();
-
-      expect(respuesta).toEqual({
-        veredicto: "apto_con_advertencia",
-        apto: false,
-        alergenos_en_conflicto: [],
-        trazas_en_conflicto: [AllergenCode.MANI],
-        datos_suficientes: true,
-      });
-    });
-
-    it("apto si no hay conflictos y los datos son suficientes", async () => {
-      conAlergias([AllergenCode.SOYA]);
-
-      const { respuesta } = await compatibilidadDeGalletas();
-
-      expect(respuesta).toEqual({
-        veredicto: "apto",
-        apto: true,
-        alergenos_en_conflicto: [],
-        trazas_en_conflicto: [],
-        datos_suficientes: true,
-      });
+      expect(productsRepository.buscarPorCodigo).not.toHaveBeenCalled();
     });
 
     it.each([
-      ["sin ingredientes", { ingredientes: [] }],
-      [
-        "con el problema sin_ingredientes",
-        { calidad: calidad(0.9, ["sin_ingredientes"]) },
-      ],
-      [
-        "con el problema ingredientes_vacios",
-        { calidad: calidad(0.9, ["ingredientes_vacios"]) },
-      ],
-      ["con completitud menor que 0,5", { calidad: calidad(0.49) }],
-    ])(
-      "con alergias y datos insuficientes (%s): apto_con_advertencia",
-      async (_caso, cambios: Partial<Producto>) => {
-        conAlergias([AllergenCode.SOYA]);
-        fastApiClient.obtenerProducto.mockResolvedValue(conDatos(cambios));
+      ["apto", true],
+      ["apto_con_advertencia", false],
+      ["no_apto", false],
+    ] as const)(
+      "con veredicto %s del motor, apto es %s",
+      async (veredicto, apto) => {
+        fastApiClient.compatibilidad.mockResolvedValue({
+          ...veredictoMotor,
+          veredicto,
+        });
 
         const { respuesta } = await compatibilidadDeGalletas();
 
-        expect(respuesta).toEqual({
-          veredicto: "apto_con_advertencia",
-          apto: false,
-          alergenos_en_conflicto: [],
-          trazas_en_conflicto: [],
-          datos_suficientes: false,
-        });
+        expect(respuesta.veredicto).toBe(veredicto);
+        expect(respuesta.apto).toBe(apto);
       },
     );
 
-    it("con completitud justo 0,5 los datos alcanzan", async () => {
-      conAlergias([AllergenCode.SOYA]);
-      fastApiClient.obtenerProducto.mockResolvedValue(
-        conDatos({ calidad: calidad(0.5) }),
-      );
+    it.each([
+      [500, CodigoError.INTERNAL_ERROR],
+      [502, CodigoError.INTERNAL_ERROR],
+      [503, CodigoError.SOURCE_UNAVAILABLE],
+      [504, CodigoError.SOURCE_TIMEOUT],
+    ])(
+      "si el motor falla con %i, responde la regla local sobre el producto guardado",
+      async (status, codigo) => {
+        fastApiClient.compatibilidad.mockRejectedValue(
+          errorFastApi(status, codigo),
+        );
+        productsRepository.buscarPorCodigo.mockResolvedValue(galletas);
 
-      const { respuesta } = await compatibilidadDeGalletas();
+        const { respuesta, fuente } = await compatibilidadDeGalletas();
 
-      expect(respuesta.veredicto).toBe("apto");
-      expect(respuesta.datos_suficientes).toBe(true);
-    });
+        expect(fuente).toBe("respaldo");
+        expect(productsRepository.buscarPorCodigo).toHaveBeenCalledWith(
+          "7801234000018",
+        );
+        expect(respuesta).toMatchObject({
+          codigo_barras: "7801234000018",
+          veredicto: "no_apto",
+          apto: false,
+          alergenos_en_conflicto: [AllergenCode.LACTEOS],
+          confianza: "baja",
+          aviso: AVISO,
+        });
+        expect(respuesta.motivos_confianza).toContain("evaluacion_de_respaldo");
+        expect(respuesta.explicacion).toContain(
+          "El servicio de evaluación no está disponible",
+        );
+      },
+    );
 
-    it("sin alergias en el perfil es apto aunque falten datos", async () => {
-      conAlergias([]);
-      const sinIngredientes = conDatos({ ingredientes: [] });
-      fastApiClient.obtenerProducto.mockResolvedValue(sinIngredientes);
-
-      const { respuesta } = await compatibilidadDeGalletas();
-
-      expect(respuesta).toEqual({
-        veredicto: "apto",
-        apto: true,
-        alergenos_en_conflicto: [],
-        trazas_en_conflicto: [],
-        datos_suficientes: false,
-      });
-    });
-
-    it("informa si el producto vino del respaldo", async () => {
-      fastApiClient.obtenerProducto.mockRejectedValue(
+    it("en respaldo nunca responde apto, aunque no haya conflictos", async () => {
+      fastApiClient.compatibilidad.mockRejectedValue(
         errorFastApi(503, CodigoError.SOURCE_UNAVAILABLE),
       );
-      productsRepository.buscarPorCodigo.mockResolvedValue(galletas);
-
-      const { fuente } = await compatibilidadDeGalletas();
-
-      expect(fuente).toBe("respaldo");
-    });
-
-    it("compatibles busca en la base excluyendo las alergias del usuario", async () => {
-      productsRepository.buscarCompatibles.mockResolvedValue({
-        total: 7,
-        resultados: resultadosRespaldo,
+      productsRepository.buscarPorCodigo.mockResolvedValue({
+        ...galletas,
+        alergenos: [AllergenCode.GLUTEN],
+        trazas: [],
       });
 
-      const respuesta = await service.compatibles(PARAMETROS, "u1");
+      const { respuesta, fuente } = await compatibilidadDeGalletas();
 
-      expect(productsRepository.buscarCompatibles).toHaveBeenCalledWith(PARAMETROS, [
-        AllergenCode.LACTEOS,
-        AllergenCode.MANI,
-      ]);
-      expect(respuesta).toEqual({
-        consulta: "leche",
-        total: 7,
-        tiempo_ms: expect.any(Number),
-        resultados: resultadosRespaldo,
-        estado_fuente: "cache",
+      expect(fuente).toBe("respaldo");
+      expect(respuesta.veredicto).toBe("apto_con_advertencia");
+      expect(respuesta.apto).toBe(false);
+      expect(respuesta.confianza).toBe("baja");
+    });
+
+    it("si el motor falla y el producto no está guardado, propaga el error", async () => {
+      const error = errorFastApi(503, CodigoError.SOURCE_UNAVAILABLE);
+      fastApiClient.compatibilidad.mockRejectedValue(error);
+      productsRepository.buscarPorCodigo.mockResolvedValue(null);
+
+      await expect(compatibilidadDeGalletas()).rejects.toBe(error);
+    });
+
+    it("propaga el 404 del motor sin usar el respaldo", async () => {
+      const error = errorFastApi(404, CodigoError.NOT_FOUND);
+      fastApiClient.compatibilidad.mockRejectedValue(error);
+
+      await expect(compatibilidadDeGalletas()).rejects.toBe(error);
+      expect(productsRepository.buscarPorCodigo).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("búsqueda personalizada y compatibles", () => {
+    const ALERGIAS = [AllergenCode.LACTEOS, AllergenCode.MANI];
+    const galletas = {
+      codigo_barras: "7801234000018",
+      ingredientes: ["avena"],
+      alergenos: [AllergenCode.GLUTEN],
+      trazas: [],
+      calidad: { es_valido: true, problemas: [], completitud: 0.9 },
+    } as unknown as Producto;
+    const conLeche = {
+      ...galletas,
+      codigo_barras: "7801234000025",
+      alergenos: [AllergenCode.LACTEOS],
+    } as Producto;
+    const veredicto = (
+      codigo: string,
+      tipo: Veredicto["veredicto"],
+    ): Veredicto => ({
+      codigo_barras: codigo,
+      veredicto: tipo,
+      alergenos_en_conflicto: [],
+      trazas_en_conflicto: [],
+      dietas_no_confirmadas: [],
+      conflictos: [],
+      motivos_no_apto: [],
+      datos_suficientes: true,
+      explicacion: "x",
+      confianza: "alta",
+      motivos_confianza: [],
+      aviso: AVISO,
+    });
+    const respuestaMotor = (
+      resultados: Array<[Producto, Veredicto["veredicto"]]>,
+    ): RespuestaBusquedaPersonalizada => ({
+      consulta: "galletas",
+      interpretacion: {
+        terminos: ["galleta"],
+        restricciones: [],
+        no_reconocidas: [],
+      },
+      perfil_aplicado: { alergias: ALERGIAS, dietas: [], modo_estricto: true },
+      modo: "filtrar",
+      total: resultados.length,
+      total_base: 9,
+      tiempo_ms: 1.8,
+      estado_fuente: "online",
+      resultados: resultados.map(([producto, tipo], i) => ({
+        producto,
+        score: 3 - i,
+        posicion: i + 1,
+        posicion_base: i + 2,
+        veredicto: veredicto(producto.codigo_barras, tipo),
+      })),
+      no_aptos: { total: 0, ocultos: true, motivos: [], texto: "" },
+      comparacion: { k: 5, top_base: [], top_personalizado: [] },
+      aviso: AVISO,
+    });
+    const PARAMS = { q: "galletas", limit: 10, offset: 0 };
+    const caido = () => errorFastApi(503, CodigoError.SOURCE_UNAVAILABLE);
+
+    beforeEach(() => {
+      usersService.perfil.mockResolvedValue({
+        id: "u1",
+        nombre: "Ana",
+        correo: "ana@correo.cl",
+        alergias: ALERGIAS,
+      });
+    });
+
+    describe("buscarPersonalizado", () => {
+      it("envía la consulta, el modo y solo el perfil, y responde lo del motor", async () => {
+        const motor = respuestaMotor([[galletas, "apto"]]);
+        fastApiClient.buscarPersonalizado.mockResolvedValue(motor);
+
+        const resultado = await service.buscarPersonalizado(
+          PARAMS,
+          "reordenar",
+          "u1",
+          REQUEST_ID,
+        );
+
+        expect(fastApiClient.buscarPersonalizado).toHaveBeenCalledWith(
+          {
+            consulta: "galletas",
+            perfil: { alergias: ALERGIAS, dietas: [], modo_estricto: false },
+            modo: "reordenar",
+            limit: 10,
+            offset: 0,
+          },
+          REQUEST_ID,
+        );
+        expect(resultado).toEqual({ respuesta: motor, fuente: "fastapi" });
+        expect(productsRepository.guardar).toHaveBeenCalledWith([galletas]);
+      });
+
+      it("si el motor falla, ordena los guardados con la regla local (nunca apto)", async () => {
+        fastApiClient.buscarPersonalizado.mockRejectedValue(caido());
+        productsRepository.buscarPersonalizadoRespaldo.mockResolvedValue({
+          total: 1,
+          total_base: 3,
+          no_aptos: 2,
+          motivos: [
+            { codigo: AllergenCode.LACTEOS, cantidad: 2 },
+            { codigo: AllergenCode.MANI, cantidad: 1 },
+          ],
+          resultados: [{ producto: galletas, score: 3, posicion: 1 }],
+        });
+
+        const { respuesta, fuente } = await service.buscarPersonalizado(
+          { q: "Galletas de AVENA", limit: 10, offset: 0 },
+          "filtrar",
+          "u1",
+          REQUEST_ID,
+        );
+
+        expect(fuente).toBe("respaldo");
+        expect(
+          productsRepository.buscarPersonalizadoRespaldo,
+        ).toHaveBeenCalledWith(
+          { q: "Galletas de AVENA", limit: 10, offset: 0 },
+          ALERGIAS,
+          "filtrar",
+        );
+        expect(respuesta).toMatchObject({
+          consulta: "Galletas de AVENA",
+          interpretacion: {
+            terminos: ["galleta", "avena"],
+            restricciones: [],
+            no_reconocidas: [],
+          },
+          perfil_aplicado: {
+            alergias: ALERGIAS,
+            dietas: [],
+            modo_estricto: false,
+          },
+          modo: "filtrar",
+          total: 1,
+          total_base: 3,
+          estado_fuente: "cache",
+          no_aptos: {
+            total: 2,
+            ocultos: true,
+            motivos: [
+              { tipo: "alergeno", codigo: "lacteos", cantidad: 2 },
+              { tipo: "alergeno", codigo: "mani", cantidad: 1 },
+            ],
+            texto: "2 ocultos: 2 por contener lácteos y 1 por contener maní.",
+          },
+          comparacion: null,
+          aviso: AVISO,
+        });
+        const [resultado] = respuesta.resultados;
+        expect(resultado).toMatchObject({
+          producto: galletas,
+          score: 3,
+          posicion: 1,
+          posicion_base: null,
+        });
+        expect(resultado.veredicto.veredicto).toBe("apto_con_advertencia");
+        expect(resultado.veredicto.confianza).toBe("baja");
+        expect(resultado.veredicto.motivos_confianza).toContain(
+          "evaluacion_de_respaldo",
+        );
+      });
+
+      it("en reordenar, los no aptos de respaldo no van ocultos", async () => {
+        fastApiClient.buscarPersonalizado.mockRejectedValue(caido());
+        productsRepository.buscarPersonalizadoRespaldo.mockResolvedValue({
+          total: 2,
+          total_base: 2,
+          no_aptos: 1,
+          motivos: [{ codigo: AllergenCode.LACTEOS, cantidad: 1 }],
+          resultados: [
+            { producto: galletas, score: 3, posicion: 1 },
+            { producto: conLeche, score: 3, posicion: 2 },
+          ],
+        });
+
+        const { respuesta } = await service.buscarPersonalizado(
+          PARAMS,
+          "reordenar",
+          "u1",
+          REQUEST_ID,
+        );
+
+        expect(respuesta.no_aptos).toMatchObject({
+          ocultos: false,
+          texto: "1 no apto al final por contener lácteos.",
+        });
+        expect(respuesta.resultados.map((r) => r.veredicto.veredicto)).toEqual([
+          "apto_con_advertencia",
+          "no_apto",
+        ]);
+      });
+
+      it("si el motor falla y la base no tiene coincidencias, mantiene el error", async () => {
+        const error = caido();
+        fastApiClient.buscarPersonalizado.mockRejectedValue(error);
+        productsRepository.buscarPersonalizadoRespaldo.mockResolvedValue({
+          total: 0,
+          total_base: 0,
+          no_aptos: 0,
+          motivos: [],
+          resultados: [],
+        });
+
+        await expect(
+          service.buscarPersonalizado(PARAMS, "filtrar", "u1", REQUEST_ID),
+        ).rejects.toBe(error);
+      });
+
+      it("si la base también falla, mantiene el error del motor", async () => {
+        const error = caido();
+        fastApiClient.buscarPersonalizado.mockRejectedValue(error);
+        productsRepository.buscarPersonalizadoRespaldo.mockRejectedValue(
+          new Error("sin base"),
+        );
+
+        await expect(
+          service.buscarPersonalizado(PARAMS, "filtrar", "u1", REQUEST_ID),
+        ).rejects.toBe(error);
+        expect(logError).toHaveBeenCalled();
+      });
+
+      it("un 4xx del motor se propaga sin respaldo", async () => {
+        const error = errorFastApi(422, CodigoError.VALIDATION_ERROR);
+        fastApiClient.buscarPersonalizado.mockRejectedValue(error);
+
+        await expect(
+          service.buscarPersonalizado(PARAMS, "filtrar", "u1", REQUEST_ID),
+        ).rejects.toBe(error);
+        expect(
+          productsRepository.buscarPersonalizadoRespaldo,
+        ).not.toHaveBeenCalled();
+      });
+    });
+
+    describe("compatibles", () => {
+      it("usa el motor en modo filtrar y estricto, y responde con la forma de /search", async () => {
+        fastApiClient.buscarPersonalizado.mockResolvedValue(
+          respuestaMotor([[galletas, "apto"]]),
+        );
+
+        const resultado = await service.compatibles(PARAMS, "u1", REQUEST_ID);
+
+        expect(fastApiClient.buscarPersonalizado).toHaveBeenCalledWith(
+          {
+            consulta: "galletas",
+            perfil: { alergias: ALERGIAS, dietas: [], modo_estricto: true },
+            modo: "filtrar",
+            limit: 10,
+            offset: 0,
+          },
+          REQUEST_ID,
+        );
+        expect(resultado).toEqual({
+          respuesta: {
+            consulta: "galletas",
+            total: 1,
+            tiempo_ms: 1.8,
+            resultados: [{ producto: galletas, score: 3, posicion: 1 }],
+            estado_fuente: "online",
+          },
+          fuente: "fastapi",
+        });
+        expect(productsRepository.guardar).toHaveBeenCalledWith([galletas]);
+        expect(productsRepository.buscarCompatibles).not.toHaveBeenCalled();
+      });
+
+      it('nunca muestra algo que no sea "apto", aunque el motor lo devuelva', async () => {
+        fastApiClient.buscarPersonalizado.mockResolvedValue(
+          respuestaMotor([
+            [galletas, "apto"],
+            [conLeche, "apto_con_advertencia"],
+          ]),
+        );
+
+        const { respuesta } = await service.compatibles(
+          PARAMS,
+          "u1",
+          REQUEST_ID,
+        );
+
+        expect(
+          respuesta.resultados.map((r) => r.producto.codigo_barras),
+        ).toEqual(["7801234000018"]);
+        expect(respuesta.total).toBe(1);
+        expect(logWarn).toHaveBeenCalledWith(
+          expect.stringContaining("se ocultan"),
+        );
+      });
+
+      it("si el motor falla, busca en la base sin alérgenos ni trazas del usuario", async () => {
+        fastApiClient.buscarPersonalizado.mockRejectedValue(caido());
+        productsRepository.buscarCompatibles.mockResolvedValue({
+          total: 7,
+          resultados: resultadosRespaldo,
+        });
+
+        const resultado = await service.compatibles(
+          PARAMETROS,
+          "u1",
+          REQUEST_ID,
+        );
+
+        expect(productsRepository.buscarCompatibles).toHaveBeenCalledWith(
+          PARAMETROS,
+          ALERGIAS,
+        );
+        expect(resultado).toEqual({
+          respuesta: {
+            consulta: "leche",
+            total: 7,
+            tiempo_ms: expect.any(Number),
+            resultados: resultadosRespaldo,
+            estado_fuente: "cache",
+          },
+          fuente: "respaldo",
+        });
+      });
+
+      it("si la base también falla, mantiene el error del motor", async () => {
+        const error = caido();
+        fastApiClient.buscarPersonalizado.mockRejectedValue(error);
+        productsRepository.buscarCompatibles.mockRejectedValue(
+          new Error("sin base"),
+        );
+
+        await expect(
+          service.compatibles(PARAMS, "u1", REQUEST_ID),
+        ).rejects.toBe(error);
       });
     });
   });
