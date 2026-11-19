@@ -58,6 +58,8 @@ describe("Integración: perfil, alergias y compatibilidad (con JWT)", () => {
       correo: "ana@correo.cl",
       password: "$2b$10$hash",
       alergias: [AllergenCode.LACTEOS, AllergenCode.MANI],
+      dietas: [],
+      modo_estricto: false,
       rol: Rol.USUARIO,
     });
     usuarios.usuarios.set(ADMIN_ID, {
@@ -66,6 +68,8 @@ describe("Integración: perfil, alergias y compatibilidad (con JWT)", () => {
       correo: "admin@correo.cl",
       password: "$2b$10$hash",
       alergias: [AllergenCode.GLUTEN],
+      dietas: [],
+      modo_estricto: false,
       rol: Rol.ADMINISTRADOR,
     });
   });
@@ -75,6 +79,8 @@ describe("Integración: perfil, alergias y compatibilidad (con JWT)", () => {
   it.each([
     ["get", "/api/usuarios/me"],
     ["put", "/api/usuarios/me/alergias"],
+    ["patch", "/api/usuarios/me"],
+    ["delete", "/api/usuarios/me"],
     ["get", "/api/products/7801234000018/compatibilidad"],
     ["get", "/api/products/compatibles?q=galletas"],
   ] as const)("%s %s responde 401 sin token", async (metodo, ruta) => {
@@ -93,7 +99,118 @@ describe("Integración: perfil, alergias y compatibilidad (con JWT)", () => {
       nombre: "Ana",
       correo: "ana@correo.cl",
       alergias: ["lacteos", "mani"],
+      dietas: [],
+      modo_estricto: false,
       rol: "usuario",
+    });
+  });
+
+  describe("PATCH /api/usuarios/me", () => {
+    const editar = (cuerpo: object) =>
+      request(servidor())
+        .patch("/api/usuarios/me")
+        .set("Authorization", token())
+        .send(cuerpo);
+
+    it("cambia nombre, alergias, dietas y modo estricto, y solo esos", async () => {
+      const res = await editar({
+        nombre: "  Ana María ",
+        alergias: ["gluten"],
+        dietas: ["vegano", "sin_gluten"],
+        modo_estricto: true,
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({
+        id: ANA_ID,
+        nombre: "Ana María",
+        correo: "ana@correo.cl",
+        alergias: ["gluten"],
+        dietas: ["vegano", "sin_gluten"],
+        modo_estricto: true,
+        rol: "usuario",
+      });
+    });
+
+    it("un cambio parcial conserva lo demás", async () => {
+      const res = await editar({ modo_estricto: true });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        nombre: "Ana",
+        alergias: ["lacteos", "mani"],
+        dietas: [],
+        modo_estricto: true,
+      });
+    });
+
+    it.each([
+      ["el rol", { rol: "administrador" }],
+      ["el correo", { correo: "otra@correo.cl" }],
+      ["la contraseña", { password: "nueva" }],
+      ["una dieta desconocida", { dietas: ["paleo"] }],
+      ["un nombre vacío", { nombre: "   " }],
+      ["un modo estricto que no es booleano", { modo_estricto: "si" }],
+    ])("rechaza con 400 %s", async (_caso, cuerpo) => {
+      const res = await editar(cuerpo);
+
+      expect(res.status).toBe(400);
+      expect(usuarios.usuarios.get(ANA_ID)).toMatchObject({
+        nombre: "Ana",
+        correo: "ana@correo.cl",
+        rol: Rol.USUARIO,
+      });
+    });
+
+    it("el motor recibe las dietas y el modo estricto guardados, sin datos personales", async () => {
+      await editar({ dietas: ["vegetariano"], modo_estricto: true });
+      fastapi.responder("/products/7801234000018/compatibility", () => ({
+        status: 200,
+        cuerpo: {
+          codigo_barras: "7801234000018",
+          veredicto: "apto",
+          alergenos_en_conflicto: [],
+          trazas_en_conflicto: [],
+          dietas_no_confirmadas: [],
+          conflictos: [],
+          motivos_no_apto: [],
+          datos_suficientes: true,
+          explicacion: "Sin conflictos con tu perfil.",
+          confianza: "alta",
+          motivos_confianza: [],
+          aviso: "Clasificación orientativa.",
+        },
+      }));
+
+      await request(servidor())
+        .get("/api/products/7801234000018/compatibilidad")
+        .set("Authorization", token());
+
+      const enviado = fastapi.peticiones[0].cuerpo as { perfil: object };
+      expect(enviado).toEqual({
+        perfil: {
+          alergias: ["lacteos", "mani"],
+          dietas: ["vegetariano"],
+          modo_estricto: true,
+        },
+      });
+      expect(JSON.stringify(enviado)).not.toMatch(/ana@correo|Ana|usuario/);
+    });
+  });
+
+  describe("DELETE /api/usuarios/me", () => {
+    it("borra la cuenta y desde ese momento el token responde 401", async () => {
+      const borrar = await request(servidor())
+        .delete("/api/usuarios/me")
+        .set("Authorization", token());
+      const despues = await request(servidor())
+        .get("/api/usuarios/me")
+        .set("Authorization", token());
+
+      expect(borrar.status).toBe(204);
+      expect(usuarios.usuarios.has(ANA_ID)).toBe(false);
+      expect(usuarios.usuarios.has(ADMIN_ID)).toBe(true);
+      expect(despues.status).toBe(401);
     });
   });
 

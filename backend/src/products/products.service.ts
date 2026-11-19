@@ -12,20 +12,31 @@ import {
 } from "./products.repository";
 import { Compatibilidad } from "./dto/compatibilidad.dto";
 import { BusquedaPersonalizada } from "./dto/busqueda-personalizada.dto";
-import { ModoBusqueda, PerfilRestricciones } from "./contrato/adaptativo";
-import { AllergenCode } from "./contrato/enums";
+import {
+  ModoBusqueda,
+  PerfilRestricciones,
+  RespuestaBusquedaPersonalizada,
+} from "./contrato/adaptativo";
 import {
   AVISO,
   textoNoAptos,
   veredictoDeRespaldo,
 } from "./compatibilidad-local";
 import { tokensRespaldo } from "./busqueda-respaldo";
-import { UsersService } from "../users/users.service";
+import { UsersService, UsuarioPublico } from "../users/users.service";
 
 // Errores de FastAPI (ya con los reintentos agotados) que usan el respaldo:
 // error interno (500), respuesta fuera del contrato (502), sin conexión (503)
 // y timeout (504). Nunca los 4xx.
 const STATUS_CON_RESPALDO = new Set([500, 502, 503, 504]);
+
+/**
+ * Páginas extra que /compatibles pide como máximo al motor para contar los
+ * "apto" (el total). Si se alcanza, el total es lo contado hasta ahí.
+ */
+export const MAX_PAGINAS_TOTAL_COMPATIBLES = 5;
+// Límite máximo de una página del motor (contrato de /search/personalized).
+const LIMITE_MOTOR = 50;
 
 export interface BusquedaProductos {
   respuesta: RespuestaBusqueda;
@@ -62,11 +73,11 @@ export class ProductsService {
     usuarioId: string,
     requestId: string,
   ): Promise<{ respuesta: Compatibilidad; fuente: FuenteDatos }> {
-    const { alergias } = await this.usersService.perfil(usuarioId);
+    const perfil = perfilDe(await this.usersService.perfil(usuarioId));
     try {
       const veredicto = await this.fastApiClient.compatibilidad(
         codigoBarras,
-        perfilDe(alergias),
+        perfil,
         requestId,
       );
       return {
@@ -80,7 +91,7 @@ export class ProductsService {
         error,
       );
       // En respaldo veredicto nunca es "apto", así que apto siempre es false.
-      const veredicto = veredictoDeRespaldo(producto, alergias);
+      const veredicto = veredictoDeRespaldo(producto, perfil);
       return {
         respuesta: { ...veredicto, apto: veredicto.veredicto === "apto" },
         fuente: "respaldo",
@@ -100,8 +111,7 @@ export class ProductsService {
     usuarioId: string,
     requestId: string,
   ): Promise<BusquedaPersonalizadaConFuente> {
-    const { alergias } = await this.usersService.perfil(usuarioId);
-    const perfil = perfilDe(alergias);
+    const perfil = perfilDe(await this.usersService.perfil(usuarioId));
     try {
       const respuesta = await this.fastApiClient.buscarPersonalizado(
         { consulta: params.q, perfil, modo, ...paginacion(params) },
@@ -131,30 +141,36 @@ export class ProductsService {
    * modo estricto (solo en esta llamada), así las trazas y los datos
    * insuficientes también quedan ocultos. Responde con la forma de
    * RespuestaBusqueda. Si el motor falla, busca en los productos guardados
-   * sin alérgenos ni trazas del usuario.
+   * con la misma regla.
+   *
+   * Filtrar oculta los no_apto, pero con dietas también llegan los
+   * apto_con_advertencia (una dieta que el producto no declara lo es incluso
+   * en modo estricto). Como el motor ordena los apto primero, se muestran solo
+   * los apto y total se cuenta hasta el primero que no lo es.
    */
   async compatibles(
     params: ParametrosBusqueda,
     usuarioId: string,
     requestId: string,
   ): Promise<BusquedaProductos> {
-    const { alergias } = await this.usersService.perfil(usuarioId);
+    const perfil: PerfilRestricciones = {
+      ...perfilDe(await this.usersService.perfil(usuarioId)),
+      modo_estricto: true,
+    };
     let respuesta: BusquedaPersonalizada;
     try {
-      respuesta = await this.fastApiClient.buscarPersonalizado(
-        {
-          consulta: params.q,
-          perfil: { ...perfilDe(alergias), modo_estricto: true },
-          modo: "filtrar",
-          ...paginacion(params),
-        },
+      respuesta = await this.paginaCompatibles(
+        params.q,
+        perfil,
+        params.offset,
+        params.limit,
         requestId,
       );
     } catch (error) {
       return {
         respuesta: await this.compatiblesEnRespaldo(
           params,
-          alergias,
+          perfil,
           requestId,
           error,
         ),
@@ -166,21 +182,18 @@ export class ProductsService {
       respuesta.resultados.map((r) => r.producto),
       requestId,
     );
-    // Con modo estricto y sin dietas, filtrar solo deja "apto". Si algo más
-    // llegara, no se muestra: "solo aptos" nunca muestra una advertencia.
     const aptos = respuesta.resultados.filter(
       (r) => r.veredicto.veredicto === "apto",
     );
-    const descartados = respuesta.resultados.length - aptos.length;
-    if (descartados > 0) {
-      this.logger.warn(
-        `[${requestId}] El motor devolvió ${descartados} resultados que no son "apto" en /compatibles; se ocultan`,
-      );
-    }
     return {
       respuesta: {
         consulta: params.q,
-        total: respuesta.total - descartados,
+        total: await this.totalCompatibles(
+          params,
+          perfil,
+          respuesta,
+          requestId,
+        ),
         tiempo_ms: respuesta.tiempo_ms,
         resultados: aptos.map(({ producto, score, posicion }) => ({
           producto,
@@ -193,13 +206,91 @@ export class ProductsService {
     };
   }
 
+  private paginaCompatibles(
+    consulta: string,
+    perfil: PerfilRestricciones,
+    offset: number,
+    limit: number,
+    requestId: string,
+  ): Promise<RespuestaBusquedaPersonalizada> {
+    return this.fastApiClient.buscarPersonalizado(
+      { consulta, perfil, modo: "filtrar", limit, offset },
+      requestId,
+    );
+  }
+
   /**
-   * Respaldo de /compatibles: productos guardados sin ningún alérgeno del
-   * usuario, ni como ingrediente ni como traza.
+   * Cuántos "apto" hay en total. Los apto van primero en el ranking del
+   * motor: si la página ya muestra dónde terminan, no hace falta pedir más;
+   * si no, se siguen pidiendo páginas (como máximo
+   * MAX_PAGINAS_TOTAL_COMPATIBLES).
+   */
+  private async totalCompatibles(
+    { q, offset }: ParametrosBusqueda,
+    perfil: PerfilRestricciones,
+    pagina: BusquedaPersonalizada,
+    requestId: string,
+  ): Promise<number> {
+    const aptos = aptosAlInicio(pagina);
+    const vistos = offset + pagina.resultados.length;
+    const terminan = aptos < pagina.resultados.length || vistos >= pagina.total;
+    if (aptos > 0 && terminan) {
+      return offset + aptos;
+    }
+    if (aptos === 0 && offset === 0) {
+      return 0;
+    }
+    // Página llena de apto: se sigue contando desde su final. Página sin
+    // apto con offset: los apto terminaron antes; se cuentan desde el inicio.
+    return this.contarAptos(q, perfil, aptos > 0 ? vistos : 0, requestId);
+  }
+
+  private async contarAptos(
+    consulta: string,
+    perfil: PerfilRestricciones,
+    desde: number,
+    requestId: string,
+  ): Promise<number> {
+    let contados = desde;
+    for (let i = 0; i < MAX_PAGINAS_TOTAL_COMPATIBLES; i++) {
+      let pagina: BusquedaPersonalizada;
+      try {
+        pagina = await this.paginaCompatibles(
+          consulta,
+          perfil,
+          contados,
+          LIMITE_MOTOR,
+          requestId,
+        );
+      } catch (error) {
+        this.logger.warn(
+          `[${requestId}] /compatibles no pudo contar todos los apto (${error.message}); total es al menos ${contados}`,
+        );
+        return contados;
+      }
+      const aptos = aptosAlInicio(pagina);
+      contados += aptos;
+      if (
+        aptos < pagina.resultados.length ||
+        pagina.resultados.length === 0 ||
+        contados >= pagina.total
+      ) {
+        return contados;
+      }
+    }
+    this.logger.warn(
+      `[${requestId}] /compatibles alcanzó el tope de ${MAX_PAGINAS_TOTAL_COMPATIBLES} páginas al contar los apto; total es al menos ${contados}`,
+    );
+    return contados;
+  }
+
+  /**
+   * Respaldo de /compatibles: productos guardados que son "apto" para el
+   * perfil en modo estricto, con la regla local.
    */
   private async compatiblesEnRespaldo(
     params: ParametrosBusqueda,
-    alergias: AllergenCode[],
+    perfil: PerfilRestricciones,
     requestId: string,
     error: unknown,
   ): Promise<RespuestaBusqueda> {
@@ -209,7 +300,7 @@ export class ProductsService {
     try {
       resultado = await this.productsRepository.buscarCompatibles(
         params,
-        alergias,
+        perfil,
       );
     } catch (errorBase) {
       this.logger.error(
@@ -243,13 +334,12 @@ export class ProductsService {
   ): Promise<BusquedaPersonalizada> {
     const falla = this.fallaConRespaldo(error);
     const inicio = performance.now();
-    const { alergias } = perfil;
 
     let resultado: ResultadoPersonalizadoRespaldo;
     try {
       resultado = await this.productsRepository.buscarPersonalizadoRespaldo(
         params,
-        alergias,
+        perfil,
         modo,
       );
     } catch (errorBase) {
@@ -288,13 +378,13 @@ export class ProductsService {
         score,
         posicion,
         posicion_base: null,
-        veredicto: veredictoDeRespaldo(producto, alergias),
+        veredicto: veredictoDeRespaldo(producto, perfil),
       })),
       no_aptos: {
         total: resultado.no_aptos,
         ocultos,
-        motivos: resultado.motivos.map(({ codigo, cantidad }) => ({
-          tipo: "alergeno" as const,
+        motivos: resultado.motivos.map(({ tipo, codigo, cantidad }) => ({
+          tipo,
           codigo,
           cantidad,
         })),
@@ -455,11 +545,24 @@ export class ProductsService {
 }
 
 /**
- * Perfil para el motor: solo las restricciones, nunca id, nombre ni correo.
- * Las dietas y el modo estricto todavía no se guardan por usuario.
+ * Perfil para el motor: solo las restricciones del usuario (alergias, dietas
+ * y modo estricto), nunca su id, nombre, correo ni rol.
  */
-export function perfilDe(alergias: AllergenCode[]): PerfilRestricciones {
-  return { alergias, dietas: [], modo_estricto: false };
+export function perfilDe({
+  alergias,
+  dietas,
+  modo_estricto,
+}: Pick<
+  UsuarioPublico,
+  "alergias" | "dietas" | "modo_estricto"
+>): PerfilRestricciones {
+  return { alergias, dietas, modo_estricto };
+}
+
+/** Cuántos resultados seguidos son "apto" desde el inicio de la página. */
+function aptosAlInicio({ resultados }: BusquedaPersonalizada): number {
+  const primero = resultados.findIndex((r) => r.veredicto.veredicto !== "apto");
+  return primero === -1 ? resultados.length : primero;
 }
 
 function paginacion({ limit, offset }: ParametrosBusqueda) {

@@ -15,10 +15,17 @@ import {
   ResultadoPersonalizadoRespaldo,
   ResultadoRespaldo,
 } from "../../src/products/products.repository";
-import { ModoBusqueda } from "../../src/products/contrato/adaptativo";
+import {
+  ModoBusqueda,
+  PerfilRestricciones,
+} from "../../src/products/contrato/adaptativo";
+import {
+  Coincidencia,
+  compatiblesDeRespaldo,
+  personalizadoDeRespaldo,
+} from "../../src/products/respaldo-local";
 import { ProductsRepository } from "../../src/products/products.repository";
 import { User } from "../../src/users/user.entity";
-import { AllergenCode } from "../../src/products/contrato/enums";
 import { Food } from "../../src/foods/entities/food.entity";
 
 /**
@@ -45,75 +52,26 @@ export class ProductosEnMemoria implements Pick<
     }
   }
 
+  // Las mismas reglas que el repositorio real (respaldo-local.ts) sobre las
+  // coincidencias en memoria: solo cambia de dónde salen los productos.
   async buscarCompatibles(
     params: ParametrosBusqueda,
-    alergias: AllergenCode[],
+    perfil: PerfilRestricciones,
   ): Promise<ResultadoRespaldo> {
-    const excluir = new Set<string>(alergias);
-    const todos = await this.buscarRespaldo({
-      ...params,
-      limit: 1000,
-      offset: 0,
-    });
-    // Igual que el SQL real: ni alérgenos ni trazas del usuario.
-    const compatibles = todos.resultados.filter(
-      (r) =>
-        !r.producto.alergenos.some((a) => excluir.has(a)) &&
-        !r.producto.trazas.some((a) => excluir.has(a)),
-    );
-    return {
-      total: compatibles.length,
-      resultados: compatibles
-        .slice(params.offset, params.offset + params.limit)
-        .map((r, i) => ({ ...r, posicion: params.offset + i + 1 })),
-    };
+    return compatiblesDeRespaldo(this.coincidencias(params.q), perfil, params);
   }
 
-  /** Igual que el SQL real: orden por la regla local y luego por score. */
   async buscarPersonalizadoRespaldo(
     params: ParametrosBusqueda,
-    alergias: AllergenCode[],
+    perfil: PerfilRestricciones,
     modo: ModoBusqueda,
   ): Promise<ResultadoPersonalizadoRespaldo> {
-    const delUsuario = new Set<string>(alergias);
-    const noApto = (p: Producto) => p.alergenos.some((a) => delUsuario.has(a));
-    const rango = (p: Producto) => {
-      if (noApto(p)) return 2;
-      const advertencia =
-        p.trazas.some((a) => delUsuario.has(a)) ||
-        p.ingredientes.length === 0 ||
-        p.calidad.completitud < 0.5;
-      return delUsuario.size > 0 && advertencia ? 1 : 0;
-    };
-    const { resultados: todos } = await this.buscarRespaldo({
-      ...params,
-      limit: 1000,
-      offset: 0,
-    });
-    const noAptos = todos.filter((r) => noApto(r.producto));
-    const cantidades = new Map<AllergenCode, number>();
-    for (const { producto } of noAptos) {
-      for (const a of producto.alergenos.filter((a) => delUsuario.has(a))) {
-        cantidades.set(a, (cantidades.get(a) ?? 0) + 1);
-      }
-    }
-    const visibles = (
-      modo === "filtrar" ? todos.filter((r) => !noApto(r.producto)) : todos
-    ).sort(
-      (a, b) => rango(a.producto) - rango(b.producto) || b.score - a.score,
+    return personalizadoDeRespaldo(
+      this.coincidencias(params.q),
+      perfil,
+      modo,
+      params,
     );
-    return {
-      total: visibles.length,
-      total_base: todos.length,
-      no_aptos: noAptos.length,
-      motivos: [...cantidades].map(([codigo, cantidad]) => ({
-        codigo,
-        cantidad,
-      })),
-      resultados: visibles
-        .slice(params.offset, params.offset + params.limit)
-        .map((r, i) => ({ ...r, posicion: params.offset + i + 1 })),
-    };
   }
 
   async buscarRespaldo({
@@ -121,14 +79,7 @@ export class ProductosEnMemoria implements Pick<
     limit,
     offset,
   }: ParametrosBusqueda): Promise<ResultadoRespaldo> {
-    const tokens = tokensRespaldo(q);
-    const coincidencias = [...this.productos.values()]
-      .map((producto) => ({
-        producto,
-        score: tokens.filter((t) => producto.nombre.toLowerCase().includes(t))
-          .length,
-      }))
-      .filter(({ score }) => score > 0);
+    const coincidencias = this.coincidencias(q);
     return {
       total: coincidencias.length,
       resultados: coincidencias
@@ -136,9 +87,25 @@ export class ProductosEnMemoria implements Pick<
         .map((r, i) => ({ ...r, posicion: offset + i + 1 })),
     };
   }
+
+  /**
+   * Coincidencias por nombre (un punto por token), de mayor a menor score
+   * como en el SQL real; a igual score, en orden de inserción.
+   */
+  private coincidencias(q: string): Coincidencia[] {
+    const tokens = tokensRespaldo(q);
+    return [...this.productos.values()]
+      .map((producto) => ({
+        producto,
+        score: tokens.filter((t) => producto.nombre.toLowerCase().includes(t))
+          .length,
+      }))
+      .filter(({ score }) => score > 0)
+      .sort((a, b) => b.score - a.score);
+  }
 }
 
-/** Repositorio de usuarios en memoria (findOne por id o correo, find, save). */
+/** Repositorio de usuarios en memoria (findOne por id o correo, find, save, delete). */
 export class UsuariosEnMemoria {
   readonly usuarios = new Map<string, User>();
 
@@ -160,6 +127,10 @@ export class UsuariosEnMemoria {
 
   create(datos: Partial<User>): User {
     return { ...datos } as User;
+  }
+
+  async delete({ id }: { id: string }): Promise<{ affected: number }> {
+    return { affected: this.usuarios.delete(id) ? 1 : 0 };
   }
 
   async save(usuario: User): Promise<User> {

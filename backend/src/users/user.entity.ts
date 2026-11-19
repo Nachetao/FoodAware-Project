@@ -1,5 +1,5 @@
 import { Entity, PrimaryGeneratedColumn, Column } from "typeorm";
-import { AllergenCode } from "../products/contrato/enums";
+import { AllergenCode, DietLabel } from "../products/contrato/enums";
 import { Rol } from "./rol";
 
 @Entity("users")
@@ -19,6 +19,15 @@ export class User {
   // Códigos del contrato (AllergenCode), nunca texto libre.
   @Column({ type: "text", array: true, default: () => "'{}'" })
   alergias: AllergenCode[];
+
+  // Códigos DietLabel del contrato. Se envían al motor con las alergias.
+  @Column({ type: "text", array: true, default: () => "'{}'" })
+  dietas: DietLabel[];
+
+  // true: las trazas, los indicios y los datos insuficientes hacen el
+  // producto no_apto en vez de apto_con_advertencia.
+  @Column({ type: "boolean", default: false })
+  modo_estricto: boolean;
 
   // Viaja en el JWT y se compara con este valor en cada petición.
   @Column({
