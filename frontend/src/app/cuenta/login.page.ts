@@ -11,6 +11,7 @@ import { ErrorApi } from '../products/models/error';
     </ion-header>
     <ion-content class="ion-padding">
       <form class="formulario" (ngSubmit)="ingresar()">
+        <h1 class="solo-lectores">Ingresar</h1>
         <ion-input name="correo" type="email" label="Correo" labelPlacement="floating"
           autocomplete="email" [(ngModel)]="correo" required></ion-input>
         <ion-input name="password" type="password" label="Contraseña" labelPlacement="floating"

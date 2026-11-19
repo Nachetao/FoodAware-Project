@@ -11,6 +11,13 @@
         Busca alimentos y descubre si son aptos para ti según tus alergias. Para personas
         con alergias, intolerancias o dietas.
       </p>
+      <!-- Solo si el navegador permite instalar la PWA (no en Safari ni en la app de Android). -->
+      @if (instalacion.disponible()) {
+        <ion-button class="instalar ion-margin-top" fill="outline" size="small" (click)="instalar()">
+          <ion-icon name="download-outline" slot="start" aria-hidden="true"></ion-icon>
+          Instalar FoodAware
+        </ion-button>
+      }
     </section>
 
     <!-- Buscador principal: lleva a /busqueda?q=... -->
@@ -24,7 +31,7 @@
         fill="outline"
         shape="round"
         aria-label="Buscar alimentos"
-        placeholder="Ej. leche, galletas de avena"
+        placeholder="Ej. leche, avena"
       ></ion-input>
       <ion-button type="submit" color="secondary" class="buscar">
         <ion-icon name="search-outline" slot="start" aria-hidden="true"></ion-icon>
@@ -42,7 +49,7 @@
               <span class="acceso-frase">Busca con los resultados adaptados a tus alergias y dietas.</span>
             </span>
           </button>
-          <a class="enlace-secundario editar-alergias" routerLink="/perfil">Editar mis alergias</a>
+          <a class="enlace-secundario enlace-suelto editar-alergias" routerLink="/perfil">Editar mis alergias</a>
         </div>
       } @else {
         <a class="acceso iniciar-sesion" routerLink="/login">

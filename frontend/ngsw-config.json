@@ -1,0 +1,92 @@
+{
+  "$schema": "./node_modules/@angular/service-worker/config/schema.json",
+  "index": "/index.html",
+  "assetGroups": [
+    {
+      "name": "app",
+      "installMode": "prefetch",
+      "resources": {
+        "files": [
+          "/index.html",
+          "/manifest.webmanifest",
+          "/*.css",
+          "/*.js",
+          "/media/inter-latin-*.woff2"
+        ]
+      }
+    },
+    {
+      "name": "iconos",
+      "installMode": "prefetch",
+      "resources": {
+        "files": [
+          "/svg/checkmark-circle.svg",
+          "/svg/checkmark-circle-outline.svg",
+          "/svg/checkmark-outline.svg",
+          "/svg/close-circle.svg",
+          "/svg/close-circle-outline.svg",
+          "/svg/cloud-offline-outline.svg",
+          "/svg/create-outline.svg",
+          "/svg/download-outline.svg",
+          "/svg/eye-off-outline.svg",
+          "/svg/flask-outline.svg",
+          "/svg/heart-circle.svg",
+          "/svg/heart-dislike.svg",
+          "/svg/help-circle-outline.svg",
+          "/svg/image-outline.svg",
+          "/svg/information-circle-outline.svg",
+          "/svg/list.svg",
+          "/svg/options-outline.svg",
+          "/svg/person-circle-outline.svg",
+          "/svg/refresh-outline.svg",
+          "/svg/search-outline.svg",
+          "/svg/shield-checkmark-outline.svg",
+          "/svg/stats-chart-outline.svg",
+          "/svg/warning.svg",
+          "/svg/warning-outline.svg"
+        ]
+      }
+    },
+    {
+      "name": "assets",
+      "installMode": "lazy",
+      "updateMode": "prefetch",
+      "resources": {
+        "files": [
+          "/assets/**",
+          "/svg/**",
+          "/media/**",
+          "/*.(svg|cur|jpg|jpeg|png|apng|webp|avif|gif|otf|ttf|woff|woff2)"
+        ]
+      }
+    }
+  ],
+  "dataGroups": [
+    {
+      "name": "catalogo-publico",
+      "urls": [
+        "/api/products/search?",
+        "/api/products/[0-9]{8,14}$"
+      ],
+      "cacheConfig": {
+        "strategy": "freshness",
+        "timeout": "8s",
+        "maxSize": 100,
+        "maxAge": "7d"
+      }
+    },
+    {
+      "name": "metricas-publicas",
+      "urls": [
+        "/api/metricas/",
+        "/api/ingesta/ultima"
+      ],
+      "cacheConfig": {
+        "strategy": "freshness",
+        "timeout": "8s",
+        "maxSize": 5,
+        "maxAge": "1d"
+      }
+    }
+  ]
+}

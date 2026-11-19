@@ -138,21 +138,40 @@ function desdeRespaldo(headers: HttpHeaders): boolean {
   return headers.get(HEADER_FUENTE_DATOS) === 'respaldo';
 }
 
-/** Convierte un error HTTP en ErrorApi (mensaje del contrato o uno genérico). */
+/**
+ * Convierte un error HTTP en ErrorApi (mensaje del contrato o uno genérico).
+ * Sin conexión, cualquier error dice que no hay internet: el resto de los
+ * mensajes no le sirven al usuario hasta que vuelva la conexión.
+ */
 export function aErrorApi(error: HttpErrorResponse): ErrorApi {
+  const sinDetalle = { status: error.status, codigo: null, requestId: null };
+  if (!navigator.onLine) {
+    return { ...sinDetalle, mensaje: 'No hay conexión a internet.' };
+  }
   if (esErrorContrato(error.error)) {
     const { codigo, mensaje, request_id } = error.error.error;
     return { status: error.status, codigo, mensaje, requestId: request_id };
+  }
+  // Antes que el message de NestJS: con fetch, un fallo de red llega como un
+  // TypeError cuyo message es "Failed to fetch", que no es para el usuario.
+  if (sinRespuestaDelServidor(error)) {
+    return { ...sinDetalle, mensaje: 'No se pudo conectar con el servidor.' };
   }
   // Errores por defecto de NestJS (login, registro, validación): { message }.
   const message = (error.error as { message?: unknown } | null)?.message;
   if (typeof message === 'string' || Array.isArray(message)) {
     const mensaje = Array.isArray(message) ? message.join('. ') : message;
-    return { status: error.status, codigo: null, mensaje, requestId: null };
+    return { ...sinDetalle, mensaje };
   }
-  const mensaje =
-    error.status === 0
-      ? 'No se pudo conectar con el servidor.'
-      : `Ocurrió un error inesperado (HTTP ${error.status}).`;
-  return { status: error.status, codigo: null, mensaje, requestId: null };
+  return { ...sinDetalle, mensaje: `Ocurrió un error inesperado (HTTP ${error.status}).` };
+}
+
+/**
+ * La petición no llegó a una respuesta del backend: status 0 (red caída,
+ * CORS) o el 504 vacío que inventa el service worker de Angular cuando falla
+ * la red de un dataGroup sin nada en caché. El 504 del backend
+ * (SOURCE_TIMEOUT) siempre trae cuerpo del contrato.
+ */
+function sinRespuestaDelServidor(error: HttpErrorResponse): boolean {
+  return error.status === 0 || (error.status === 504 && !error.error);
 }

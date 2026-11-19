@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">FoodAware</string>
+    <string name="title_activity_main">FoodAware</string>
+    <string name="package_name">cl.foodaware.app</string>
+    <string name="custom_url_scheme">cl.foodaware.app</string>
+</resources>

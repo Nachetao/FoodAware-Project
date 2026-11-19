@@ -1,0 +1,20 @@
+// La app ocupa el alto que deja libre el aviso sin conexión (que solo tiene
+// alto mientras no hay conexión). Ionic posiciona ion-app de forma absoluta
+// sobre toda la pantalla; aquí pasa a ser un elemento flexible.
+:host {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+ion-app {
+  position: relative;
+  inset: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+app-aviso-sin-conexion {
+  flex: 0 0 auto;
+}

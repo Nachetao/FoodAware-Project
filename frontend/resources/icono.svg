@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Ícono de FoodAware: hoja con visto bueno, en la paleta de la app. -->
+  <rect width="512" height="512" rx="112" fill="#00473c"/>
+  <g id="hoja">
+    <path d="M150 362 C130 230 210 140 362 150 C372 302 282 382 150 362 Z" fill="#e6ff55"/>
+    <path d="M150 362 L114 398" stroke="#e6ff55" stroke-width="24" stroke-linecap="round"/>
+    <path d="M206 262 L244 298 L312 218" fill="none" stroke="#00473c" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
 import { IonicModule } from '@ionic/angular/lazy';
 import { Subject, of, throwError } from 'rxjs';
@@ -123,6 +124,20 @@ describe('MetricasPage', () => {
     expect(
       (fixture.nativeElement as HTMLElement).querySelector('.tarjeta-calidad ion-spinner'),
     ).not.toBeNull();
+    // El spinner es solo visual: lo anuncia el texto de la región de estado.
+    expect(
+      (fixture.nativeElement as HTMLElement)
+        .querySelector('.tarjeta-calidad app-cargando [role="status"]')
+        ?.textContent?.trim(),
+    ).toBe('Cargando…');
+  });
+
+  it('tiene un h1 para lectores de pantalla', async () => {
+    await crear();
+
+    expect((fixture.nativeElement as HTMLElement).querySelector('h1.solo-lectores')?.textContent).toBe(
+      'Métricas',
+    );
   });
 
   it('indica que no hay ingestas ante NOT_FOUND, sin afectar las otras tarjetas', async () => {
@@ -153,9 +168,11 @@ describe('MetricasPage', () => {
     await crear();
     servicio.calidad.mockReturnValue(of({ ...CALIDAD, total_productos: 2000 }));
 
-    (fixture.nativeElement as HTMLElement)
-      .querySelector<HTMLElement>('ion-button[aria-label="Actualizar métricas"]')!
-      .click();
+    // Ionic quita aria-label del DOM al hidratar: se busca en la plantilla.
+    const boton = fixture.debugElement
+      .queryAll(By.css('app-barra-superior ion-button'))
+      .find((b) => b.attributes['aria-label'] === 'Actualizar métricas');
+    (boton!.nativeElement as HTMLElement).click();
 
     expect(servicio.calidad).toHaveBeenCalledTimes(2);
     expect(servicio.evaluacion).toHaveBeenCalledTimes(2);

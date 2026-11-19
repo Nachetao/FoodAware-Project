@@ -26,6 +26,26 @@ log.txt
 # Generado al compilar desde API_URL (scripts/generar-api-url.js)
 /src/environments/api-url.ts
 
+# Android (Capacitor). android/.gitignore ya los excluye; aquí por si acaso.
+# Builds y caché de Gradle
+/android/.gradle
+/android/build
+/android/app/build
+/android/capacitor-cordova-android-plugins
+# Copia de www/ y configuración que escribe "npx cap sync"
+/android/app/src/main/assets/public
+/android/app/src/main/assets/capacitor.config.json
+/android/app/src/main/assets/capacitor.plugins.json
+# Ruta local del SDK y archivos de Android Studio
+/android/local.properties
+/android/.idea
+/android/captures
+# Paquetes y claves de firma
+*.apk
+*.aab
+*.keystore
+*.jks
+
 # Compiled output
 /dist
 /tmp

@@ -5,9 +5,7 @@
 <ion-content class="ion-padding">
   <div class="contenedor">
     @if (cargando()) {
-      <div class="estado">
-        <ion-spinner name="crescent" aria-label="Cargando producto"></ion-spinner>
-      </div>
+      <app-cargando texto="Cargando producto…"></app-cargando>
     } @else if (noEncontrado()) {
       <div class="estado">
         <h1>Producto no encontrado</h1>
@@ -87,7 +85,7 @@
             <span>{{ v.aviso }}</span>
           </p>
 
-          <a class="editar-alergias" routerLink="/perfil">
+          <a class="editar-alergias enlace-suelto" routerLink="/perfil">
             <ion-icon name="create-outline" aria-hidden="true"></ion-icon>
             Editar mis alergias
           </a>
@@ -185,7 +183,7 @@
         <!-- Sin punto tras la fecha: la hora puede terminar en "p. m.". -->
         <p class="recuperado">Datos recuperados el {{ fecha(p.procedencia.recuperado_en) }}</p>
         <p>
-          <a [href]="p.procedencia.url_fuente" target="_blank" rel="noopener noreferrer">
+          <a class="enlace-suelto" [href]="p.procedencia.url_fuente" target="_blank" rel="noopener noreferrer">
             Ver la ficha original
           </a>
         </p>

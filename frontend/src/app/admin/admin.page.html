@@ -8,6 +8,7 @@
 
 <ion-content class="ion-padding">
   <div class="contenedor">
+    <h1 class="solo-lectores">Administración</h1>
     <section class="seccion usuarios" aria-labelledby="titulo-usuarios">
       <h2 id="titulo-usuarios">Usuarios</h2>
       @let seccionUsuarios = usuarios();
@@ -62,9 +63,7 @@
 
 <ng-template #estado let-seccion>
   @if (seccion.cargando && !seccion.datos) {
-    <div class="cargando">
-      <ion-spinner name="crescent" aria-label="Cargando"></ion-spinner>
-    </div>
+    <app-cargando texto="Cargando…"></app-cargando>
   }
   @if (seccion.error) {
     <ion-text color="danger">

@@ -9,19 +9,21 @@ import { AllergenCode } from '../products/models/enums';
     <div class="chips" role="group" aria-label="Alergias">
       @for (opcion of opciones; track opcion.codigo) {
         @let elegida = seleccion().includes(opcion.codigo);
-        <ion-chip
-          [class.chip-alergeno]="elegida"
-          [outline]="!elegida"
-          role="button"
+        <!-- Botón nativo (foco, Enter y Espacio, 44 px) con el chip de siempre adentro. -->
+        <button
+          type="button"
+          class="opcion-chip"
           [attr.aria-pressed]="elegida"
           [attr.data-codigo]="opcion.codigo"
           (click)="alternar(opcion.codigo)"
         >
-          @if (elegida) {
-            <ion-icon name="checkmark-outline" aria-hidden="true"></ion-icon>
-          }
-          <span>{{ opcion.etiqueta }}</span>
-        </ion-chip>
+          <ion-chip [class.chip-alergeno]="elegida" [outline]="!elegida">
+            @if (elegida) {
+              <ion-icon name="checkmark-outline" aria-hidden="true"></ion-icon>
+            }
+            <span>{{ opcion.etiqueta }}</span>
+          </ion-chip>
+        </button>
       }
     </div>
   `,
@@ -29,10 +31,7 @@ import { AllergenCode } from '../products/models/enums';
     .chips {
       display: flex;
       flex-wrap: wrap;
-      gap: var(--app-espacio-2);
-    }
-    ion-chip {
-      margin: 0;
+      column-gap: var(--app-espacio-2);
     }
   `,
   standalone: false,

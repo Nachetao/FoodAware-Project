@@ -160,6 +160,13 @@ describe('AdminPage', () => {
 
     expect(raiz().querySelector('.usuarios ion-spinner')).not.toBeNull();
     expect(raiz().querySelector('.alimentos ion-spinner')).toBeNull();
+    expect(texto('.usuarios app-cargando [role="status"]')).toBe('Cargando…');
+  });
+
+  it('tiene un h1 para lectores de pantalla', async () => {
+    await crear();
+
+    expect(texto('h1.solo-lectores')).toBe('Administración');
   });
 
   it('un error en una sección no oculta la otra', async () => {
