@@ -14,7 +14,7 @@ async function bootstrap() {
   const config = new DocumentBuilder()
     .setTitle("FoodAware Backend")
     .setDescription(
-      "Las rutas exigen un JWT (Authorization: Bearer <token>, de POST /api/auth/login) salvo las públicas: GET /api/health, POST /api/auth/login, POST /api/users, GET /api/products/search y POST /api/food/analizar (token opcional).",
+      "Las rutas exigen un JWT (Authorization: Bearer <token>, de POST /api/auth/login) salvo las públicas: GET /api/health, POST /api/auth/login, POST /api/users, GET /api/products/search y POST /api/food/analizar (token opcional). GET /api/food y GET /api/usuarios son solo para administradores (403 a los demás). El rol viaja en el JWT y se compara con la base en cada petición: si cambió o el usuario ya no existe, responde 401.",
     )
     .setVersion("1.0")
     .addBearerAuth()

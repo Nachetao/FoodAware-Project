@@ -9,9 +9,16 @@ import * as bcrypt from "bcrypt";
 import { User } from "./user.entity";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { AllergenCode } from "../products/contrato/enums";
+import { Rol } from "./rol";
 
 /** Usuario sin el hash de la contraseña, para responder al cliente. */
 export type UsuarioPublico = Omit<User, "password">;
+
+/**
+ * Usuario en la lista de administración: sin contraseña y sin datos de salud
+ * (alergias), que solo ve su dueño.
+ */
+export type UsuarioResumen = Pick<User, "id" | "nombre" | "correo" | "rol">;
 
 // Código de PostgreSQL para una violación de UNIQUE.
 const VIOLACION_UNIQUE = "23505";
@@ -38,6 +45,8 @@ export class UsersService {
       correo,
       password: await bcrypt.hash(password, 10),
       alergias: alergias ?? [],
+      // Explícito: el registro nunca crea administradores.
+      rol: Rol.USUARIO,
     });
 
     try {
@@ -56,6 +65,24 @@ export class UsersService {
 
   async findByCorreo(correo: string): Promise<User | null> {
     return this.userRepository.findOne({ where: { correo } });
+  }
+
+  /** Usuario por id, o null si ya no existe (por ejemplo, si borró su cuenta). */
+  async buscarPorId(id: string): Promise<User | null> {
+    return this.userRepository.findOne({ where: { id } });
+  }
+
+  /** Todos los usuarios para la administración, ordenados por nombre. */
+  async listar(): Promise<UsuarioResumen[]> {
+    const usuarios = await this.userRepository.find({
+      order: { nombre: "ASC", correo: "ASC" },
+    });
+    return usuarios.map(({ id, nombre, correo, rol }) => ({
+      id,
+      nombre,
+      correo,
+      rol,
+    }));
   }
 
   /** Perfil del usuario, sin password; 404 si ya no existe. */
@@ -89,5 +116,6 @@ function aUsuarioPublico(usuario: User): UsuarioPublico {
     nombre: usuario.nombre,
     correo: usuario.correo,
     alergias: usuario.alergias,
+    rol: usuario.rol,
   };
 }

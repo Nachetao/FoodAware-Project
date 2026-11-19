@@ -1,5 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, Column } from "typeorm";
 import { AllergenCode } from "../products/contrato/enums";
+import { Rol } from "./rol";
 
 @Entity("users")
 export class User {
@@ -18,4 +19,13 @@ export class User {
   // Códigos del contrato (AllergenCode), nunca texto libre.
   @Column({ type: "text", array: true, default: () => "'{}'" })
   alergias: AllergenCode[];
+
+  // Viaja en el JWT y se compara con este valor en cada petición.
+  @Column({
+    type: "enum",
+    enum: Rol,
+    enumName: "rol_usuario",
+    default: Rol.USUARIO,
+  })
+  rol: Rol;
 }

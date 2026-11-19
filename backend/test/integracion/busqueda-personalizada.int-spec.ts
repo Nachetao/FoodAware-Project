@@ -10,11 +10,12 @@ import {
   producto,
 } from "./app-de-prueba";
 import { AllergenCode } from "../../src/products/contrato/enums";
+import { Rol } from "../../src/users/rol";
 import { Producto } from "../../src/products/contrato/producto";
 
 const ANA_ID = "3f2b8c1e-9d4a-4e7b-8a6f-1c2d3e4f5a6b";
 const token = () =>
-  `Bearer ${sign({ sub: ANA_ID, correo: "ana@correo.cl" }, process.env.JWT_SECRET!)}`;
+  `Bearer ${sign({ sub: ANA_ID, correo: "ana@correo.cl", rol: Rol.USUARIO }, process.env.JWT_SECRET!)}`;
 const AVISO =
   "Clasificación orientativa según tu perfil y los datos de Open Food Facts. No es una garantía de que el producto sea seguro para ti: revisa siempre la etiqueta del envase.";
 
@@ -136,6 +137,7 @@ describe("Integración: búsqueda personalizada y /compatibles con el motor", ()
       correo: "ana@correo.cl",
       password: "$2b$10$hash",
       alergias: [AllergenCode.LACTEOS, AllergenCode.MANI],
+      rol: Rol.USUARIO,
     });
   });
 

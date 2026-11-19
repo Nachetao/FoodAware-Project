@@ -45,6 +45,13 @@ describe("UsersController (POST /api/users)", () => {
     expect(usersService.createTestUser).not.toHaveBeenCalled();
   });
 
+  it("rechaza con 400 un registro que intenta elegir su rol", async () => {
+    const res = await registrar({ ...valido, rol: "administrador" });
+
+    expect(res.status).toBe(400);
+    expect(usersService.createTestUser).not.toHaveBeenCalled();
+  });
+
   it("acepta un registro válido", async () => {
     usersService.createTestUser.mockResolvedValue({ id: "uuid-1" });
 

@@ -50,7 +50,11 @@ export class ProductosEnMemoria implements Pick<
     alergias: AllergenCode[],
   ): Promise<ResultadoRespaldo> {
     const excluir = new Set<string>(alergias);
-    const todos = await this.buscarRespaldo({ ...params, limit: 1000, offset: 0 });
+    const todos = await this.buscarRespaldo({
+      ...params,
+      limit: 1000,
+      offset: 0,
+    });
     // Igual que el SQL real: ni alérgenos ni trazas del usuario.
     const compatibles = todos.resultados.filter(
       (r) =>
@@ -134,7 +138,7 @@ export class ProductosEnMemoria implements Pick<
   }
 }
 
-/** Repositorio de usuarios en memoria (findOne por id o correo, save). */
+/** Repositorio de usuarios en memoria (findOne por id o correo, find, save). */
 export class UsuariosEnMemoria {
   readonly usuarios = new Map<string, User>();
 
@@ -146,12 +150,23 @@ export class UsuariosEnMemoria {
     );
   }
 
+  /** Como find({ order: { nombre, correo } }) de la lista de administración. */
+  async find(): Promise<User[]> {
+    return [...this.usuarios.values()].sort(
+      (a, b) =>
+        a.nombre.localeCompare(b.nombre) || a.correo.localeCompare(b.correo),
+    );
+  }
+
   create(datos: Partial<User>): User {
     return { ...datos } as User;
   }
 
   async save(usuario: User): Promise<User> {
-    const guardado = { ...usuario, id: usuario.id ?? `usuario-${this.usuarios.size + 1}` };
+    const guardado = {
+      ...usuario,
+      id: usuario.id ?? `usuario-${this.usuarios.size + 1}`,
+    };
     this.usuarios.set(guardado.id, guardado);
     return guardado;
   }
@@ -192,6 +207,7 @@ export async function crearApp(pythonApiUrl: string) {
     .useValue({
       create: (datos: Partial<Food>) => ({ ...datos }),
       save: async (food: Food) => ({ ...food, id: "food-1" }),
+      find: async () => [],
     })
     .overrideProvider(ProductsRepository)
     .useValue(productos)

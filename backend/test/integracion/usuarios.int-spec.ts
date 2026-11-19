@@ -1,6 +1,7 @@
 import { INestApplication } from "@nestjs/common";
 import request from "supertest";
-import { sign } from "jsonwebtoken";
+import * as bcrypt from "bcrypt";
+import { decode, sign } from "jsonwebtoken";
 import { FastApiFalso } from "./fastapi-falso";
 import {
   ProductosEnMemoria,
@@ -11,12 +12,15 @@ import {
 } from "./app-de-prueba";
 import { AllergenCode } from "../../src/products/contrato/enums";
 import { Producto } from "../../src/products/contrato/producto";
+import { Rol } from "../../src/users/rol";
 
 const ANA_ID = "3f2b8c1e-9d4a-4e7b-8a6f-1c2d3e4f5a6b";
+const ADMIN_ID = "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
 
 // Mismo payload que firma AuthService en el login, con el JWT_SECRET de prueba.
-const token = (id = ANA_ID) =>
-  `Bearer ${sign({ sub: id, correo: "ana@correo.cl" }, process.env.JWT_SECRET!)}`;
+const token = (id = ANA_ID, rol = Rol.USUARIO) =>
+  `Bearer ${sign({ sub: id, correo: "ana@correo.cl", rol }, process.env.JWT_SECRET!)}`;
+const tokenAdmin = () => token(ADMIN_ID, Rol.ADMINISTRADOR);
 
 function conAlergenos(
   codigo: string,
@@ -54,6 +58,15 @@ describe("Integración: perfil, alergias y compatibilidad (con JWT)", () => {
       correo: "ana@correo.cl",
       password: "$2b$10$hash",
       alergias: [AllergenCode.LACTEOS, AllergenCode.MANI],
+      rol: Rol.USUARIO,
+    });
+    usuarios.usuarios.set(ADMIN_ID, {
+      id: ADMIN_ID,
+      nombre: "Admin",
+      correo: "admin@correo.cl",
+      password: "$2b$10$hash",
+      alergias: [AllergenCode.GLUTEN],
+      rol: Rol.ADMINISTRADOR,
     });
   });
 
@@ -80,6 +93,100 @@ describe("Integración: perfil, alergias y compatibilidad (con JWT)", () => {
       nombre: "Ana",
       correo: "ana@correo.cl",
       alergias: ["lacteos", "mani"],
+      rol: "usuario",
+    });
+  });
+
+  describe("roles", () => {
+    it("el login firma el rol en el JWT y ese token sirve en las rutas privadas", async () => {
+      usuarios.usuarios.get(ADMIN_ID)!.password = await bcrypt.hash(
+        "clave-admin",
+        4,
+      );
+
+      const login = await request(servidor())
+        .post("/api/auth/login")
+        .send({ correo: "admin@correo.cl", password: "clave-admin" });
+
+      expect(login.status).toBe(201);
+      expect(decode(login.body.access_token)).toMatchObject({
+        sub: ADMIN_ID,
+        rol: "administrador",
+      });
+      const lista = await request(servidor())
+        .get("/api/usuarios")
+        .set("Authorization", `Bearer ${login.body.access_token}`);
+      expect(lista.status).toBe(200);
+    });
+
+    it("el registro crea siempre un usuario y rechaza elegir el rol", async () => {
+      const datos = {
+        nombre: "Bea",
+        correo: "bea@correo.cl",
+        password: "clave-bea",
+      };
+
+      const conRol = await request(servidor())
+        .post("/api/users")
+        .send({ ...datos, rol: "administrador" });
+      const normal = await request(servidor()).post("/api/users").send(datos);
+
+      expect(conRol.status).toBe(400);
+      expect(normal.status).toBe(201);
+      expect(normal.body.rol).toBe("usuario");
+    });
+
+    it.each([["/api/usuarios"], ["/api/food"]])(
+      "GET %s: 401 sin token, 403 a un usuario y 200 a un administrador",
+      async (ruta) => {
+        const sinToken = await request(servidor()).get(ruta);
+        const usuario = await request(servidor())
+          .get(ruta)
+          .set("Authorization", token());
+        const admin = await request(servidor())
+          .get(ruta)
+          .set("Authorization", tokenAdmin());
+
+        expect(sinToken.status).toBe(401);
+        expect(usuario.status).toBe(403);
+        expect(admin.status).toBe(200);
+      },
+    );
+
+    it("la lista de usuarios no incluye contraseñas ni datos de salud", async () => {
+      const res = await request(servidor())
+        .get("/api/usuarios")
+        .set("Authorization", tokenAdmin());
+
+      expect(res.body).toEqual([
+        {
+          id: ADMIN_ID,
+          nombre: "Admin",
+          correo: "admin@correo.cl",
+          rol: "administrador",
+        },
+        { id: ANA_ID, nombre: "Ana", correo: "ana@correo.cl", rol: "usuario" },
+      ]);
+    });
+
+    it("un token con un rol que ya no coincide con la base responde 401", async () => {
+      usuarios.usuarios.get(ADMIN_ID)!.rol = Rol.USUARIO;
+
+      const res = await request(servidor())
+        .get("/api/usuarios/me")
+        .set("Authorization", tokenAdmin());
+
+      expect(res.status).toBe(401);
+    });
+
+    it("un token de un usuario que ya no existe responde 401", async () => {
+      usuarios.usuarios.delete(ANA_ID);
+
+      const res = await request(servidor())
+        .get("/api/usuarios/me")
+        .set("Authorization", token());
+
+      expect(res.status).toBe(401);
     });
   });
 

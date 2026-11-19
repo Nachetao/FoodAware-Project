@@ -10,6 +10,9 @@ export default new DataSource({
   username: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
+  // DB_SSL=true al conectarse desde fuera a una base que exige TLS (por
+  // ejemplo, la de staging en Render para el script admin:asignar).
+  ssl: process.env.DB_SSL === "true",
   entities: [__dirname + "/**/*.entity{.ts,.js}"],
   migrations: [__dirname + "/migrations/*{.ts,.js}"],
   synchronize: false,
