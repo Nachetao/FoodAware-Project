@@ -10,6 +10,13 @@ import { BusquedaPage } from './busqueda.page';
 import { AuthService } from '../auth/auth.service';
 import { ProductsService } from '../products/products.service';
 import { BusquedaProductos, ResultadoBusqueda } from '../products/models/busqueda';
+import {
+  BusquedaPersonalizada,
+  ModoBusqueda,
+  RespuestaBusquedaPersonalizada,
+} from '../products/models/busqueda-personalizada';
+import { Veredicto, VeredictoProducto } from '../products/models/compatibilidad';
+import { CLAVE_PREFERENCIAS } from './preferencias-busqueda';
 import { ErrorApi } from '../products/models/error';
 import { Producto } from '../products/models/producto';
 
@@ -65,6 +72,66 @@ function respuesta(
   };
 }
 
+const AVISO =
+  'Clasificación orientativa según tu perfil y los datos de Open Food Facts. No es una garantía de que el producto sea seguro para ti: revisa siempre la etiqueta del envase.';
+
+function veredicto(codigo: string, tipo: Veredicto): VeredictoProducto {
+  return {
+    codigo_barras: codigo,
+    veredicto: tipo,
+    alergenos_en_conflicto: [],
+    trazas_en_conflicto: [],
+    dietas_no_confirmadas: [],
+    conflictos: [],
+    motivos_no_apto: [],
+    datos_suficientes: true,
+    explicacion: 'x',
+    confianza: 'alta',
+    motivos_confianza: [],
+    aviso: AVISO,
+  };
+}
+
+function personalizada(
+  tipos: Veredicto[],
+  {
+    total = tipos.length,
+    desde = 1,
+    modo = 'filtrar' as ModoBusqueda,
+    noAptos = { total: 0, ocultos: true, texto: '' },
+    interpretacion = { terminos: ['leche'], restricciones: [], no_reconocidas: [] } as
+      RespuestaBusquedaPersonalizada['interpretacion'],
+    desdeRespaldo = false,
+  } = {},
+): BusquedaPersonalizada {
+  return {
+    respuesta: {
+      consulta: 'leche',
+      interpretacion,
+      perfil_aplicado: { alergias: ['lacteos'], dietas: [], modo_estricto: false },
+      modo,
+      total,
+      total_base: total,
+      tiempo_ms: 1,
+      estado_fuente: desdeRespaldo ? 'cache' : 'online',
+      resultados: tipos.map((tipo, i) => {
+        const { producto, score, posicion } = resultado(desde + i);
+        return {
+          producto,
+          score,
+          posicion,
+          posicion_base: null,
+          veredicto: veredicto(producto.codigo_barras, tipo),
+        };
+      }),
+      no_aptos: noAptos,
+      comparacion: null,
+      aviso: AVISO,
+    },
+    desdeRespaldo,
+  };
+}
+
 function errorApi(mensaje: string): ErrorApi {
   return { status: 503, codigo: 'SOURCE_UNAVAILABLE', mensaje, requestId: 'req-1' };
 }
@@ -73,12 +140,14 @@ describe('BusquedaPage', () => {
   let fixture: ComponentFixture<BusquedaPage>;
   let page: BusquedaPage;
   let buscar: Mock<ProductsService['buscar']>;
-  let compatibles: Mock<ProductsService['compatibles']>;
+  let buscarPersonalizado: Mock<ProductsService['buscarPersonalizado']>;
   let autenticado: ReturnType<typeof signal<boolean>>;
 
   beforeEach(async () => {
+    // La página lee las preferencias guardadas al crearse.
+    localStorage.clear();
     buscar = vi.fn<ProductsService['buscar']>();
-    compatibles = vi.fn<ProductsService['compatibles']>();
+    buscarPersonalizado = vi.fn<ProductsService['buscarPersonalizado']>();
     autenticado = signal(false);
 
     await TestBed.configureTestingModule({
@@ -86,7 +155,7 @@ describe('BusquedaPage', () => {
       imports: [IonicModule.forRoot(), RouterModule],
       providers: [
         provideRouter([]),
-        { provide: ProductsService, useValue: { buscar, compatibles } },
+        { provide: ProductsService, useValue: { buscar, buscarPersonalizado } },
         { provide: AuthService, useValue: { autenticado } },
       ],
     }).compileComponents();
@@ -351,72 +420,281 @@ describe('BusquedaPage', () => {
     });
   });
 
-  describe('interruptor "Solo aptos para mí"', () => {
-    const interruptor = () => elemento().querySelector('ion-toggle.solo-aptos');
+  describe('búsqueda personalizada según el perfil', () => {
+    const interruptor = () => elemento().querySelector('ion-toggle.personalizar');
+    const segmento = () => elemento().querySelector('ion-segment.modo');
+    const chips = () => textos('.chip-veredicto');
+    const guardadas = () => JSON.parse(localStorage.getItem(CLAVE_PREFERENCIAS) ?? 'null');
 
-    it('no aparece sin sesión', () => {
-      expect(interruptor()).toBeNull();
+    function recrear(): void {
+      fixture.destroy();
+      fixture = TestBed.createComponent(BusquedaPage);
+      page = fixture.componentInstance;
+      fixture.detectChanges();
+    }
+
+    describe('sin sesión', () => {
+      it('no muestra el interruptor e invita a iniciar sesión', () => {
+        expect(interruptor()).toBeNull();
+        expect(segmento()).toBeNull();
+        expect(texto()).toContain(
+          'Inicia sesión para personalizar la búsqueda según tus alergias.',
+        );
+        expect(elemento().querySelector('.invitar-sesion a')?.getAttribute('href')).toBe(
+          '/login',
+        );
+      });
+
+      it('busca con /search aunque la preferencia guardada sea personalizar', () => {
+        localStorage.setItem(
+          CLAVE_PREFERENCIAS,
+          JSON.stringify({ personalizar: true, modo: 'filtrar' }),
+        );
+        recrear();
+        buscar.mockReturnValue(of(respuesta(rango(1, 3))));
+
+        page.buscar('leche');
+
+        expect(buscar).toHaveBeenCalledWith('leche', 20, 0);
+        expect(buscarPersonalizado).not.toHaveBeenCalled();
+        expect(chips()).toEqual([]);
+      });
     });
 
-    it('aparece con sesión, apagado, y la búsqueda sigue usando /search', () => {
-      autenticado.set(true);
-      buscar.mockReturnValue(of(respuesta(rango(1, 3))));
+    describe('con sesión', () => {
+      beforeEach(() => autenticado.set(true));
 
-      page.buscar('leche');
+      it('muestra el interruptor apagado, con aria-label, y busca con /search', () => {
+        buscar.mockReturnValue(of(respuesta(rango(1, 3))));
 
-      expect(interruptor()?.textContent?.trim()).toBe('Solo aptos para mí');
-      expect(buscar).toHaveBeenCalledWith('leche', 20, 0);
-      expect(compatibles).not.toHaveBeenCalled();
-    });
+        page.buscar('leche');
 
-    it('al activarlo repite la consulta con /compatibles y pagina con el mismo endpoint', () => {
-      autenticado.set(true);
-      buscar.mockReturnValue(of(respuesta(rango(1, 3))));
-      page.buscar('leche');
+        expect(interruptor()?.textContent?.trim()).toBe('Personalizar según mi perfil');
+        expect(interruptor()?.getAttribute('aria-label')).toBe('Personalizar según mi perfil');
+        expect(segmento()).toBeNull();
+        expect(elemento().querySelector('.invitar-sesion')).toBeNull();
+        expect(buscar).toHaveBeenCalledWith('leche', 20, 0);
+        expect(buscarPersonalizado).not.toHaveBeenCalled();
+        expect(elemento().querySelector('.aviso-orientativo')).toBeNull();
+      });
 
-      compatibles.mockReturnValueOnce(of(respuesta(rango(1, 20), 21)));
-      page.cambiarSoloAptos(true);
-      expect(compatibles).toHaveBeenCalledWith('leche', 20, 0);
-      expect(texto()).toContain('21 resultados aptos para ti para «leche»');
+      it('al activarlo repite la consulta personalizada en modo filtrar y lo recuerda', () => {
+        buscar.mockReturnValue(of(respuesta(rango(1, 3))));
+        page.buscar('leche');
+        buscarPersonalizado.mockReturnValue(of(personalizada(['apto', 'apto_con_advertencia'])));
 
-      compatibles.mockReturnValueOnce(of(respuesta(rango(21, 21), 21)));
-      page.cargarMas();
-      expect(compatibles).toHaveBeenLastCalledWith('leche', 20, 20);
-      expect(buscar).toHaveBeenCalledTimes(1);
-      expect(elemento().querySelectorAll('ion-item')).toHaveLength(21);
-    });
+        page.cambiarPersonalizar(true);
 
-    it('avisa cuando no hay productos aptos', () => {
-      autenticado.set(true);
-      page.cambiarSoloAptos(true);
-      compatibles.mockReturnValue(of(respuesta([], 0)));
+        expect(buscarPersonalizado).toHaveBeenCalledWith('leche', 'filtrar', 20, 0);
+        expect(guardadas()).toEqual({ personalizar: true, modo: 'filtrar' });
+        expect(segmento()?.getAttribute('aria-label')).toBe(
+          'Qué hacer con los productos no aptos',
+        );
+        expect(textos('ion-segment-button')).toEqual(['Ocultar no aptos', 'Mostrar al final']);
+        expect(texto()).toContain('2 resultados para «leche», según tu perfil');
+      });
 
-      page.buscar('leche');
+      it('muestra el veredicto de cada resultado con ícono y texto', () => {
+        page.cambiarPersonalizar(true);
+        buscarPersonalizado.mockReturnValue(
+          of(personalizada(['apto', 'apto_con_advertencia', 'no_apto'], { modo: 'reordenar' })),
+        );
 
-      expect(texto()).toContain('No se encontraron productos aptos para ti para «leche».');
-    });
+        page.buscar('leche');
 
-    it('al desactivarlo vuelve a /search', () => {
-      autenticado.set(true);
-      page.cambiarSoloAptos(true);
-      compatibles.mockReturnValue(of(respuesta(rango(1, 2))));
-      page.buscar('leche');
+        expect(chips()).toEqual(['Apto', 'Con advertencia', 'No apto']);
+        const clases = Array.from(elemento().querySelectorAll('.chip-veredicto')).map((c) =>
+          ['apto', 'apto-con-advertencia', 'no-apto'].find((k) => c.classList.contains(k)),
+        );
+        expect(clases).toEqual(['apto', 'apto-con-advertencia', 'no-apto']);
+        expect(elemento().querySelectorAll('.chip-veredicto ion-icon[aria-hidden="true"]')).toHaveLength(3);
+      });
 
-      buscar.mockReturnValue(of(respuesta(rango(1, 5))));
-      page.cambiarSoloAptos(false);
+      it('"Mostrar al final" repite la consulta en modo reordenar y lo recuerda', () => {
+        page.cambiarPersonalizar(true);
+        buscarPersonalizado.mockReturnValue(of(personalizada(['apto'])));
+        page.buscar('leche');
 
-      expect(buscar).toHaveBeenCalledWith('leche', 20, 0);
-      expect(elemento().querySelectorAll('ion-item')).toHaveLength(5);
-    });
+        page.cambiarModo('reordenar');
 
-    it('sin sesión busca con /search aunque haya quedado activado', () => {
-      page.cambiarSoloAptos(true);
-      buscar.mockReturnValue(of(respuesta(rango(1, 3))));
+        expect(buscarPersonalizado).toHaveBeenLastCalledWith('leche', 'reordenar', 20, 0);
+        expect(guardadas()).toEqual({ personalizar: true, modo: 'reordenar' });
+      });
 
-      page.buscar('leche');
+      it('ignora un modo inválido', () => {
+        page.cambiarModo('otro');
 
-      expect(buscar).toHaveBeenCalledWith('leche', 20, 0);
-      expect(compatibles).not.toHaveBeenCalled();
+        expect(page.modo()).toBe('filtrar');
+        expect(localStorage.getItem(CLAVE_PREFERENCIAS)).toBeNull();
+      });
+
+      it('recuerda la elección guardada al volver a la página', () => {
+        localStorage.setItem(
+          CLAVE_PREFERENCIAS,
+          JSON.stringify({ personalizar: true, modo: 'reordenar' }),
+        );
+        recrear();
+        buscarPersonalizado.mockReturnValue(of(personalizada(['apto'])));
+
+        page.buscar('leche');
+
+        expect(buscarPersonalizado).toHaveBeenCalledWith('leche', 'reordenar', 20, 0);
+        expect(buscar).not.toHaveBeenCalled();
+      });
+
+      it('funciona aunque localStorage falle', () => {
+        vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+          throw new Error('bloqueado');
+        });
+        vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+          throw new Error('bloqueado');
+        });
+        recrear();
+        buscarPersonalizado.mockReturnValue(of(personalizada(['apto'])));
+
+        page.cambiarPersonalizar(true);
+        page.buscar('leche');
+
+        expect(buscarPersonalizado).toHaveBeenCalledWith('leche', 'filtrar', 20, 0);
+        vi.restoreAllMocks();
+      });
+
+      it('muestra qué se ocultó y por qué, y el aviso orientativo', () => {
+        page.cambiarPersonalizar(true);
+        buscarPersonalizado.mockReturnValue(
+          of(
+            personalizada(['apto'], {
+              noAptos: { total: 3, ocultos: true, texto: '3 ocultos por contener lácteos.' },
+            }),
+          ),
+        );
+
+        page.buscar('leche');
+
+        expect(textos('.no-aptos[role="status"]')).toEqual(['3 ocultos por contener lácteos.']);
+        expect(textos('.aviso-orientativo[role="status"]')).toEqual([AVISO]);
+      });
+
+      it('sin no aptos no muestra el resumen, pero sí el aviso', () => {
+        page.cambiarPersonalizar(true);
+        buscarPersonalizado.mockReturnValue(of(personalizada(['apto'])));
+
+        page.buscar('leche');
+
+        expect(elemento().querySelector('.no-aptos')).toBeNull();
+        expect(textos('.aviso-orientativo')).toEqual([AVISO]);
+      });
+
+      it('si todo quedó oculto, lo explica junto al mensaje de sin resultados', () => {
+        page.cambiarPersonalizar(true);
+        buscarPersonalizado.mockReturnValue(
+          of(
+            personalizada([], {
+              noAptos: { total: 2, ocultos: true, texto: '2 ocultos por contener lácteos.' },
+            }),
+          ),
+        );
+
+        page.buscar('leche');
+
+        expect(texto()).toContain('No se encontraron productos para «leche» según tu perfil.');
+        expect(textos('.no-aptos')).toEqual(['2 ocultos por contener lácteos.']);
+        expect(textos('.aviso-orientativo')).toEqual([AVISO]);
+      });
+
+      it('muestra cómo se interpretó la consulta y lo que no se reconoció', () => {
+        page.cambiarPersonalizar(true);
+        buscarPersonalizado.mockReturnValue(
+          of(
+            personalizada(['apto'], {
+              interpretacion: {
+                terminos: ['chocolate', 'azucar'],
+                restricciones: [{ texto: 'sin leche', tipo: 'alergeno', codigo: 'lacteos' }],
+                no_reconocidas: ['sin azúcar'],
+              },
+            }),
+          ),
+        );
+
+        page.buscar('chocolate sin leche sin azúcar');
+
+        expect(textos('.interpretacion').map((t) => t.replace(/\s+/g, ' '))).toEqual([
+          'Buscamos «chocolate azucar» sin lácteos (por «sin leche»).',
+          'No reconocimos «sin azúcar» como alérgeno ni dieta: se buscó como texto.',
+        ]);
+      });
+
+      it('sin restricciones en la consulta no muestra la interpretación', () => {
+        page.cambiarPersonalizar(true);
+        buscarPersonalizado.mockReturnValue(of(personalizada(['apto'])));
+
+        page.buscar('leche');
+
+        expect(elemento().querySelector('.interpretacion')).toBeNull();
+      });
+
+      it('"Cargar más" usa la búsqueda personalizada con el mismo modo', () => {
+        page.cambiarPersonalizar(true);
+        page.cambiarModo('reordenar');
+        buscarPersonalizado.mockReturnValueOnce(
+          of(personalizada(Array(20).fill('apto'), { total: 21, modo: 'reordenar' })),
+        );
+        page.buscar('leche');
+
+        buscarPersonalizado.mockReturnValueOnce(
+          of(personalizada(['no_apto'], { total: 21, desde: 21, modo: 'reordenar' })),
+        );
+        page.cargarMas();
+
+        expect(buscarPersonalizado).toHaveBeenLastCalledWith('leche', 'reordenar', 20, 20);
+        expect(buscar).not.toHaveBeenCalled();
+        expect(elemento().querySelectorAll('ion-item')).toHaveLength(21);
+        expect(chips().at(-1)).toBe('No apto');
+      });
+
+      it('indica la revisión básica si la personalizada vino del respaldo', () => {
+        page.cambiarPersonalizar(true);
+        buscarPersonalizado.mockReturnValue(
+          of(personalizada(['apto_con_advertencia'], { desdeRespaldo: true })),
+        );
+
+        page.buscar('leche');
+
+        expect(
+          textos('.aviso-respaldo[role="status"]').map((t) => t.replace(/\s+/g, ' ')),
+        ).toEqual([
+          'El servicio de evaluación no está disponible: revisión básica con productos guardados anteriormente.',
+        ]);
+      });
+
+      it('al desactivarlo vuelve a /search, sin chips ni aviso, y lo recuerda', () => {
+        page.cambiarPersonalizar(true);
+        buscarPersonalizado.mockReturnValue(of(personalizada(['apto'])));
+        page.buscar('leche');
+
+        buscar.mockReturnValue(of(respuesta(rango(1, 5))));
+        page.cambiarPersonalizar(false);
+
+        expect(buscar).toHaveBeenCalledWith('leche', 20, 0);
+        expect(elemento().querySelectorAll('ion-item')).toHaveLength(5);
+        expect(chips()).toEqual([]);
+        expect(elemento().querySelector('.aviso-orientativo')).toBeNull();
+        expect(guardadas()).toEqual({ personalizar: false, modo: 'filtrar' });
+      });
+
+      it('descarta la respuesta tardía de la búsqueda anterior al cambiar de modo', () => {
+        const filtrar = new Subject<BusquedaPersonalizada>();
+        page.cambiarPersonalizar(true);
+        buscarPersonalizado
+          .mockReturnValueOnce(filtrar)
+          .mockReturnValueOnce(of(personalizada(['no_apto'], { modo: 'reordenar' })));
+
+        page.buscar('leche');
+        page.cambiarModo('reordenar');
+        filtrar.next(personalizada(['apto', 'apto']));
+
+        expect(chips()).toEqual(['No apto']);
+      });
     });
   });
 

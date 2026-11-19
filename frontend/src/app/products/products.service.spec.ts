@@ -225,25 +225,6 @@ describe('ProductsService', () => {
     });
   });
 
-  describe('compatibles', () => {
-    it('hace GET a /compatibles con q, limit y offset', async () => {
-      const resultado = firstValueFrom(service.compatibles('leche', 20, 40));
-
-      const req = httpMock.expectOne(
-        (r) => r.url === `${environment.apiUrl}/api/products/compatibles`,
-      );
-      expect(req.request.params.get('q')).toBe('leche');
-      expect(req.request.params.get('limit')).toBe('20');
-      expect(req.request.params.get('offset')).toBe('40');
-      req.flush(respuestaBusqueda);
-
-      await expect(resultado).resolves.toEqual({
-        respuesta: respuestaBusqueda,
-        desdeRespaldo: false,
-      });
-    });
-  });
-
   describe('compatibilidad', () => {
     const URL = `${environment.apiUrl}/api/products/7801234000018/compatibilidad`;
     const cuerpo = {

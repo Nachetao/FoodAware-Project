@@ -34,14 +34,6 @@ export class ProductsService {
   }
 
   /**
-   * Como buscar, pero solo entre los productos guardados sin alérgenos del
-   * usuario. Requiere sesión (el interceptor agrega el token).
-   */
-  compatibles(q: string, limit = 10, offset = 0): Observable<BusquedaProductos> {
-    return this.buscarEn(`${this.productsUrl}/compatibles`, q, limit, offset);
-  }
-
-  /**
    * Veredicto del motor adaptativo para el perfil del usuario, y si vino de
    * la revisión básica de respaldo. Requiere sesión.
    */
