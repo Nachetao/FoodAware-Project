@@ -1,6 +1,7 @@
-import { Component, signal } from '@angular/core';
+import { Component, DebugElement, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { Router, provideRouter } from '@angular/router';
+import { By } from '@angular/platform-browser';
+import { Router, RouterLinkActive, provideRouter } from '@angular/router';
 import { IonicModule } from '@ionic/angular/lazy';
 
 import { AuthService } from '../auth/auth.service';
@@ -52,16 +53,21 @@ describe('BarraSuperiorComponent', () => {
     fixture.detectChanges();
     return fixture.nativeElement as HTMLElement;
   };
-  // Al cargar, ion-button e ion-back-button le quitan los atributos aria al
-  // elemento exterior y los pasan al <button> de su shadowRoot. Cuándo ocurre
-  // depende del entorno, así que se busca en los dos lugares.
-  const aria = (el: Element, atributo: string) =>
-    el.getAttribute(atributo) ?? el.shadowRoot?.querySelector('button')?.getAttribute(atributo) ?? null;
-  const nombre = (el: Element) => aria(el, 'aria-label');
-  const botones = () =>
-    Array.from(raiz().querySelectorAll<HTMLElement>('ion-toolbar ion-buttons[slot="end"] ion-button'));
-  const boton = (etiqueta: string) => botones().find((b) => nombre(b) === etiqueta) ?? null;
+  // Al cargar, ion-button e ion-back-button le quitan del DOM los atributos
+  // aria y los trasladan, en un momento y a un lugar que dependen del entorno.
+  // DebugElement.attributes devuelve los atributos estáticos tal como los
+  // declara la plantilla, sin importar lo que Ionic haga después.
+  const query = (selector: string) => {
+    fixture.detectChanges();
+    return fixture.debugElement.queryAll(By.css(selector));
+  };
+  const nombre = (de: DebugElement) => de.attributes['aria-label'] ?? null;
+  const botones = () => query('ion-toolbar ion-buttons[slot="end"] ion-button');
+  const botonDe = (etiqueta: string) => botones().find((b) => nombre(b) === etiqueta) ?? null;
+  const boton = (etiqueta: string) => (botonDe(etiqueta)?.nativeElement as HTMLElement | undefined) ?? null;
   const etiquetas = () => botones().map(nombre);
+  // aria-current es un binding de RouterLinkActive; se comprueba su estado.
+  const activo = (etiqueta: string) => botonDe(etiqueta)?.injector.get(RouterLinkActive).isActive;
 
   it('muestra el título', () => {
     expect(raiz().querySelector('ion-title')?.textContent?.trim()).toBe('Métricas');
@@ -111,17 +117,15 @@ describe('BarraSuperiorComponent', () => {
     await TestBed.inject(Router).navigateByUrl('/metricas');
     await fixture.whenStable();
 
-    expect(aria(boton('Ver métricas')!, 'aria-current')).toBe('page');
-    expect(aria(boton('Buscar productos')!, 'aria-current')).toBeNull();
+    expect(activo('Ver métricas')).toBe(true);
+    expect(activo('Buscar productos')).toBe(false);
   });
 
   it('con atras muestra el botón volver, con aria-label y la ruta por defecto', () => {
-    const volver = raiz().querySelector('ion-buttons[slot="start"] ion-back-button') as
-      | (HTMLElement & { defaultHref?: string })
-      | null;
+    const [volver] = query('ion-buttons[slot="start"] ion-back-button');
 
     expect(volver && nombre(volver)).toBe('Volver');
-    expect(volver?.defaultHref).toBe('/home');
+    expect((volver?.nativeElement as { defaultHref?: string } | undefined)?.defaultHref).toBe('/home');
   });
 
   it('sin atras no hay botón volver', () => {
