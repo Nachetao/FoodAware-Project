@@ -19,6 +19,11 @@ export interface Usuario {
   rol: Rol;
 }
 
+/** Lo que el usuario puede cambiar de su perfil. */
+export type CambiosPerfil = Partial<
+  Pick<Usuario, 'nombre' | 'alergias' | 'dietas' | 'modo_estricto'>
+>;
+
 export interface DatosRegistro {
   nombre: string;
   correo: string;
@@ -116,13 +121,20 @@ export class AuthService {
     );
   }
 
-  actualizarAlergias(alergias: AllergenCode[]): Observable<Usuario> {
-    return this.http
-      .put<Usuario>(`${this.api}/usuarios/me/alergias`, { alergias })
-      .pipe(
-        tap((usuario) => this.usuario.set(usuario)),
-        catchError((error: HttpErrorResponse) => throwError(() => aErrorApi(error))),
-      );
+  /** Edita el perfil (PATCH): solo cambian los campos que vienen. */
+  actualizarPerfil(cambios: CambiosPerfil): Observable<Usuario> {
+    return this.http.patch<Usuario>(`${this.api}/usuarios/me`, cambios).pipe(
+      tap((usuario) => this.usuario.set(usuario)),
+      catchError((error: HttpErrorResponse) => throwError(() => aErrorApi(error))),
+    );
+  }
+
+  /** Borra la cuenta y sus datos en el backend, y cierra la sesión. */
+  borrarCuenta(): Observable<void> {
+    return this.http.delete<void>(`${this.api}/usuarios/me`).pipe(
+      tap(() => this.cerrarSesion()),
+      catchError((error: HttpErrorResponse) => throwError(() => aErrorApi(error))),
+    );
   }
 
   cerrarSesion(): void {

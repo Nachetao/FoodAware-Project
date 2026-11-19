@@ -95,6 +95,59 @@ describe('Autenticación', () => {
       expect(localStorage.getItem('foodaware.token')).toBeNull();
     });
 
+    it('actualizarPerfil hace PATCH con los cambios y actualiza el usuario', async () => {
+      await iniciarSesion();
+
+      const resultado = firstValueFrom(auth.actualizarPerfil({ dietas: ['vegano'], modo_estricto: true }));
+      const req = httpMock.expectOne(`${API}/usuarios/me`);
+      expect(req.request.method).toBe('PATCH');
+      expect(req.request.body).toEqual({ dietas: ['vegano'], modo_estricto: true });
+      const actualizado: Usuario = { ...ANA, dietas: ['vegano'], modo_estricto: true };
+      req.flush(actualizado);
+
+      await expect(resultado).resolves.toEqual(actualizado);
+      expect(auth.usuario()).toEqual(actualizado);
+    });
+
+    it('actualizarPerfil convierte el error en ErrorApi', async () => {
+      await iniciarSesion();
+
+      const resultado = firstValueFrom(auth.actualizarPerfil({ nombre: '' }));
+      httpMock
+        .expectOne(`${API}/usuarios/me`)
+        .flush(
+          { statusCode: 400, message: ['El nombre no puede quedar vacío'] },
+          { status: 400, statusText: 'Bad Request' },
+        );
+
+      await expect(resultado).rejects.toMatchObject({ status: 400, mensaje: 'El nombre no puede quedar vacío' });
+      expect(auth.usuario()).toEqual(ANA);
+    });
+
+    it('borrarCuenta hace DELETE y cierra la sesión', async () => {
+      await iniciarSesion();
+
+      const resultado = firstValueFrom(auth.borrarCuenta(), { defaultValue: undefined });
+      const req = httpMock.expectOne(`${API}/usuarios/me`);
+      expect(req.request.method).toBe('DELETE');
+      req.flush(null, { status: 204, statusText: 'No Content' });
+      await resultado;
+
+      expect(auth.autenticado()).toBe(false);
+      expect(auth.usuario()).toBeNull();
+      expect(localStorage.getItem('foodaware.token')).toBeNull();
+    });
+
+    it('si borrarCuenta falla, la sesión sigue abierta', async () => {
+      await iniciarSesion();
+
+      const resultado = firstValueFrom(auth.borrarCuenta(), { defaultValue: undefined });
+      httpMock.expectOne(`${API}/usuarios/me`).error(new ProgressEvent('error'));
+
+      await expect(resultado).rejects.toMatchObject({ status: 0 });
+      expect(auth.autenticado()).toBe(true);
+    });
+
     it('funciona aunque localStorage falle', async () => {
       vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
         throw new Error('almacenamiento bloqueado');
