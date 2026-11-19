@@ -114,3 +114,53 @@ ion-thumbnail {
     color: var(--ion-color-primary);
   }
 }
+
+// Estados del veredicto del motor (franja del detalle y chips de la
+// búsqueda). Cada estado tiene además su ícono y su texto: no depende solo del
+// color.
+.apto {
+  background: var(--ion-color-success);
+  color: var(--ion-color-success-contrast);
+}
+
+// Advertencia, no prohibición; misma familia ámbar que los alérgenos. El borde
+// punteado la distingue también sin color.
+.apto-con-advertencia {
+  border: 2px dashed var(--app-alerta-borde);
+  background: var(--app-alerta-fondo);
+  color: var(--app-alerta-texto);
+}
+
+.no-apto {
+  background: var(--ion-color-danger);
+  color: var(--ion-color-danger-contrast);
+}
+
+// Línea de texto con un ícono al inicio (confianza, avisos, resúmenes).
+.fila-icono {
+  display: flex;
+  gap: var(--app-espacio-2);
+  align-items: flex-start;
+  margin: var(--app-espacio-2) 0;
+  font-size: 14px;
+  line-height: 1.4;
+
+  ion-icon {
+    flex-shrink: 0;
+    margin-top: 1px;
+    font-size: 18px;
+  }
+}
+
+// Aviso permanente de que la clasificación es orientativa (detalle y
+// búsqueda personalizada): siempre visible, sin competir con el veredicto.
+.aviso-orientativo {
+  padding: var(--app-espacio-2) var(--app-espacio-3);
+  border-radius: var(--app-espacio-3);
+  background: var(--ion-color-tertiary);
+  color: var(--ion-color-tertiary-contrast);
+
+  ion-icon {
+    color: var(--ion-color-primary);
+  }
+}

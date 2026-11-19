@@ -4,7 +4,8 @@ import { ActivatedRoute } from '@angular/router';
 import { AuthService } from '../auth/auth.service';
 import { ProductsService } from '../products/products.service';
 import { etiquetaAlergeno, etiquetaDieta } from '../products/models/alergenos';
-import { Compatibilidad, Veredicto } from '../products/models/compatibilidad';
+import { Compatibilidad } from '../products/models/compatibilidad';
+import { presentarConfianza, presentarVeredicto } from '../products/models/veredicto';
 import { ErrorApi } from '../products/models/error';
 import { Producto } from '../products/models/producto';
 import { esProblemaDeAlergenos, explicarProblema } from '../products/models/problemas';
@@ -28,25 +29,31 @@ export class ProductoPage implements OnInit {
   readonly error = signal<ErrorApi | null>(null);
   readonly noEncontrado = computed(() => this.error()?.codigo === 'NOT_FOUND');
 
-  // Franja de 3 estados (verde, ámbar, roja): solo con sesión. Si la consulta
-  // falla, el detalle se muestra igual, sin franja.
+  // Sin sesión no hay veredicto: se invita a iniciar sesión.
+  readonly conSesion = computed(() => this.auth.autenticado());
+
+  // Veredicto del motor: solo con sesión. Si la consulta falla, el detalle se
+  // muestra igual, sin veredicto.
   private readonly compatibilidad = signal<Compatibilidad | null>(null);
-  readonly franja = computed(() => {
-    const c = this.auth.autenticado() ? this.compatibilidad() : null;
+  private readonly compatibilidadDesdeRespaldo = signal(false);
+  readonly veredicto = computed(() => {
+    const c = this.conSesion() ? this.compatibilidad() : null;
     if (!c) {
       return null;
     }
-    const trazas = c.trazas_en_conflicto.map(etiquetaAlergeno).join(', ');
-    // Ámbar: qué impide confirmar que es apto.
-    const advertencias = [
-      trazas ? `puede contener ${trazas}` : '',
-      c.datos_suficientes === false ? 'datos insuficientes' : '',
-    ].filter(Boolean);
+    const confianza = presentarConfianza(c.confianza);
     return {
-      veredicto: veredictoDe(c),
-      conflictos: c.alergenos_en_conflicto.map(etiquetaAlergeno).join(', '),
-      trazas,
-      advertencia: advertencias.join('; ') || 'no se pudo confirmar',
+      ...presentarVeredicto(c.veredicto),
+      // Un no apto se anuncia de inmediato; los otros dos, sin interrumpir.
+      rol: c.veredicto === 'no_apto' ? 'alert' : 'status',
+      explicacion: c.explicacion,
+      confianza,
+      // Puntos de la escala de confianza (decorativos: el texto la dice).
+      puntos: [1, 2, 3].map((n) => n <= confianza.nivel),
+      desdeRespaldo:
+        this.compatibilidadDesdeRespaldo() ||
+        c.motivos_confianza.includes('evaluacion_de_respaldo'),
+      aviso: c.aviso,
     };
   });
 
@@ -113,6 +120,7 @@ export class ProductoPage implements OnInit {
 
   private cargarCompatibilidad(): void {
     this.compatibilidad.set(null);
+    this.compatibilidadDesdeRespaldo.set(false);
     if (!this.auth.autenticado()) {
       return;
     }
@@ -121,27 +129,14 @@ export class ProductoPage implements OnInit {
       .compatibilidad(codigo)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: ({ compatibilidad }) => {
+        next: ({ compatibilidad, desdeRespaldo }) => {
           // Si la ruta ya cambió de producto, esta respuesta no le corresponde.
           if (this.codigo === codigo) {
             this.compatibilidad.set(compatibilidad);
+            this.compatibilidadDesdeRespaldo.set(desdeRespaldo);
           }
         },
         error: () => undefined,
       });
   }
-}
-
-/**
- * Veredicto de la respuesta. Si el backend todavía no lo envía (despliegue a
- * medias), se deriva de forma conservadora: nunca "apto" con conflictos.
- */
-function veredictoDe(c: Compatibilidad): Veredicto {
-  if (c.veredicto) {
-    return c.veredicto;
-  }
-  if (c.alergenos_en_conflicto.length > 0) {
-    return 'no_apto';
-  }
-  return c.apto && c.trazas_en_conflicto.length === 0 ? 'apto' : 'apto_con_advertencia';
 }

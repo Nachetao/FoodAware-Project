@@ -57,33 +57,53 @@
         </div>
       </div>
 
-      @if (franja(); as f) {
-        @switch (f.veredicto) {
-          @case ('apto') {
-            <div class="franja apto" role="status">
-              <ion-icon name="checkmark-circle-outline" aria-hidden="true"></ion-icon>
-              <span>Apto para ti</span>
+      @if (veredicto(); as v) {
+        <section class="veredicto" aria-labelledby="titulo-veredicto">
+          <!-- Cada estado tiene su título e ícono: se distingue también sin color. -->
+          <div class="franja" [class]="v.clase" [attr.role]="v.rol">
+            <ion-icon [name]="v.icono" aria-hidden="true"></ion-icon>
+            <div>
+              <h2 id="titulo-veredicto" class="franja-titulo">{{ v.titulo }}</h2>
+              <p class="explicacion">{{ v.explicacion }}</p>
             </div>
+          </div>
+
+          <p class="fila-icono confianza">
+            <span class="puntos" aria-hidden="true">
+              @for (lleno of v.puntos; track $index) {
+                <span class="punto" [class.lleno]="lleno"></span>
+              }
+            </span>
+            <span>
+              <strong>Confianza {{ v.confianza.etiqueta.toLowerCase() }}:</strong>
+              {{ v.confianza.frase }}
+            </span>
+          </p>
+
+          @if (v.desdeRespaldo) {
+            <p class="fila-icono revision-basica" role="status">
+              <ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon>
+              <span>Revisión básica: el servicio de evaluación no estaba disponible.</span>
+            </p>
           }
-          @case ('apto_con_advertencia') {
-            <div class="franja apto-con-advertencia" role="status">
-              <ion-icon name="warning-outline" aria-hidden="true"></ion-icon>
-              <span>Apto con advertencia: {{ f.advertencia }}</span>
-            </div>
-          }
-          @default {
-            <div class="franja no-apto" role="alert">
-              <ion-icon name="close-circle-outline" aria-hidden="true"></ion-icon>
-              <span>{{ f.conflictos ? 'No apto: contiene ' + f.conflictos : 'No apto' }}</span>
-            </div>
-            @if (f.trazas) {
-              <div class="franja trazas-en-conflicto" role="status">
-                <ion-icon name="warning-outline" aria-hidden="true"></ion-icon>
-                <span>Puede contener {{ f.trazas }}</span>
-              </div>
-            }
-          }
-        }
+
+          <p class="fila-icono aviso-orientativo" role="status">
+            <ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon>
+            <span>{{ v.aviso }}</span>
+          </p>
+
+          <a class="editar-alergias" routerLink="/perfil">
+            <ion-icon name="create-outline" aria-hidden="true"></ion-icon>
+            Editar mis alergias
+          </a>
+        </section>
+      } @else if (!conSesion()) {
+        <p class="fila-icono invitar-sesion">
+          <ion-icon name="person-circle-outline" aria-hidden="true"></ion-icon>
+          <span>
+            <a routerLink="/login">Inicia sesión</a> para saber si es apto para ti.
+          </span>
+        </p>
       }
 
       <section aria-labelledby="titulo-alergenos">
