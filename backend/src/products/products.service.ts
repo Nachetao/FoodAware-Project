@@ -5,11 +5,21 @@ import { Producto } from "./contrato/producto";
 import { ContratoHttpException } from "./contrato-http.exception";
 import { FastApiClientService } from "./fastapi-client.service";
 import { FuenteDatos } from "./fuente-datos";
-import { ProductsRepository, ResultadoRespaldo } from "./products.repository";
+import {
+  ProductsRepository,
+  ResultadoPersonalizadoRespaldo,
+  ResultadoRespaldo,
+} from "./products.repository";
 import { Compatibilidad } from "./dto/compatibilidad.dto";
-import { PerfilRestricciones } from "./contrato/adaptativo";
+import { BusquedaPersonalizada } from "./dto/busqueda-personalizada.dto";
+import { ModoBusqueda, PerfilRestricciones } from "./contrato/adaptativo";
 import { AllergenCode } from "./contrato/enums";
-import { veredictoDeRespaldo } from "./compatibilidad-local";
+import {
+  AVISO,
+  textoNoAptos,
+  veredictoDeRespaldo,
+} from "./compatibilidad-local";
+import { tokensRespaldo } from "./busqueda-respaldo";
 import { UsersService } from "../users/users.service";
 
 // Errores de FastAPI (ya con los reintentos agotados) que usan el respaldo:
@@ -19,6 +29,11 @@ const STATUS_CON_RESPALDO = new Set([500, 502, 503, 504]);
 
 export interface BusquedaProductos {
   respuesta: RespuestaBusqueda;
+  fuente: FuenteDatos;
+}
+
+export interface BusquedaPersonalizadaConFuente {
+  respuesta: BusquedaPersonalizada;
   fuente: FuenteDatos;
 }
 
@@ -64,33 +79,229 @@ export class ProductsService {
         requestId,
         error,
       );
+      // En respaldo veredicto nunca es "apto", así que apto siempre es false.
+      const veredicto = veredictoDeRespaldo(producto, alergias);
       return {
-        respuesta: veredictoDeRespaldo(producto, alergias),
+        respuesta: { ...veredicto, apto: veredicto.veredicto === "apto" },
         fuente: "respaldo",
       };
     }
   }
 
   /**
-   * Productos guardados que coinciden con la búsqueda y no tienen ningún
-   * alérgeno del usuario, ni como ingrediente ni como traza ("solo aptos" no
-   * muestra productos con advertencia), con la forma de RespuestaBusqueda
-   * (estado_fuente "cache": vienen de la base).
+   * Búsqueda personalizada del motor adaptativo con el perfil del usuario.
+   * Guarda los productos encontrados. Si el motor falla (500, 502, 503 o
+   * 504), ordena las coincidencias guardadas con la regla local; si la base
+   * tampoco tiene coincidencias, se mantiene el error.
+   */
+  async buscarPersonalizado(
+    params: ParametrosBusqueda,
+    modo: ModoBusqueda,
+    usuarioId: string,
+    requestId: string,
+  ): Promise<BusquedaPersonalizadaConFuente> {
+    const { alergias } = await this.usersService.perfil(usuarioId);
+    const perfil = perfilDe(alergias);
+    try {
+      const respuesta = await this.fastApiClient.buscarPersonalizado(
+        { consulta: params.q, perfil, modo, ...paginacion(params) },
+        requestId,
+      );
+      await this.guardarSinRomper(
+        respuesta.resultados.map((r) => r.producto),
+        requestId,
+      );
+      return { respuesta, fuente: "fastapi" };
+    } catch (error) {
+      return {
+        respuesta: await this.personalizadoEnRespaldo(
+          params,
+          modo,
+          perfil,
+          requestId,
+          error,
+        ),
+        fuente: "respaldo",
+      };
+    }
+  }
+
+  /**
+   * "Solo aptos para mí": la búsqueda personalizada en modo filtrar y con
+   * modo estricto (solo en esta llamada), así las trazas y los datos
+   * insuficientes también quedan ocultos. Responde con la forma de
+   * RespuestaBusqueda. Si el motor falla, busca en los productos guardados
+   * sin alérgenos ni trazas del usuario.
    */
   async compatibles(
     params: ParametrosBusqueda,
     usuarioId: string,
-  ): Promise<RespuestaBusqueda> {
+    requestId: string,
+  ): Promise<BusquedaProductos> {
     const { alergias } = await this.usersService.perfil(usuarioId);
+    let respuesta: BusquedaPersonalizada;
+    try {
+      respuesta = await this.fastApiClient.buscarPersonalizado(
+        {
+          consulta: params.q,
+          perfil: { ...perfilDe(alergias), modo_estricto: true },
+          modo: "filtrar",
+          ...paginacion(params),
+        },
+        requestId,
+      );
+    } catch (error) {
+      return {
+        respuesta: await this.compatiblesEnRespaldo(
+          params,
+          alergias,
+          requestId,
+          error,
+        ),
+        fuente: "respaldo",
+      };
+    }
+
+    await this.guardarSinRomper(
+      respuesta.resultados.map((r) => r.producto),
+      requestId,
+    );
+    // Con modo estricto y sin dietas, filtrar solo deja "apto". Si algo más
+    // llegara, no se muestra: "solo aptos" nunca muestra una advertencia.
+    const aptos = respuesta.resultados.filter(
+      (r) => r.veredicto.veredicto === "apto",
+    );
+    const descartados = respuesta.resultados.length - aptos.length;
+    if (descartados > 0) {
+      this.logger.warn(
+        `[${requestId}] El motor devolvió ${descartados} resultados que no son "apto" en /compatibles; se ocultan`,
+      );
+    }
+    return {
+      respuesta: {
+        consulta: params.q,
+        total: respuesta.total - descartados,
+        tiempo_ms: respuesta.tiempo_ms,
+        resultados: aptos.map(({ producto, score, posicion }) => ({
+          producto,
+          score,
+          posicion,
+        })),
+        estado_fuente: respuesta.estado_fuente,
+      },
+      fuente: "fastapi",
+    };
+  }
+
+  /**
+   * Respaldo de /compatibles: productos guardados sin ningún alérgeno del
+   * usuario, ni como ingrediente ni como traza.
+   */
+  private async compatiblesEnRespaldo(
+    params: ParametrosBusqueda,
+    alergias: AllergenCode[],
+    requestId: string,
+    error: unknown,
+  ): Promise<RespuestaBusqueda> {
+    const falla = this.fallaConRespaldo(error);
     const inicio = performance.now();
-    const { total, resultados } =
-      await this.productsRepository.buscarCompatibles(params, alergias);
+    let resultado: ResultadoRespaldo;
+    try {
+      resultado = await this.productsRepository.buscarCompatibles(
+        params,
+        alergias,
+      );
+    } catch (errorBase) {
+      this.logger.error(
+        `[${requestId}] ${falla} y el respaldo de /compatibles también falló: ${errorBase.message}`,
+      );
+      throw error;
+    }
+    this.logger.warn(
+      `[${requestId}] ${falla}; /compatibles responde desde la base: ${resultado.resultados.length} de ${resultado.total} productos`,
+    );
     return {
       consulta: params.q,
-      total,
-      tiempo_ms: Math.round((performance.now() - inicio) * 1000) / 1000,
-      resultados,
+      total: resultado.total,
+      tiempo_ms: msDesde(inicio),
+      resultados: resultado.resultados,
       estado_fuente: "cache",
+    };
+  }
+
+  /**
+   * Respaldo de la búsqueda personalizada: coincidencias guardadas con el
+   * veredicto de la regla local (nunca "apto"). No interpreta restricciones
+   * de la consulta ("sin leche") ni compara con el ranking base.
+   */
+  private async personalizadoEnRespaldo(
+    params: ParametrosBusqueda,
+    modo: ModoBusqueda,
+    perfil: PerfilRestricciones,
+    requestId: string,
+    error: unknown,
+  ): Promise<BusquedaPersonalizada> {
+    const falla = this.fallaConRespaldo(error);
+    const inicio = performance.now();
+    const { alergias } = perfil;
+
+    let resultado: ResultadoPersonalizadoRespaldo;
+    try {
+      resultado = await this.productsRepository.buscarPersonalizadoRespaldo(
+        params,
+        alergias,
+        modo,
+      );
+    } catch (errorBase) {
+      this.logger.error(
+        `[${requestId}] ${falla} y el respaldo de la búsqueda personalizada también falló: ${errorBase.message}`,
+      );
+      throw error;
+    }
+
+    if (resultado.total_base === 0) {
+      this.logger.warn(
+        `[${requestId}] ${falla} y el respaldo no tiene coincidencias; se mantiene el error`,
+      );
+      throw error;
+    }
+
+    this.logger.warn(
+      `[${requestId}] ${falla}; búsqueda personalizada desde la base: ${resultado.resultados.length} de ${resultado.total} productos`,
+    );
+    const ocultos = modo === "filtrar";
+    return {
+      consulta: params.q,
+      interpretacion: {
+        terminos: tokensRespaldo(params.q),
+        restricciones: [],
+        no_reconocidas: [],
+      },
+      perfil_aplicado: perfil,
+      modo,
+      total: resultado.total,
+      total_base: resultado.total_base,
+      tiempo_ms: msDesde(inicio),
+      estado_fuente: "cache",
+      resultados: resultado.resultados.map(({ producto, score, posicion }) => ({
+        producto,
+        score,
+        posicion,
+        posicion_base: null,
+        veredicto: veredictoDeRespaldo(producto, alergias),
+      })),
+      no_aptos: {
+        total: resultado.no_aptos,
+        ocultos,
+        motivos: resultado.motivos.map(({ codigo, cantidad }) => ({
+          tipo: "alergeno" as const,
+          codigo,
+          cantidad,
+        })),
+        texto: textoNoAptos(resultado.no_aptos, resultado.motivos, ocultos),
+      },
+      comparacion: null,
+      aviso: AVISO,
     };
   }
 
@@ -249,4 +460,12 @@ export class ProductsService {
  */
 export function perfilDe(alergias: AllergenCode[]): PerfilRestricciones {
   return { alergias, dietas: [], modo_estricto: false };
+}
+
+function paginacion({ limit, offset }: ParametrosBusqueda) {
+  return { limit, offset };
+}
+
+function msDesde(inicio: number): number {
+  return Math.round((performance.now() - inicio) * 1000) / 1000;
 }

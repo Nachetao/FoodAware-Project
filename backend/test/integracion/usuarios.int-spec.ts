@@ -289,7 +289,7 @@ describe("Integración: perfil, alergias y compatibilidad (con JWT)", () => {
     });
   });
 
-  it("compatibles: excluye los productos con alérgenos o trazas del usuario", async () => {
+  it("compatibles sin motor: excluye los guardados con alérgenos o trazas del usuario", async () => {
     for (const p of [
       conAlergenos("7801234000018", "Galletas de avena con leche", [
         AllergenCode.LACTEOS,
@@ -305,18 +305,19 @@ describe("Integración: perfil, alergias y compatibilidad (con JWT)", () => {
     ]) {
       productos.productos.set(p.codigo_barras, p);
     }
+    await fastapi.apagar();
 
     const res = await request(servidor())
       .get("/api/products/compatibles?q=galletas")
       .set("Authorization", token());
 
     expect(res.status).toBe(200);
+    expect(res.headers["x-fuente-datos"]).toBe("respaldo");
     expect(res.body.estado_fuente).toBe("cache");
     expect(res.body.total).toBe(2);
     expect(
       res.body.resultados.map((r) => r.producto.codigo_barras).sort(),
     ).toEqual(["7801234000025", "7801234000032"]);
-    expect(fastapi.peticiones).toHaveLength(0);
   });
 
   it("compatibles valida la consulta como la búsqueda (422)", async () => {

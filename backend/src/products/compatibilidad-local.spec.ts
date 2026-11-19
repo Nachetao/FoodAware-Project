@@ -1,6 +1,8 @@
 import {
   AVISO,
+  enumerar,
   evaluarCompatibilidad,
+  textoNoAptos,
   veredictoDeRespaldo,
 } from "./compatibilidad-local";
 import { AllergenCode } from "./contrato/enums";
@@ -106,7 +108,6 @@ describe("veredictoDeRespaldo", () => {
     expect(veredictoDeRespaldo(galletas, [LACTEOS, MANI])).toEqual({
       codigo_barras: "7801234000018",
       veredicto: "no_apto",
-      apto: false,
       alergenos_en_conflicto: [LACTEOS],
       trazas_en_conflicto: [MANI],
       dietas_no_confirmadas: [],
@@ -128,7 +129,7 @@ describe("veredictoDeRespaldo", () => {
     const veredicto = veredictoDeRespaldo(galletas, [SOYA]);
 
     expect(veredicto.veredicto).toBe("apto_con_advertencia");
-    expect(veredicto.apto).toBe(false);
+    expect(veredicto).not.toHaveProperty("apto");
     expect(veredicto.motivos_no_apto).toEqual([]);
     expect(veredicto.explicacion).toContain(
       "No encontramos tus alérgenos, pero sin el servicio de evaluación no podemos confirmarlo.",
@@ -210,5 +211,56 @@ describe("veredictoDeRespaldo", () => {
     expect(veredicto.explicacion).toContain(
       "No podemos revisarlo bien: sus datos están incompletos.",
     );
+  });
+});
+
+describe("textoNoAptos", () => {
+  it.each([
+    [0, [], true, "No hay productos ocultos."],
+    [0, [], false, "No hay productos no aptos."],
+    [1, [{ codigo: MANI, cantidad: 1 }], true, "1 oculto por contener maní."],
+    [
+      25,
+      [{ codigo: LACTEOS, cantidad: 25 }],
+      true,
+      "25 ocultos por contener lácteos.",
+    ],
+    [
+      3,
+      [
+        { codigo: LACTEOS, cantidad: 2 },
+        { codigo: MANI, cantidad: 1 },
+      ],
+      true,
+      "3 ocultos: 2 por contener lácteos y 1 por contener maní.",
+    ],
+    [
+      2,
+      [{ codigo: SOYA, cantidad: 2 }],
+      false,
+      "2 no aptos al final por contener soya.",
+    ],
+    [
+      1,
+      [{ codigo: GLUTEN, cantidad: 1 }],
+      false,
+      "1 no apto al final por contener gluten.",
+    ],
+  ])(
+    "con %i no aptos y %j (ocultos: %s): %s",
+    (total, motivos, ocultos, texto) => {
+      expect(textoNoAptos(total, motivos, ocultos)).toBe(texto);
+    },
+  );
+});
+
+describe("enumerar", () => {
+  it.each([
+    [[], ""],
+    [["maní"], "maní"],
+    [["maní", "soya"], "maní y soya"],
+    [["maní", "soya", "lácteos"], "maní, soya y lácteos"],
+  ])("%j → %s", (partes, texto) => {
+    expect(enumerar(partes)).toBe(texto);
   });
 });

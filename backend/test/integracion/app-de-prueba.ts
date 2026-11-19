@@ -11,7 +11,11 @@ import {
 } from "../../src/products/contrato/busqueda";
 import { Producto } from "../../src/products/contrato/producto";
 import { Product } from "../../src/products/entities/product.entity";
-import { ResultadoRespaldo } from "../../src/products/products.repository";
+import {
+  ResultadoPersonalizadoRespaldo,
+  ResultadoRespaldo,
+} from "../../src/products/products.repository";
+import { ModoBusqueda } from "../../src/products/contrato/adaptativo";
 import { ProductsRepository } from "../../src/products/products.repository";
 import { User } from "../../src/users/user.entity";
 import { AllergenCode } from "../../src/products/contrato/enums";
@@ -23,7 +27,11 @@ import { Food } from "../../src/foods/entities/food.entity";
  */
 export class ProductosEnMemoria implements Pick<
   ProductsRepository,
-  "guardar" | "buscarRespaldo" | "buscarPorCodigo" | "buscarCompatibles"
+  | "guardar"
+  | "buscarRespaldo"
+  | "buscarPorCodigo"
+  | "buscarCompatibles"
+  | "buscarPersonalizadoRespaldo"
 > {
   readonly productos = new Map<string, Producto>();
 
@@ -52,6 +60,53 @@ export class ProductosEnMemoria implements Pick<
     return {
       total: compatibles.length,
       resultados: compatibles
+        .slice(params.offset, params.offset + params.limit)
+        .map((r, i) => ({ ...r, posicion: params.offset + i + 1 })),
+    };
+  }
+
+  /** Igual que el SQL real: orden por la regla local y luego por score. */
+  async buscarPersonalizadoRespaldo(
+    params: ParametrosBusqueda,
+    alergias: AllergenCode[],
+    modo: ModoBusqueda,
+  ): Promise<ResultadoPersonalizadoRespaldo> {
+    const delUsuario = new Set<string>(alergias);
+    const noApto = (p: Producto) => p.alergenos.some((a) => delUsuario.has(a));
+    const rango = (p: Producto) => {
+      if (noApto(p)) return 2;
+      const advertencia =
+        p.trazas.some((a) => delUsuario.has(a)) ||
+        p.ingredientes.length === 0 ||
+        p.calidad.completitud < 0.5;
+      return delUsuario.size > 0 && advertencia ? 1 : 0;
+    };
+    const { resultados: todos } = await this.buscarRespaldo({
+      ...params,
+      limit: 1000,
+      offset: 0,
+    });
+    const noAptos = todos.filter((r) => noApto(r.producto));
+    const cantidades = new Map<AllergenCode, number>();
+    for (const { producto } of noAptos) {
+      for (const a of producto.alergenos.filter((a) => delUsuario.has(a))) {
+        cantidades.set(a, (cantidades.get(a) ?? 0) + 1);
+      }
+    }
+    const visibles = (
+      modo === "filtrar" ? todos.filter((r) => !noApto(r.producto)) : todos
+    ).sort(
+      (a, b) => rango(a.producto) - rango(b.producto) || b.score - a.score,
+    );
+    return {
+      total: visibles.length,
+      total_base: todos.length,
+      no_aptos: noAptos.length,
+      motivos: [...cantidades].map(([codigo, cantidad]) => ({
+        codigo,
+        cantidad,
+      })),
+      resultados: visibles
         .slice(params.offset, params.offset + params.limit)
         .map((r, i) => ({ ...r, posicion: params.offset + i + 1 })),
     };

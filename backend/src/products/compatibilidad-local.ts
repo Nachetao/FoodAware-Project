@@ -6,9 +6,9 @@ import {
 import { AllergenCode } from "./contrato/enums";
 import { Producto } from "./contrato/producto";
 import {
-  Compatibilidad,
   EVALUACION_DE_RESPALDO,
   MotivoConfianzaBackend,
+  VeredictoBackend,
 } from "./dto/compatibilidad.dto";
 
 // Regla local de compatibilidad: solo se usa como respaldo cuando el motor
@@ -116,7 +116,7 @@ export function evaluarCompatibilidad(
 export function veredictoDeRespaldo(
   producto: Producto,
   alergias: AllergenCode[],
-): Compatibilidad {
+): VeredictoBackend {
   const local = evaluarCompatibilidad(producto, alergias);
   const veredicto: TipoVeredicto =
     local.veredicto === "apto" ? "apto_con_advertencia" : local.veredicto;
@@ -149,7 +149,6 @@ export function veredictoDeRespaldo(
   return {
     codigo_barras: producto.codigo_barras,
     veredicto,
-    apto: false,
     alergenos_en_conflicto: local.alergenos_en_conflicto,
     trazas_en_conflicto: local.trazas_en_conflicto,
     dietas_no_confirmadas: [],
@@ -222,9 +221,44 @@ function explicacionDeRespaldo(
 }
 
 /** "maní", "maní y lácteos", "maní, soya y lácteos". */
+export function enumerar(partes: string[]): string {
+  return partes.length > 1
+    ? `${partes.slice(0, -1).join(", ")} y ${partes[partes.length - 1]}`
+    : (partes[0] ?? "");
+}
+
 function lista(codigos: AllergenCode[]): string {
-  const nombres = codigos.map((c) => ETIQUETAS[c]);
-  return nombres.length > 1
-    ? `${nombres.slice(0, -1).join(", ")} y ${nombres[nombres.length - 1]}`
-    : nombres[0];
+  return enumerar(codigos.map((c) => ETIQUETAS[c]));
+}
+
+/** Cuántos productos no aptos hay por cada alérgeno del usuario. */
+export interface ConteoAlergeno {
+  codigo: AllergenCode;
+  cantidad: number;
+}
+
+/**
+ * Resumen de los no aptos de la búsqueda personalizada de respaldo, con el
+ * mismo estilo que el texto del motor: "25 ocultos por contener lácteos." o
+ * "3 ocultos: 2 por contener lácteos y 1 por contener maní.". Un producto con
+ * dos alérgenos cuenta en los dos.
+ */
+export function textoNoAptos(
+  total: number,
+  motivos: ConteoAlergeno[],
+  ocultos: boolean,
+): string {
+  if (total === 0) {
+    return ocultos ? "No hay productos ocultos." : "No hay productos no aptos.";
+  }
+  const cuantos = ocultos
+    ? `${total} ${total === 1 ? "oculto" : "ocultos"}`
+    : `${total} ${total === 1 ? "no apto" : "no aptos"} al final`;
+  if (motivos.length === 1) {
+    return `${cuantos} por contener ${ETIQUETAS[motivos[0].codigo]}.`;
+  }
+  const partes = motivos.map(
+    (m) => `${m.cantidad} por contener ${ETIQUETAS[m.codigo]}`,
+  );
+  return `${cuantos}: ${enumerar(partes)}.`;
 }

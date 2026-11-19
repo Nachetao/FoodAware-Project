@@ -14,19 +14,12 @@ export const MOTIVOS_CONFIANZA_BACKEND = [
 export type MotivoConfianzaBackend = (typeof MOTIVOS_CONFIANZA_BACKEND)[number];
 
 /**
- * Respuesta de GET /api/products/:codigo_barras/compatibilidad: el Veredicto
- * del motor adaptativo más el campo apto que ya usaba el frontend.
+ * Veredicto que responde el backend: el del motor adaptativo o, si el motor
+ * no está disponible, el de la regla local (con "evaluacion_de_respaldo").
  */
-export class Compatibilidad extends OmitType(Veredicto, [
+export class VeredictoBackend extends OmitType(Veredicto, [
   "motivos_confianza",
 ] as const) {
-  @ApiProperty({
-    description:
-      'true solo si veredicto es "apto": nunca con alérgenos o trazas en conflicto, ni con datos insuficientes.',
-    example: false,
-  })
-  apto: boolean;
-
   @ApiProperty({
     enum: MOTIVOS_CONFIANZA_BACKEND,
     isArray: true,
@@ -35,4 +28,17 @@ export class Compatibilidad extends OmitType(Veredicto, [
     example: [],
   })
   motivos_confianza: MotivoConfianzaBackend[];
+}
+
+/**
+ * Respuesta de GET /api/products/:codigo_barras/compatibilidad: el veredicto
+ * más el campo apto que ya usaba el frontend.
+ */
+export class Compatibilidad extends VeredictoBackend {
+  @ApiProperty({
+    description:
+      'true solo si veredicto es "apto": nunca con alérgenos o trazas en conflicto, ni con datos insuficientes.',
+    example: false,
+  })
+  apto: boolean;
 }
