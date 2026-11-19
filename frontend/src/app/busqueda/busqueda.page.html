@@ -4,6 +4,7 @@
     <ion-searchbar
       placeholder="Ej. leche, galletas de avena"
       inputmode="search"
+      [value]="textoBuscador()"
       [debounce]="400"
       (ionInput)="buscar($event.detail.value ?? '')"
     ></ion-searchbar>

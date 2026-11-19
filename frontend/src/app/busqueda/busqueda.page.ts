@@ -1,5 +1,6 @@
 import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { ActivatedRoute } from '@angular/router';
 import {
   EMPTY,
   Observable,
@@ -70,11 +71,15 @@ interface Pagina {
 export class BusquedaPage {
   private productsService = inject(ProductsService);
   private destroyRef = inject(DestroyRef);
+  private route = inject(ActivatedRoute);
   // El interruptor "Personalizar según mi perfil" se muestra solo con sesión.
   readonly auth = inject(AuthService);
 
   // Signals: sin zone.js, actualizan la vista sin llamar a detectChanges().
   readonly consulta = signal('');
+  // Texto del buscador puesto desde ?q= (por ejemplo, desde home). Solo
+  // cambia con la URL: lo que escribe el usuario no vuelve al campo.
+  readonly textoBuscador = signal('');
   readonly resultados = signal<ResultadoVista[]>([]);
   readonly total = signal(0);
   readonly cargando = signal(false);
@@ -125,6 +130,19 @@ export class BusquedaPage {
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe();
+
+    // /busqueda?q=leche rellena el buscador y busca.
+    this.route.queryParamMap
+      .pipe(
+        map((params) => params.get('q')?.trim() ?? ''),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe((q) => {
+        if (q) {
+          this.textoBuscador.set(q);
+          this.buscar(q);
+        }
+      });
   }
 
   buscar(texto: string): void {

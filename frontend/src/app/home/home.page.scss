@@ -1,22 +1,158 @@
-.mobile-container {
-  max-width: 450px;
-  margin: 40px auto;
+// Una columna centrada; los accesos pasan a dos columnas en pantallas anchas.
+// Contraste medido (WCAG 2.x, AA: 4.5:1 texto, 3:1 bordes e íconos):
+//   #0e150e / #f4f3e7 (texto / crema)          16.6:1
+//   #555555 / #f4f3e7 (secundario / crema)      6.7:1
+//   #00473c / #f4f3e7 (título y enlace / crema) 9.6:1
+//   #0e150e / #d8e5d6 (texto / tarjeta)        14.2:1
+//   #555555 / #d8e5d6 (frase / tarjeta)         5.7:1
+//   #00473c / #d8e5d6 (ícono y borde hover)     8.2:1
+//   #0e150e / #e6ff55 (botón Buscar)           16.6:1
+//   #0e150e / #ffffff (texto del campo)        18.5:1
+//   #555555 / #ffffff (placeholder)             7.5:1
+//   #555555 / #f4f3e7 (borde del campo)         6.7:1
+// El hover no oscurece la tarjeta (#555555 sobre #becabc da 4.4:1): marca un
+// borde verde interior.
+
+.contenedor {
   display: flex;
   flex-direction: column;
-  gap: 15px;
+  gap: var(--app-espacio-6);
+  max-width: 720px;
+  margin: 0 auto;
+  padding-top: var(--app-espacio-4);
+}
+
+h1 {
+  margin: 0 0 var(--app-espacio-2);
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--ion-color-primary);
+}
+
+.presentacion p {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.5;
+  color: var(--ion-color-medium);
+}
+
+.buscador {
+  display: flex;
+  gap: var(--app-espacio-2);
+
+  ion-input {
+    flex: 1;
+    min-height: 52px;
+    font-size: 17px;
+    --background: #ffffff;
+    --border-color: var(--ion-color-medium);
+    --highlight-color-focused: var(--ion-color-primary);
+    --placeholder-color: var(--ion-color-medium);
+    --placeholder-opacity: 1;
+  }
+
+  ion-button {
+    height: 52px;
+    margin: 0;
+  }
+}
+
+.accesos {
+  display: grid;
+  gap: var(--app-espacio-3);
+  align-items: start;
+
+  @media (min-width: 640px) {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.acceso-grupo {
+  display: grid;
+  gap: var(--app-espacio-2);
+}
+
+// Tarjeta de acceso: <a> o <button> nativo con el aspecto de las tarjetas.
+.acceso {
+  display: flex;
+  gap: var(--app-espacio-3);
+  width: 100%;
+  padding: var(--app-espacio-4);
+  border: 0;
+  border-radius: var(--app-radio-tarjeta);
+  background: var(--ion-color-tertiary);
+  color: var(--ion-text-color);
+  font: inherit;
+  text-align: start;
+  text-decoration: none;
+  cursor: pointer;
+
+  &:hover {
+    box-shadow: inset 0 0 0 2px var(--ion-color-primary);
+  }
+
+  ion-icon {
+    flex-shrink: 0;
+    font-size: 28px;
+    color: var(--ion-color-primary);
+  }
+}
+
+.acceso-titulo {
+  display: block;
+  margin-bottom: var(--app-espacio-1);
+  font-weight: 700;
+}
+
+.acceso-frase {
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--ion-color-medium);
+}
+
+.enlace-secundario {
+  justify-self: start;
+  padding: var(--app-espacio-1) var(--app-espacio-4);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ion-color-primary);
+}
+
+// Foco visible de las tarjetas y del enlace (elementos nativos).
+a:focus-visible,
+button:focus-visible {
+  outline: 3px solid var(--ion-color-primary);
+  outline-offset: 2px;
+}
+
+// Sección secundaria: separada por una línea, título chico y botón de contorno.
+.analisis {
+  padding-top: var(--app-espacio-6);
+  border-top: 1px solid var(--ion-border-color);
+
+  h2 {
+    margin: 0 0 var(--app-espacio-2);
+    font-size: 18px;
+  }
+}
+
+ion-item {
+  --background: transparent;
+  --padding-start: 0;
 }
 
 .result-list {
   background: transparent;
+}
 
-  ion-item {
-    --background: transparent;
-    --padding-start: 0;
-  }
+// Reemplaza a ion-label (evita el polyfill de slots de Stencil).
+.texto-resultado {
+  flex: 1;
+  margin: 12px 0;
+}
 
-  // Reemplaza a ion-label (evita el polyfill de slots de Stencil).
-  .texto-resultado {
-    flex: 1;
-    margin: 12px 0;
-  }
+.pie {
+  text-align: center;
+  font-size: 13px;
+  color: var(--ion-color-medium);
 }
