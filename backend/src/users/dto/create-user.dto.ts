@@ -5,6 +5,7 @@ import {
   IsOptional,
   IsArray,
   IsEnum,
+  MinLength,
 } from "class-validator";
 import { AllergenCode } from "../../products/contrato/enums";
 
@@ -17,8 +18,13 @@ export class CreateUserDto {
   @IsNotEmpty({ message: "El correo es obligatorio" })
   correo: string;
 
+  // Solo en el registro: LoginDto no exige largo mínimo, para que las cuentas
+  // creadas antes de esta regla puedan seguir entrando.
   @IsString()
   @IsNotEmpty({ message: "La contraseña (password) es obligatoria" })
+  @MinLength(8, {
+    message: "La contraseña debe tener al menos 8 caracteres",
+  })
   password: string;
 
   @IsArray()

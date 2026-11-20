@@ -12,6 +12,8 @@ import { MetricasModule } from "./metricas/metricas.module";
 import { LoggerModule } from "nestjs-pino";
 import { configuracionLogger } from "./observabilidad/logger.config";
 import { TiempoRespuestaInterceptor } from "./observabilidad/tiempo-respuesta.interceptor";
+import { ThrottlerModule } from "@nestjs/throttler";
+import { opcionesLimitePeticiones } from "./seguridad/limite-peticiones";
 
 @Module({
   imports: [
@@ -36,6 +38,8 @@ import { TiempoRespuestaInterceptor } from "./observabilidad/tiempo-respuesta.in
         migrationsRun: true,
       }),
     }),
+    // Límite de peticiones por IP: solo en las rutas con @LimitarPeticiones().
+    ThrottlerModule.forRoot(opcionesLimitePeticiones),
     UsersModule,
     IaModule,
     FoodsModule,

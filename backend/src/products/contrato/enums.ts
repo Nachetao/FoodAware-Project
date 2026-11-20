@@ -33,6 +33,8 @@ export enum CodigoError {
   SOURCE_UNAVAILABLE = "SOURCE_UNAVAILABLE",
   SOURCE_TIMEOUT = "SOURCE_TIMEOUT",
   INTERNAL_ERROR = "INTERNAL_ERROR",
+  /** Solo de NestJS (límite de peticiones por IP); FastAPI no lo usa. */
+  TOO_MANY_REQUESTS = "TOO_MANY_REQUESTS",
 }
 
 export const NUTRISCORES = ["a", "b", "c", "d", "e"] as const;

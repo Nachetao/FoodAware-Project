@@ -30,6 +30,7 @@ Los modelos están tipados según el contrato (`docs/contratos/`), sin `any`.
 ## Manejo de errores y estados
 
 - Todo error HTTP se convierte en un `ErrorApi` (`status`, `codigo`, `mensaje`, `requestId`): con el mensaje del contrato si viene, "No se pudo conectar con el servidor." si no hay respuesta, o un mensaje genérico en otros casos. Las páginas solo muestran `mensaje`.
+- **Límite de peticiones:** un 429 del backend (login, registro, análisis o detalle de producto) muestra siempre "Demasiados intentos, espera un minuto.", venga en el formato de NestJS o en el del contrato. El registro exige una contraseña de al menos 8 caracteres (el botón queda deshabilitado y se indica el mínimo), igual que el backend; el login no exige largo mínimo, para que las cuentas anteriores sigan entrando.
 - Cada página tiene estados de **carga**, **sin resultados** y **error** (con reintento en el detalle).
 - **Aviso de respaldo:** si el backend responde con `X-Fuente-Datos: respaldo`, se muestra "El servicio de búsqueda no está disponible; mostrando productos guardados anteriormente."
 - **Servidor dormido:** si la búsqueda tarda más de 5 s (por ejemplo, en el plan gratuito de Render), aparece "Despertando el servidor…".

@@ -19,6 +19,7 @@ import {
   ApiParam,
   ApiServiceUnavailableResponse,
   ApiTags,
+  ApiTooManyRequestsResponse,
   ApiUnauthorizedResponse,
   ApiUnprocessableEntityResponse,
 } from "@nestjs/swagger";
@@ -35,6 +36,7 @@ import { requestIdDe } from "../observabilidad/request-id";
 import { HEADER_FUENTE_DATOS } from "./fuente-datos";
 import { Public, UsuarioActual } from "../auth/decoradores";
 import { UsuarioToken } from "../auth/jwt.strategy";
+import { LimitarPeticiones } from "../seguridad/limite-peticiones";
 import { Compatibilidad } from "./dto/compatibilidad.dto";
 import {
   BuscarPersonalizadoQueryDto,
@@ -233,11 +235,19 @@ export class ProductsController {
 
   // Después de "search": si no, /products/search se tomaría como un código.
   @Public()
+  // Cada código que no está en la caché de FastAPI gasta el límite de
+  // lecturas a Open Food Facts (amenaza D1 de docs/modelo-amenazas.md).
+  @LimitarPeticiones("publico")
   @Get(":codigo_barras")
   @ApiOperation({
     summary: "Detalle de un producto por código de barras",
     description:
-      "Consulta /products/{codigo_barras} de FastAPI y guarda el producto. Si FastAPI falla (500, 502, 503 o 504) responde el producto guardado con X-Fuente-Datos: respaldo. Un 404 de FastAPI se propaga.",
+      "Consulta /products/{codigo_barras} de FastAPI y guarda el producto. Si FastAPI falla (500, 502, 503 o 504) responde el producto guardado con X-Fuente-Datos: respaldo. Un 404 de FastAPI se propaga. Limitado por IP (LIMITE_PUBLICO_POR_MINUTO, 30 por defecto).",
+  })
+  @ApiTooManyRequestsResponse({
+    type: ErrorContrato,
+    description:
+      "Demasiadas peticiones desde la misma IP en un minuto (TOO_MANY_REQUESTS).",
   })
   @ApiParam({ name: "codigo_barras", description: "De 8 a 14 dígitos." })
   @ApiOkResponse({ type: Producto, headers: HEADER_RESPUESTA })
