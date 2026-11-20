@@ -55,8 +55,16 @@ jobs:
         run: |
           if [ -z "$DB_PASSWORD" ]; then DB_PASSWORD=$(openssl rand -hex 24); fi
           if [ -z "$JWT_SECRET" ]; then JWT_SECRET=$(openssl rand -hex 32); fi
+          # Clave entre servicios de esta ejecución. python-service y backend
+          # leen el mismo .env (env_file), así que los dos reciben la misma;
+          # la Prueba 3 lo comprueba de punta a punta (con otra clave, el
+          # backend recibiría 403 y respondería desde el respaldo). Las
+          # pruebas que llaman directo a FastAPI la leen de GITHUB_ENV.
+          CLAVE_SERVICIO=$(openssl rand -hex 32)
           echo "::add-mask::$DB_PASSWORD"
           echo "::add-mask::$JWT_SECRET"
+          echo "::add-mask::$CLAVE_SERVICIO"
+          echo "CLAVE_SERVICIO=$CLAVE_SERVICIO" >> "$GITHUB_ENV"
           umask 077
           # OFF_BASE_URL e INGESTA_AL_INICIAR son fijos: las pruebas nunca
           # deben llamar a Open Food Facts (.invalid nunca resuelve).
@@ -81,6 +89,8 @@ jobs:
           INGESTA_AL_INICIAR=false
           INGESTA_INTERVALO_HORAS=24
           CACHE_TTL_HORAS=72
+          CLAVE_SERVICIO=$CLAVE_SERVICIO
+          CLAVE_SERVICIO_OBLIGATORIA=true
           JWT_SECRET=$JWT_SECRET
           EOF
           cut -d= -f1 .env | tr '\n' ' '
@@ -174,6 +184,7 @@ jobs:
 
           # Mismo resultado y orden que el /search de FastAPI.
           codigos_fastapi=$(curl -sS --fail-with-body --max-time 10 \
+            -H "X-Clave-Servicio: $CLAVE_SERVICIO" \
             "$PYTHON_URL/search?q=$CONSULTA&limit=10" \
             | jq -r '.resultados[].producto.codigo_barras')
           if [[ "$codigos_nest" != "$codigos_fastapi" ]]; then
@@ -193,7 +204,50 @@ jobs:
           echo "Logs de python-service con request_id $REQUEST_ID:"
           echo "$coincidencias"
 
-      - name: "Prueba 5: sin python-service, NestJS responde con respaldo o error controlado"
+      # Antes de la Prueba 6, que detiene python-service.
+      - name: "Prueba 5: FastAPI exige X-Clave-Servicio (403 incorrecta, 403 sin clave, 200 correcta)"
+        run: |
+          url="$PYTHON_URL/search?q=$CONSULTA&limit=1"
+          clave_incorrecta=$(openssl rand -hex 32)
+
+          # Comprueba el código HTTP y, en los 403, el formato del contrato.
+          probar() {
+            local caso=$1 esperado=$2
+            shift 2
+            local codigo
+            codigo=$(curl -sS --max-time 10 -o clave.json -w '%{http_code}' "$@" "$url")
+            echo "$caso: HTTP $codigo"
+            if [[ "$codigo" != "$esperado" ]]; then
+              echo "::error::$caso: se esperaba HTTP $esperado y llegó $codigo"
+              jq . clave.json || cat clave.json
+              exit 1
+            fi
+            if [[ "$esperado" == 403 ]] \
+                && ! jq -e '.error.codigo == "FORBIDDEN"' clave.json >/dev/null; then
+              echo "::error::$caso: el 403 no tiene el código FORBIDDEN del contrato"
+              jq . clave.json || cat clave.json
+              exit 1
+            fi
+          }
+
+          probar "Clave incorrecta" 403 -H "X-Clave-Servicio: $clave_incorrecta"
+          probar "Sin clave" 403
+          probar "Clave correcta" 200 -H "X-Clave-Servicio: $CLAVE_SERVICIO"
+
+          # FastAPI registra los dos rechazos, pero nunca la clave recibida.
+          docker compose logs --no-color --no-log-prefix python-service > python-service-clave.log
+          rechazos=$(jq -Rc 'fromjson? | select(.evento == "clave_servicio_rechazada")' \
+            python-service-clave.log | wc -l)
+          if (( rechazos < 2 )); then
+            echo "::error::python-service registró $rechazos rechazos clave_servicio_rechazada; se esperaban 2"
+            exit 1
+          fi
+          if grep -qF "$clave_incorrecta" python-service-clave.log; then
+            echo "::error::La clave recibida aparece en los logs de python-service"
+            exit 1
+          fi
+
+      - name: "Prueba 6: sin python-service, NestJS responde con respaldo o error controlado"
         run: |
           docker compose stop python-service
           codigo=$(curl -sS --max-time 60 -D cabeceras-respaldo.txt \

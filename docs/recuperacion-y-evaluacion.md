@@ -853,14 +853,18 @@ docker compose exec python-service python scripts/evaluar_adaptativo.py --semill
 ```
 
 O por HTTP, con el servicio en `http://localhost:8000`. Estos endpoints exigen
-`X-Clave-Servicio` cuando `CLAVE_SERVICIO_OBLIGATORIA` es `true`; en local
-está en `false` por defecto:
+`X-Clave-Servicio` con el valor de `CLAVE_SERVICIO` de `.env`
+(`CLAVE_SERVICIO_OBLIGATORIA` es `true` por defecto, también en local); sin
+ella responden 403:
 
 ```powershell
-Invoke-RestMethod http://localhost:8000/metrics/quality
-Invoke-RestMethod http://localhost:8000/metrics/evaluation
-Invoke-RestMethod http://localhost:8000/metrics/evaluation/adaptive
-Invoke-RestMethod "http://localhost:8000/search?q=galletas%20de%20avena&limit=5"
+# Lee CLAVE_SERVICIO del .env de la raíz del repositorio.
+$h = @{ "X-Clave-Servicio" = ((Select-String -Path .env -Pattern '^CLAVE_SERVICIO=(.*)$').Matches[0].Groups[1].Value) }
+Invoke-RestMethod http://localhost:8000/metrics/quality -Headers $h
+Invoke-RestMethod http://localhost:8000/metrics/evaluation -Headers $h
+Invoke-RestMethod http://localhost:8000/metrics/evaluation/adaptive -Headers $h
+Invoke-RestMethod "http://localhost:8000/search?q=galletas%20de%20avena&limit=5" -Headers $h
+Remove-Variable h
 ```
 
 La antigüedad y los tiempos van a dar distinto según cuándo y dónde se

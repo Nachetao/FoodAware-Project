@@ -74,11 +74,12 @@ services:
       # aquí y el backend la toma con fromService, así no hay que copiarla.
       - key: CLAVE_SERVICIO
         generateValue: true
-      # Transición: "false" mientras el backend no envía la clave (sin
-      # header se acepta con una advertencia; una clave incorrecta da 403).
-      # Pasa a "true" cuando el backend la envíe.
+      # "true": sin la clave, o con una incorrecta, 403 (/health sigue
+      # público). El backend la envía en todas sus llamadas. "false" solo
+      # sirve como vuelta atrás de emergencia: sin header se acepta con una
+      # advertencia en el log.
       - key: CLAVE_SERVICIO_OBLIGATORIA
-        value: "false"
+        value: "true"
 
   - type: web
     name: foodaware-staging-backend
@@ -171,3 +172,29 @@ services:
       - path: /*
         name: Referrer-Policy
         value: strict-origin-when-cross-origin
+      # El service worker, su manifiesto y el index siempre se revalidan
+      # (lo mismo que frontend/nginx.conf, que Render no usa): si quedaran
+      # en caché HTTP, una versión nueva de la app tardaría en llegar. Son
+      # archivos reales del build, así que el rewrite de la SPA no los toca.
+      - path: /ngsw-worker.js
+        name: Cache-Control
+        value: no-cache
+      - path: /ngsw.json
+        name: Cache-Control
+        value: no-cache
+      - path: /safety-worker.js
+        name: Cache-Control
+        value: no-cache
+      - path: /worker-basic.min.js
+        name: Cache-Control
+        value: no-cache
+      - path: /manifest.webmanifest
+        name: Cache-Control
+        value: no-cache
+      - path: /index.html
+        name: Cache-Control
+        value: no-cache
+      # La raíz también sirve index.html.
+      - path: /
+        name: Cache-Control
+        value: no-cache
