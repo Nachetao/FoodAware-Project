@@ -14,4 +14,4 @@ semilla del corpus, el Blueprint de Render) siguen en
 | [0001](0001-estilo-servicios-separados.md) | Servicios separados por responsabilidad: un backend principal y un servicio especializado, no microservicios completos | Aceptada |
 | [0002](0002-python-fastapi.md) | Python y FastAPI para el servicio especializado, como servicio independiente | Aceptada |
 | [0003](0003-rest-entre-servicios.md) | REST con un contrato OpenAPI entre NestJS y FastAPI | Aceptada |
-| 0004 | PostgreSQL y TypeORM para los datos del backend | Pendiente: la escribe el responsable del backend |
+| [0004](0004-postgresql-typeorm.md) | PostgreSQL y TypeORM para los datos del backend | Aceptada |

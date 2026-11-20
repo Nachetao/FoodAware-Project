@@ -197,28 +197,66 @@ qué se pierde cuando Render duerme el servicio, cómo se despliega) están en
 
 ## Modelo de base de datos
 
-> Pendiente de actualizar por backend: este modelo es el de la EP1. Falta la
-> tabla `products`, que el backend agregó en la EP2 con la migración
-> `CreateProducts` (producto del contrato con procedencia y calidad en
-> columnas, listas como `text[]`). Ver [backend.md](backend.md).
+PostgreSQL 15 del backend, según las entidades y las migraciones de
+[`backend/src/migrations/`](../backend/src/migrations/). Por qué PostgreSQL y
+TypeORM: [ADR 0004](adr/0004-postgresql-typeorm.md).
 
 ```mermaid
 erDiagram
     USERS {
         uuid id PK
         text nombre
-        text correo
-        text password
-        text alergias "lista separada por comas"
+        text correo UK
+        text password "hash bcrypt"
+        text[] alergias "códigos AllergenCode"
+        text[] dietas "códigos DietLabel"
+        boolean modo_estricto
+        rol_usuario rol "usuario o administrador"
+    }
+    PRODUCTS {
+        varchar(14) codigo_barras PK "CHECK: 8 a 14 dígitos"
+        varchar(300) nombre
+        text marca
+        text cantidad
+        text ingredientes_texto
+        text[] ingredientes
+        text[] alergenos
+        text[] trazas
+        text[] etiquetas_dieta
+        varchar(1) nutriscore "CHECK: a, b, c, d o e"
+        text imagen_url
+        varchar(50) fuente "procedencia"
+        text url_fuente "procedencia"
+        timestamptz recuperado_en "procedencia"
+        timestamptz modificado_en_fuente "procedencia"
+        uuid run_id "procedencia"
+        char(64) hash_contenido "procedencia"
+        boolean es_valido "calidad"
+        text[] problemas "calidad"
+        double completitud "calidad"
+        timestamptz creado_en
+        timestamptz actualizado_en
     }
     FOODS {
         uuid id PK
         text nombre
-        text ingredientes "lista separada por comas"
-        text alergenosPresentes "lista separada por comas"
+        text ingredientes "simple-array: separado por comas"
+        text alergenosPresentes "simple-array: separado por comas"
         boolean esNutricionalmenteSaludable
     }
 ```
+
+- **Sin claves foráneas:** las tablas no se relacionan en la base. Las
+  alergias y dietas del usuario se cruzan con los alérgenos, las trazas y las
+  etiquetas del producto al consultar (todos son códigos del contrato), y
+  `foods` (de la EP1) no guarda qué usuario hizo el análisis.
+- **Índices de `products`**, además de la clave primaria: GIN sobre
+  `alergenos`, `trazas` y `etiquetas_dieta` (de la EP2; hoy ninguna consulta
+  los usa, ver [ADR 0004](adr/0004-postgresql-typeorm.md#consecuencias)) y un
+  índice parcial `(completitud DESC, codigo_barras) WHERE es_valido`.
+- `rol_usuario` es un tipo enum de PostgreSQL. `alergias` y `dietas` son
+  `NOT NULL` con `'{}'` por defecto, `modo_estricto` es `false` por defecto y
+  `rol`, `usuario`.
 
 La caché del python-service no está en este modelo porque vive en otra base
 (SQLite). Su diagrama está en
@@ -234,7 +272,7 @@ alternativas y consecuencias, en [adr/](adr/README.md):
 | [0001](adr/0001-estilo-servicios-separados.md) | Servicios separados por responsabilidad (un backend principal y un servicio especializado), no microservicios completos |
 | [0002](adr/0002-python-fastapi.md) | Python y FastAPI como servicio independiente |
 | [0003](adr/0003-rest-entre-servicios.md) | REST con contrato OpenAPI entre NestJS y FastAPI, en vez de gRPC o colas |
-| 0004 | PostgreSQL y TypeORM (pendiente) |
+| [0004](adr/0004-postgresql-typeorm.md) | PostgreSQL y TypeORM para los datos del backend, con migraciones versionadas |
 
 Las de abajo son las decisiones más acotadas de cada entrega.
 
@@ -262,9 +300,11 @@ se guardan con `simple-array` de TypeORM en vez de tablas relacionadas aparte.
 Es más simple de implementar, pero hace las búsquedas por ingrediente menos
 eficientes a futuro.
 
-> Pendiente de actualizar por backend: la tabla `products` de la EP2 ya usa
-> `text[]` en vez de `simple-array`, porque admite comas dentro de cada
-> valor. Las tablas `users` y `foods` siguen con texto separado por comas.
+> Desde la EP2, la tabla `products` usa `text[]` en vez de `simple-array`,
+> porque admite comas dentro de cada valor, y `users.alergias` pasó a
+> `text[]` con códigos de alérgenos (migración `AlergiasUsuarioConCodigos`);
+> `users.dietas` nació como `text[]`. Solo `foods`, de la EP1, sigue con texto
+> separado por comas. Ver [ADR 0004](adr/0004-postgresql-typeorm.md#consecuencias).
 
 **IDs tipo UUID:** se usan en vez de números correlativos (como 1, 2, 3) para
 que no se puedan adivinar ni usar para acceder a otro registro cambiando un
