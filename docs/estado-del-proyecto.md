@@ -65,9 +65,9 @@ Backend (NestJS), frontend (Angular + Ionic) y capacidad adaptativa.
 ## Correcciones de la EP1
 
 Al empezar la EP2 revisamos lo que entregamos en la EP1 y encontramos varios
-problemas. Esto es lo que corregimos. La retroalimentación formal de la
-profesora sobre la EP1 todavía no llega: estas correcciones salen de nuestra
-propia revisión, y cuando llegue la retroalimentación la vamos a sumar aquí.
+problemas. Esto es lo que corregimos. Estas correcciones salen de nuestra
+propia revisión; la retroalimentación formal de la profesora llegó después y
+está en [Retroalimentación de la EP1](#retroalimentación-de-la-ep1).
 
 | Problema en la EP1 | Qué hicimos | Dónde |
 |---|---|---|
@@ -80,6 +80,23 @@ propia revisión, y cuando llegue la retroalimentación la vamos a sumar aquí.
 | El pipeline tenía un `ci.yml` que repetía Gitleaks y el lint y las pruebas del backend y del python-service, con Node 18, mientras la imagen del backend usaba Node 20 | Eliminamos `ci.yml`. Cada workflow toma su versión de una Variable, igual a la de su Dockerfile (hoy Node 22 y Python 3.11) | PR #15 y PR #17 |
 | La única revisión de seguridad era Gitleaks | Agregamos Bandit, CodeQL, Trivy sobre las 3 imágenes, `pip-audit` y `npm audit`, con sus quality gates | PR #15 |
 | El backend tenía código muerto (`AppService`) que llamaba al python-service con otra variable (`PYTHON_SERVICE_URL`) | Lo eliminamos; todo usa `PYTHON_API_URL` | PR #17 |
+
+## Retroalimentación de la EP1
+
+Las observaciones de la profesora sobre la EP1, qué hicimos con cada una y
+dónde está la evidencia. Las respondimos en la documentación de la Entrega
+Final.
+
+| Observación | Qué hicimos | Evidencia |
+|---|---|---|
+| "No es clara la documentación de actores y sistemas externos" | Nuevo diagrama de contexto con los tres actores, que corresponden a los roles reales del backend (visitante sin sesión, usuario registrado y administrador), y los sistemas externos (Open Food Facts, Render, GitHub Actions y HCP Terraform). Una tabla dice qué puede hacer cada actor y dónde se controla, y otra, para qué usamos cada sistema externo | [Arquitectura.md](Arquitectura.md#diagrama-de-contexto): [actores](Arquitectura.md#actores) y [sistemas externos](Arquitectura.md#sistemas-externos) |
+| "Diferenciar una clasificación de compatibilidad alimentaria de una garantía de seguridad para el consumo" | Una sección que explica qué decide el sistema (los tres veredictos), qué no garantiza, el aviso permanente que muestra el frontend y por qué el error más grave es un falso "apto" | [README](../README.md#clasificación-no-garantía-de-seguridad), [Arquitectura.md](Arquitectura.md#clasificación-de-compatibilidad-no-garantía-de-seguridad), [`aviso-orientativo.ts`](../frontend/src/app/compartido/aviso-orientativo.ts) (PR #39) y [modelo-amenazas.md](modelo-amenazas.md#4-riesgos-del-dominio) |
+| "¿Monolito o microservicios, y cómo llegaron a esa decisión?" | ADR que nombra el estilo real: servicios separados por responsabilidad (un backend principal y un servicio especializado), no microservicios completos. Explica por qué descartamos un monolito NestJS, un monolito Python y los microservicios completos. En la EP1 lo habíamos llamado "microservicio"; lo corregimos también en Arquitectura.md | [ADR 0001](adr/0001-estilo-servicios-separados.md) |
+| "¿Por qué Python y FastAPI como servicio independiente?" | ADR con las alternativas (NestJS, Flask, Django y scripts llamados desde NestJS). Reconoce que hoy no usamos el ecosistema de Python que justificó la decisión: es una opción a futuro | [ADR 0002](adr/0002-python-fastapi.md) |
+| "¿Por qué REST entre NestJS y FastAPI?" | ADR con las alternativas (gRPC, colas de mensajes y GraphQL) y por qué REST alcanza: consultas síncronas que el usuario espera, poco volumen y un contrato OpenAPI que CI verifica | [ADR 0003](adr/0003-rest-entre-servicios.md) |
+| "¿Por qué PostgreSQL y TypeORM?" | **Pendiente.** El ADR lo escribe el responsable del backend; su lugar está reservado como ADR 0004 | [adr/README.md](adr/README.md) |
+| "Separar componentes de interfaz y servicios HTTP en el frontend" | Corregido: `home.page.ts` ya no inyecta `HttpClient` y usa `AnalisisService`. En todo el frontend, `HttpClient` solo se inyecta en los servicios (`admin`, `analisis`, `auth`, `metricas` y `products`) | Commit `30b3b71` (PR #39), [`home.page.ts`](../frontend/src/app/home/home.page.ts), [`analisis.service.ts`](../frontend/src/app/analisis/analisis.service.ts) y sus pruebas (`analisis.service.spec.ts`, `home.page.spec.ts`) |
+| "Documentar los fallos controlados" | Una sección explícita con el caso real de Trivy: la CVE-2026-59873 de `tar` en la imagen del backend, el bloqueo de CI Seguridad, la corrección en el PR #17, la verificación y lo que aprendimos (el ruleset de `main`). Se suma al fallo provocado de Gitleaks de la EP1 | [pipeline-devsecops.md](pipeline-devsecops.md#fallo-de-seguridad-detectado-bloqueo-del-pipeline-y-corrección), [`ep2-trivy-backend-critical.png`](evidencia/ep2-trivy-backend-critical.png) y [`ep2-ci-verde.png`](evidencia/ep2-ci-verde.png) |
 
 ## Pendiente para la EP3 y el Módulo 3
 
@@ -99,7 +116,6 @@ La especificación preliminar está en
 
 ### Producto
 
-- Aviso en la interfaz de que la información de alérgenos es orientativa.
 - Atribución a Open Food Facts también en la lista de resultados.
 - Que `/analizar` (de la EP1) use la misma detección de alérgenos que la
   búsqueda.

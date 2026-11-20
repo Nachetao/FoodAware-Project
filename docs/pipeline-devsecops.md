@@ -367,21 +367,10 @@ checks del pipeline en verde, y
 [`ep2-cd-staging.png`](evidencia/ep2-cd-staging.png), el despliegue
 automático en verde con la tabla de las pruebas de salud.
 
-No siempre fue así, y conviene contarlo. Desde el PR #15, cuando agregamos
-Trivy, CI Seguridad falló en `main` en un solo job: Trivy sobre la imagen del
-backend, en el paso "Fallar con vulnerabilidades CRITICAL con arreglo
-disponible". La causa era `tar` 6.2.1 (CVE-2026-59873, arreglado en 7.5.19),
-que no era una dependencia nuestra: venía dentro del npm que trae la imagen
-base `node:20-alpine`.
-
-El gate hizo su trabajo: detectó algo real y grave, y obligó a corregirlo. En
-el PR #17 la imagen del backend pasó a `node:22-alpine` y se quitaron npm y
-npx de la imagen final, igual que hicimos con pip en el python-service.
-
-También nos dimos cuenta de que los PR #15 y #16 se pudieron integrar con CI
-Seguridad en rojo. Para que los gates bloqueen de verdad hay que activar una
-regla de protección de `main` que exija los checks antes del merge (ver la
-sección siguiente).
+No siempre fue así: desde el PR #15 hasta el PR #17, Trivy bloqueó CI
+Seguridad por una vulnerabilidad CRITICAL en la imagen del backend. El caso
+completo está en
+[Fallo de seguridad detectado, bloqueo del pipeline y corrección](#fallo-de-seguridad-detectado-bloqueo-del-pipeline-y-corrección).
 
 ## Protección de main
 
@@ -535,6 +524,29 @@ GitHub, el siguiente plan de CI lo muestra como diferencia. Se corrige
 llevando el cambio al `.tf` o volviendo a aplicar.
 
 ## Evidencia
+
+### Fallo de seguridad detectado, bloqueo del pipeline y corrección
+
+Un caso real, no provocado: una vulnerabilidad grave en la imagen del
+backend que el pipeline detectó, bloqueó y nos obligó a corregir.
+
+| Etapa | Qué pasó | Evidencia |
+|---|---|---|
+| **1. Detección** (desde el 22 de octubre de 2026) | Con el PR #15 agregamos Trivy a CI Seguridad (commit `5b3a90e`). Desde ese PR, Trivy encontró en la imagen del backend `tar` 6.2.1 con la CVE-2026-59873, severidad CRITICAL ("Denial of Service via crafted gzip bomb"), con arreglo en la versión 7.5.19. No era una dependencia nuestra: venía dentro del npm que trae la imagen base `node:20-alpine` | [`ep2-trivy-backend-critical.png`](evidencia/ep2-trivy-backend-critical.png) |
+| **2. Bloqueo** | El job "Imagen Docker (Trivy, backend)" falló en el paso "Fallar con vulnerabilidades CRITICAL con arreglo disponible", y CI Seguridad quedó en rojo en `main`. Los otros 6 jobs de CI Seguridad (Gitleaks, Bandit, CodeQL y Trivy sobre el python-service y el frontend) pasaron | La misma captura: el job en rojo, la tabla de Trivy con la CVE y `exit code 1` |
+| **3. Corrección** (23 de octubre de 2026) | En el PR #17 (commit `e67fb0e`), la imagen final del backend pasó a `node:22-alpine` y dejó de incluir npm y npx, que no se usan para ejecutar la aplicación. Igual que con pip en el python-service, lo que no está en la imagen no puede tener vulnerabilidades | [`backend/Dockerfile`](../backend/Dockerfile) |
+| **4. Verificación** | En el commit `545168e` de `main`, los 7 workflows terminaron en verde, incluidos los 7 jobs de CI Seguridad | [`ep2-ci-verde.png`](evidencia/ep2-ci-verde.png) |
+
+**Lo que aprendimos.** El gate hizo su trabajo: detectó algo real y grave en
+una dependencia que ni siquiera habíamos elegido. Pero también nos mostró un
+hueco: los PR #15 y #16 se pudieron unir a `main` con CI Seguridad en rojo,
+porque nada exigía los checks antes del merge. Por eso activamos el ruleset
+que exige los 15 checks en verde
+([Protección de main](#protección-de-main)). Hoy ese mismo fallo no podría
+llegar a `main`, y el CD tampoco despliega un commit con algún CI en rojo.
+
+El otro fallo controlado, provocado a propósito en la EP1, es el de Gitleaks
+(abajo).
 
 ### EP1: Gitleaks bloqueando un secreto
 
