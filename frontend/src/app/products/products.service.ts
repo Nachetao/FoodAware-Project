@@ -138,6 +138,9 @@ function desdeRespaldo(headers: HttpHeaders): boolean {
   return headers.get(HEADER_FUENTE_DATOS) === 'respaldo';
 }
 
+/** Mensaje del 429 (límite de peticiones por IP del backend). */
+export const MENSAJE_DEMASIADOS_INTENTOS = 'Demasiados intentos, espera un minuto.';
+
 /**
  * Convierte un error HTTP en ErrorApi (mensaje del contrato o uno genérico).
  * Sin conexión, cualquier error dice que no hay internet: el resto de los
@@ -147,6 +150,11 @@ export function aErrorApi(error: HttpErrorResponse): ErrorApi {
   const sinDetalle = { status: error.status, codigo: null, requestId: null };
   if (!navigator.onLine) {
     return { ...sinDetalle, mensaje: 'No hay conexión a internet.' };
+  }
+  // Límite de peticiones del backend: el mismo mensaje en cualquier ruta,
+  // venga en el formato de NestJS (login, registro) o en el del contrato.
+  if (error.status === 429) {
+    return { ...sinDetalle, mensaje: MENSAJE_DEMASIADOS_INTENTOS };
   }
   if (esErrorContrato(error.error)) {
     const { codigo, mensaje, request_id } = error.error.error;

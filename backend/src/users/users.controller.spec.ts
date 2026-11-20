@@ -2,6 +2,8 @@ import { INestApplication, ValidationPipe } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import { UsersController } from "./users.controller";
 import { UsersService } from "./users.service";
+import { ThrottlerModule } from "@nestjs/throttler";
+import { opcionesLimitePeticiones } from "../seguridad/limite-peticiones";
 
 describe("UsersController (POST /api/users)", () => {
   let app: INestApplication;
@@ -10,6 +12,8 @@ describe("UsersController (POST /api/users)", () => {
 
   beforeAll(async () => {
     const module = await Test.createTestingModule({
+      // El límite de peticiones necesita ThrottlerModule, como en AppModule.
+      imports: [ThrottlerModule.forRoot(opcionesLimitePeticiones)],
       controllers: [UsersController],
       providers: [{ provide: UsersService, useValue: usersService }],
     }).compile();
@@ -36,7 +40,11 @@ describe("UsersController (POST /api/users)", () => {
       body: JSON.stringify(cuerpo),
     });
 
-  const valido = { nombre: "Ana", correo: "ana@correo.cl", password: "x1" };
+  const valido = {
+    nombre: "Ana",
+    correo: "ana@correo.cl",
+    password: "clave-ana",
+  };
 
   it("rechaza con 400 campos que no están en el DTO (por ejemplo, id)", async () => {
     const res = await registrar({ ...valido, id: "otro-usuario" });
@@ -84,4 +92,25 @@ describe("UsersController (POST /api/users)", () => {
       expect(usersService.createTestUser).not.toHaveBeenCalled();
     },
   );
+
+  it("rechaza con 400 una contraseña de menos de 8 caracteres", async () => {
+    usersService.createTestUser.mockClear();
+
+    const res = await registrar({ ...valido, password: "1234567" });
+    const cuerpo = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(cuerpo.message).toContain(
+      "La contraseña debe tener al menos 8 caracteres",
+    );
+    expect(usersService.createTestUser).not.toHaveBeenCalled();
+  });
+
+  it("acepta una contraseña de exactamente 8 caracteres", async () => {
+    usersService.createTestUser.mockResolvedValue({ id: "uuid-8" });
+
+    const res = await registrar({ ...valido, password: "12345678" });
+
+    expect(res.status).toBe(201);
+  });
 });

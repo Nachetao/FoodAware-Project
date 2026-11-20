@@ -107,7 +107,7 @@ describe('Cuenta: login, registro y perfil', () => {
   describe('RegistroPage', () => {
     it('elige alergias con los chips y registra con ellas', async () => {
       const f = await crear(RegistroPage);
-      Object.assign(f.componentInstance, { nombre: 'Ana', correo: 'ana@correo.cl', password: 'x1' });
+      Object.assign(f.componentInstance, { nombre: 'Ana', correo: 'ana@correo.cl', password: 'clave-ana' });
 
       html(f).querySelector<HTMLElement>('[data-codigo="mani"]')!.click();
       html(f).querySelector<HTMLElement>('[data-codigo="lacteos"]')!.click();
@@ -117,10 +117,49 @@ describe('Cuenta: login, registro y perfil', () => {
       expect(auth.registrar).toHaveBeenCalledWith({
         nombre: 'Ana',
         correo: 'ana@correo.cl',
-        password: 'x1',
+        password: 'clave-ana',
         alergias: ['mani', 'lacteos'],
       });
       expect(navegar).toHaveBeenCalledWith('/home');
+    });
+
+    it('con menos de 8 caracteres deshabilita el botón y no registra', async () => {
+      const f = await crear(RegistroPage);
+      // El value accessor de Ionic lee el valor del elemento al recibir ionInput.
+      const escribir = (campo: string, value: string) => {
+        const input = html(f).querySelector(`ion-input[name="${campo}"]`) as HTMLElement & { value: string };
+        input.value = value;
+        input.dispatchEvent(new CustomEvent('ionInput', { detail: { value } }));
+      };
+      const boton = () =>
+        html(f).querySelector('ion-button[type="submit"]') as HTMLElement & { disabled: boolean };
+      escribir('nombre', 'Ana');
+      escribir('correo', 'ana@correo.cl');
+      escribir('password', '1234567');
+
+      expect(html(f).querySelector('#ayuda-password')?.textContent?.trim()).toBe('Mínimo 8 caracteres.');
+      expect(boton().disabled).toBe(true);
+      f.componentInstance.registrar();
+
+      expect(auth.registrar).not.toHaveBeenCalled();
+      expect(html(f).querySelector('[role="alert"]')?.textContent?.trim()).toBe(
+        'La contraseña debe tener al menos 8 caracteres.',
+      );
+
+      escribir('password', '12345678');
+      expect(boton().disabled).toBe(false);
+    });
+
+    it('muestra el mensaje del límite de intentos', async () => {
+      auth.registrar.mockReturnValue(throwError(() => ({ mensaje: 'Demasiados intentos, espera un minuto.' })));
+      const f = await crear(RegistroPage);
+      Object.assign(f.componentInstance, { nombre: 'Ana', correo: 'ana@correo.cl', password: 'clave-ana' });
+
+      f.componentInstance.registrar();
+
+      expect(html(f).querySelector('[role="alert"]')?.textContent?.trim()).toBe(
+        'Demasiados intentos, espera un minuto.',
+      );
     });
 
     it('un chip elegido se puede quitar', async () => {

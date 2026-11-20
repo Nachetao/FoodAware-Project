@@ -16,6 +16,8 @@ import { IaAnalysisService } from "../ia/ia.service";
 import { Rol } from "../users/rol";
 import { User } from "../users/user.entity";
 import { UsersService } from "../users/users.service";
+import { ThrottlerModule } from "@nestjs/throttler";
+import { opcionesLimitePeticiones } from "../seguridad/limite-peticiones";
 
 const SECRETO = "secreto-de-prueba";
 const USUARIO_ID = "3f2b8c1e-9d4a-4e7b-8a6f-1c2d3e4f5a6b";
@@ -34,7 +36,11 @@ describe("JwtAuthGuard y RolesGuard (guards globales)", () => {
 
   beforeAll(async () => {
     const module = await Test.createTestingModule({
-      imports: [PassportModule],
+      // IaController usa el límite de peticiones, que necesita ThrottlerModule.
+      imports: [
+        PassportModule,
+        ThrottlerModule.forRoot(opcionesLimitePeticiones),
+      ],
       controllers: [FoodsController, IaController],
       providers: [
         JwtStrategy,

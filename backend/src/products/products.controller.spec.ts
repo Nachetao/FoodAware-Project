@@ -5,6 +5,8 @@ import { ProductsService } from "./products.service";
 import { ContratoHttpException } from "./contrato-http.exception";
 import { RespuestaBusqueda } from "./contrato/busqueda";
 import { CodigoError } from "./contrato/enums";
+import { ThrottlerModule } from "@nestjs/throttler";
+import { opcionesLimitePeticiones } from "../seguridad/limite-peticiones";
 
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -26,6 +28,8 @@ describe("ProductsController (GET /api/products/search)", () => {
     productsService = { buscar: jest.fn(), obtener: jest.fn() };
 
     const module = await Test.createTestingModule({
+      // El límite de peticiones necesita ThrottlerModule, como en AppModule.
+      imports: [ThrottlerModule.forRoot(opcionesLimitePeticiones)],
       controllers: [ProductsController],
       providers: [{ provide: ProductsService, useValue: productsService }],
     }).compile();

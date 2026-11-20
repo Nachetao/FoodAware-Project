@@ -39,8 +39,8 @@ Frontend ──► NestJS ──► FastAPI ──► Open Food Facts
 | Método | Ruta | Descripción |
 |---|---|---|
 | GET | `/api/health` | Estado del backend y sus dependencias (ver `docs/observabilidad.md`) |
-| POST | `/api/auth/login` | Devuelve `access_token` (JWT, 1 h) |
-| POST | `/api/users` | Registro. No devuelve la contraseña; 409 si el correo existe |
+| POST | `/api/auth/login` | Devuelve `access_token` (JWT, 1 h). Máximo 5 intentos por minuto por IP |
+| POST | `/api/users` | Registro. Contraseña de al menos 8 caracteres. No devuelve la contraseña; 409 si el correo existe |
 | GET | `/api/products/search?q=&limit=&offset=` | Búsqueda de productos (vía FastAPI, con respaldo) |
 | GET | `/api/products/:codigo_barras` | Detalle de un producto (vía FastAPI, con respaldo) |
 | POST | `/api/food/analizar` | Analiza un producto ingresado a mano; usa el usuario del token si viene |
@@ -73,6 +73,13 @@ Todos los errores de `/api/products/*`, `/api/metricas/*` e `/api/ingesta/*` sig
 | `SOURCE_UNAVAILABLE` | 503 | FastAPI no responde y no hay respaldo |
 | `SOURCE_TIMEOUT` | 504 | FastAPI no respondió a tiempo y no hay respaldo |
 | `INTERNAL_ERROR` | 500 / 502 | Error interno o respuesta de FastAPI fuera del contrato |
+| `TOO_MANY_REQUESTS` | 429 | Límite de peticiones por IP en `GET /api/products/:codigo_barras` (solo de NestJS; FastAPI no lo usa) |
+
+El resto de las rutas (login, registro, análisis) usa el formato por defecto de NestJS, también para el 429:
+
+```json
+{ "statusCode": 429, "message": "Demasiados intentos, espera un minuto.", "error": "Too Many Requests" }
+```
 
 ## Variables de entorno
 
@@ -86,6 +93,8 @@ Todos los errores de `/api/products/*`, `/api/metricas/*` e `/api/ingesta/*` sig
 | `PORT` | No | `3000` | Puerto de escucha (Render lo asigna) |
 | `CORS_ORIGINS` | No | `http://localhost:4200,http://localhost:8100` | Orígenes permitidos, separados por comas |
 | `LOG_LEVEL` | No | `info` | Nivel mínimo de los logs |
+| `LIMITE_LOGIN_POR_MINUTO` | No | `5` | Intentos de `POST /api/auth/login` por minuto y por IP |
+| `LIMITE_PUBLICO_POR_MINUTO` | No | `30` | Peticiones por minuto y por IP en `POST /api/users`, `POST /api/food/analizar` y `GET /api/products/:codigo_barras` |
 
 ## Persistencia
 
@@ -144,7 +153,21 @@ npm run migration:revert   # revertir la última
 
 - Guard JWT global con `@Public()` para las rutas públicas.
 - `ValidationPipe` con `whitelist` y `forbidNonWhitelisted`: se rechazan los campos no declarados.
-- Contraseñas con bcrypt; nunca se devuelven en las respuestas.
+- Contraseñas con bcrypt; nunca se devuelven en las respuestas. Al registrarse se exigen al menos 8 caracteres (`@MinLength(8)` en `CreateUserDto`). El login no exige largo mínimo, para que las cuentas creadas antes de la regla sigan entrando.
+- **Límite de peticiones por IP** (`@nestjs/throttler`, riesgo P1 de [modelo-amenazas.md](modelo-amenazas.md#5-riesgos-pendientes)):
+
+  | Ruta | Límite por minuto y por IP | Contra qué |
+  |---|---|---|
+  | `POST /api/auth/login` | 5 (`LIMITE_LOGIN_POR_MINUTO`) | Fuerza bruta de contraseñas (S1) |
+  | `POST /api/users` | 30 (`LIMITE_PUBLICO_POR_MINUTO`) | Creación de cuentas en masa (D3) |
+  | `POST /api/food/analizar` | 30 (`LIMITE_PUBLICO_POR_MINUTO`) | Llenar la base, porque cada llamada guarda una fila (D2) |
+  | `GET /api/products/:codigo_barras` | 30 (`LIMITE_PUBLICO_POR_MINUTO`) | Gastar el límite de lecturas a Open Food Facts (D1) |
+
+  - Se aplica con el decorador `@LimitarPeticiones("login" | "publico")` ([`seguridad/limite-peticiones.ts`](../backend/src/seguridad/limite-peticiones.ts)); las demás rutas, incluida la búsqueda, no tienen límite. Cada ruta lleva su propio contador: fallar el login no bloquea el registro.
+  - Al superarlo responde **429** con "Demasiados intentos, espera un minuto." y el header `Retry-After` (segundos). El formato es el mismo que el resto de los errores de esa ruta: el de NestJS en login, registro y análisis, y el del contrato (`TOO_MANY_REQUESTS`) en el detalle de producto. El log registra `limite_peticiones_superado` con el request id y la ruta, sin la IP ni el cuerpo.
+  - **IP real:** en Render las peticiones llegan por su proxy, así que `configurar-app.ts` activa `trust proxy` con un salto: `req.ip` sale de `X-Forwarded-For` y no es la IP del proxy. Sin esto, todos los usuarios compartirían un mismo contador.
+  - Los límites se leen en cada petición, así que basta cambiar la variable de entorno en Render (sin tocar el código) si hace falta subirlos, por ejemplo en una demo con muchas personas detrás de la misma red, que comparten IP.
+  - El contador vive en memoria: alcanza para la única instancia de staging, se reinicia con cada despliegue y, con varias instancias, cada una contaría por su lado (habría que pasar a Redis).
 - CORS restringido con `CORS_ORIGINS`.
 - Imagen Docker `node:22-alpine`, sin npm ni npx en la etapa final, ejecutada como usuario `node`. Trivy (CRITICAL) sin hallazgos.
 - `overrides` de `multer` (^2.5.0) y `body-parser` (^1.20.9) para corregir vulnerabilidades altas.
@@ -153,10 +176,12 @@ npm run migration:revert   # revertir la última
 
 | Suite | Comando | Cantidad | Qué cubre |
 |---|---|---|---|
-| Unitarias | `npm test` | 192 | Servicios, controladores, guard, mapper, normalización, configuración |
-| Integración | `npm run test:integration` | 36 (~20 s) | App NestJS real contra un FastAPI simulado (`node:http`), sin PostgreSQL |
+| Unitarias | `npm test` | 338 | Servicios, controladores, guards (JWT, roles y límite de peticiones), mapper, normalización, configuración |
+| Integración | `npm run test:integration` | 92 (~50 s) | App NestJS real contra un FastAPI simulado (`node:http`), sin PostgreSQL |
 
-La suite de integración cubre: búsqueda y guardado, `X-Request-ID`, validación, reintentos y respaldo ante 503, FastAPI apagado, timeout, `/api/health` (ok, degradado, error), `X-Response-Time-ms`, métricas, detalle, perfil, alergias, compatibilidad y 401 sin token. Corre en el CI sin Docker.
+La suite de integración cubre: búsqueda y guardado, `X-Request-ID`, validación, reintentos y respaldo ante 503, FastAPI apagado, timeout, `/api/health` (ok, degradado, error), `X-Response-Time-ms`, métricas, detalle, perfil, alergias, compatibilidad, 401 sin token y el límite de peticiones ([`limite-peticiones.int-spec.ts`](../backend/test/integracion/limite-peticiones.int-spec.ts): el sexto login en un minuto responde 429, otra IP en `X-Forwarded-For` no queda bloqueada y el detalle responde `TOO_MANY_REQUESTS`). Corre en el CI sin Docker.
+
+Cada archivo de integración levanta su propia app, así que los contadores del límite no se comparten entre archivos, y las pruebas del límite usan una IP distinta en `X-Forwarded-For` en cada caso. Si una prueba futura necesita más intentos, se puede subir el límite con las variables de entorno.
 
 ## Ejecución local
 

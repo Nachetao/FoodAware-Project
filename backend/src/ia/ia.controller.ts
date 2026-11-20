@@ -1,9 +1,14 @@
 import { Controller, Post, Body } from "@nestjs/common";
-import { ApiBearerAuth, ApiOperation } from "@nestjs/swagger";
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiTooManyRequestsResponse,
+} from "@nestjs/swagger";
 import { IaAnalysisService } from "./ia.service";
 import { AnalizarProductoDto } from "./dto/analizar-producto.dto";
 import { Public, UsuarioActual } from "../auth/decoradores";
 import { UsuarioToken } from "../auth/jwt.strategy";
+import { LimitarPeticiones } from "../seguridad/limite-peticiones";
 
 @Controller("food")
 export class IaController {
@@ -11,8 +16,13 @@ export class IaController {
 
   // Público para el frontend actual, que todavía no tiene login.
   @Public()
+  // Cada llamada guarda una fila: limitado por IP para que no llenen la base.
+  @LimitarPeticiones("publico")
   @Post("analizar")
   @ApiBearerAuth()
+  @ApiTooManyRequestsResponse({
+    description: "Demasiados análisis desde la misma IP en un minuto.",
+  })
   @ApiOperation({
     summary: "Analiza un producto (token opcional)",
     description:

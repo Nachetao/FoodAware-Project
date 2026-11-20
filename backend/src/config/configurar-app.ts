@@ -12,6 +12,10 @@ import { origenesCors } from "./despliegue";
 export function configurarApp(app: INestApplication): void {
   // Todos los Logger de NestJS escriben en JSON con el formato acordado.
   app.useLogger(app.get(Logger));
+  // En Render las peticiones llegan por su proxy: confiar en un salto hace
+  // que req.ip sea la IP real del cliente (de X-Forwarded-For) y no la del
+  // proxy. La usa el límite de peticiones.
+  app.getHttpAdapter().getInstance().set("trust proxy", 1);
   // Primero que todo: el request id queda disponible para el resto de la petición.
   app.use(requestIdMiddleware);
   // Todas las rutas estarán bajo el prefijo /api

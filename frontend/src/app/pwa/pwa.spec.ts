@@ -5,7 +5,7 @@ import { AvisoSinConexionComponent, TEXTO_SIN_CONEXION } from './aviso-sin-conex
 import { ConexionService } from './conexion.service';
 import { EventoInstalacion, InstalacionService } from './instalacion.service';
 import { PwaModule } from './pwa.module';
-import { aErrorApi } from '../products/products.service';
+import { MENSAJE_DEMASIADOS_INTENTOS, aErrorApi } from '../products/products.service';
 
 /** Simula el cambio de conexión del navegador. */
 function cambiarConexion(enLinea: boolean): void {
@@ -165,6 +165,25 @@ describe('aErrorApi con y sin conexión', () => {
         codigo: 'SOURCE_TIMEOUT',
         mensaje: 'El servicio de búsqueda no respondió a tiempo.',
         requestId: 'r1',
+      });
+    });
+
+    it.each([
+      [
+        'el formato de NestJS (login y registro)',
+        { statusCode: 429, message: 'Demasiados intentos, espera un minuto.', error: 'Too Many Requests' },
+      ],
+      [
+        'el formato del contrato (detalle de producto)',
+        { error: { codigo: 'TOO_MANY_REQUESTS', mensaje: 'Demasiados intentos, espera un minuto.', request_id: 'r2' } },
+      ],
+      ['un cuerpo vacío', null],
+    ])('un 429 con %s dice que espere un minuto', (_caso, cuerpo) => {
+      expect(aErrorApi(new HttpErrorResponse({ status: 429, error: cuerpo }))).toEqual({
+        status: 429,
+        codigo: null,
+        mensaje: MENSAJE_DEMASIADOS_INTENTOS,
+        requestId: null,
       });
     });
 
