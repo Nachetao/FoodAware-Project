@@ -149,6 +149,7 @@ describe('BusquedaPage', () => {
   let buscar: Mock<ProductsService['buscar']>;
   let buscarPersonalizado: Mock<ProductsService['buscarPersonalizado']>;
   let autenticado: ReturnType<typeof signal<boolean>>;
+  let usuario: ReturnType<typeof signal<{ alergias: string[] } | null>>;
 
   beforeEach(async () => {
     // La página lee las preferencias guardadas al crearse.
@@ -156,6 +157,7 @@ describe('BusquedaPage', () => {
     buscar = vi.fn<ProductsService['buscar']>();
     buscarPersonalizado = vi.fn<ProductsService['buscarPersonalizado']>();
     autenticado = signal(false);
+    usuario = signal<{ alergias: string[] } | null>(null);
 
     await TestBed.configureTestingModule({
       // El módulo de la página trae la barra superior compartida y el router.
@@ -163,7 +165,7 @@ describe('BusquedaPage', () => {
       providers: [
         provideRouter([]),
         { provide: ProductsService, useValue: { buscar, buscarPersonalizado } },
-        { provide: AuthService, useValue: { autenticado, esAdmin: signal(false) } },
+        { provide: AuthService, useValue: { autenticado, usuario, esAdmin: signal(false) } },
       ],
     }).compileComponents();
 
@@ -242,7 +244,58 @@ describe('BusquedaPage', () => {
       'https://images.openfoodfacts.org/leche.jpg',
     );
     expect(elemento().querySelectorAll('ion-thumbnail .sin-imagen')).toHaveLength(1);
-    expect(textos('.chip-alergeno')).toEqual(['Lácteos', 'Maní']);
+    // Sin sesión no hay perfil: todos en neutro, sin ícono de advertencia.
+    expect(textos('.alergenos .prefijo')).toEqual(['Contiene:']);
+    expect(textos('.chip-alergeno-neutro')).toEqual(['Lácteos', 'Maní']);
+    expect(elemento().querySelectorAll('.chip-alergeno')).toHaveLength(0);
+    expect(elemento().querySelectorAll('.alergenos ion-icon')).toHaveLength(0);
+  });
+
+  describe('alérgenos según el perfil', () => {
+    const conAlergenos = () =>
+      buscar.mockReturnValue(of(respuesta([resultado(1, { alergenos: ['gluten', 'lacteos', 'mani'] })])));
+
+    it('con sesión, solo los del perfil van en ámbar, primero, con ícono y texto para lectores', () => {
+      autenticado.set(true);
+      usuario.set({ alergias: ['mani'] });
+      conAlergenos();
+
+      page.buscar('galletas');
+
+      expect(textos('.chip-alergeno')).toEqual(['Maní (en tus alergias)']);
+      expect(elemento().querySelectorAll('.chip-alergeno ion-icon[name="warning-outline"]')).toHaveLength(1);
+      expect(textos('.chip-alergeno .solo-lectores')).toEqual(['(en tus alergias)']);
+      expect(textos('.chip-alergeno-neutro')).toEqual(['Gluten', 'Lácteos']);
+      expect(elemento().querySelectorAll('.chip-alergeno-neutro ion-icon')).toHaveLength(0);
+      const orden = Array.from(elemento().querySelectorAll('.alergenos ion-chip')).map((c) =>
+        c.classList.contains('chip-alergeno') ? 'perfil' : 'neutro',
+      );
+      expect(orden).toEqual(['perfil', 'neutro', 'neutro']);
+    });
+
+    it('con sesión y sin alergias en común, todos en neutro', () => {
+      autenticado.set(true);
+      usuario.set({ alergias: ['soya'] });
+      conAlergenos();
+
+      page.buscar('galletas');
+
+      expect(elemento().querySelectorAll('.chip-alergeno')).toHaveLength(0);
+      expect(textos('.chip-alergeno-neutro')).toEqual(['Gluten', 'Lácteos', 'Maní']);
+    });
+
+    it('al cerrar sesión vuelven todos a neutro', () => {
+      autenticado.set(true);
+      usuario.set({ alergias: ['mani'] });
+      conAlergenos();
+      page.buscar('galletas');
+      expect(textos('.chip-alergeno')).toHaveLength(1);
+
+      autenticado.set(false);
+
+      expect(elemento().querySelectorAll('.chip-alergeno')).toHaveLength(0);
+      expect(textos('.chip-alergeno-neutro')).toEqual(['Gluten', 'Lácteos', 'Maní']);
+    });
   });
 
   it('usa el singular con un solo resultado', () => {
@@ -768,7 +821,10 @@ describe('BusquedaPage con ?q= en la URL', () => {
         provideRouter([]),
         { provide: ActivatedRoute, useValue: { queryParamMap: parametros } },
         { provide: ProductsService, useValue: { buscar, buscarPersonalizado: vi.fn() } },
-        { provide: AuthService, useValue: { autenticado: signal(false), esAdmin: signal(false) } },
+        {
+          provide: AuthService,
+          useValue: { autenticado: signal(false), usuario: signal(null), esAdmin: signal(false) },
+        },
       ],
     }).compileComponents();
 

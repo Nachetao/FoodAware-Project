@@ -54,6 +54,7 @@ Público. Usa el mismo formato que el `/health` de FastAPI:
   "estado": "ok",
   "servicio": "backend",
   "version": "1.0.0",
+  "commit": "55a40763d1e8c0f2b9a7e5d4c3b2a1f0e9d8c7b6",
   "verificado_en": "2026-10-22T21:52:24Z",
   "dependencias": { "postgresql": "ok", "fastapi": "ok" },
   "detalle": {
@@ -68,6 +69,8 @@ Público. Usa el mismo formato que el `/health` de FastAPI:
 | PostgreSQL (`SELECT 1`) caído o sin respuesta en 2 s | `error` | **503** |
 | FastAPI caído, con timeout o reportándose degradado | `degradado` | 200 |
 | Todo responde | `ok` | 200 |
+
+`commit` es el commit del repositorio que se está ejecutando, igual que en el `/health` de FastAPI: sale de `RENDER_GIT_COMMIT` (Render la define en cada despliegue) o de `GIT_COMMIT`, y vale `null` si no hay ninguna. Sirve para comprobar qué versión del backend quedó desplegada.
 
 FastAPI caído no hace fallar el health, porque la búsqueda tiene respaldo desde la base. Este endpoint se usa como healthcheck en `docker-compose.yml` y en las pruebas de salud posteriores al despliegue.
 

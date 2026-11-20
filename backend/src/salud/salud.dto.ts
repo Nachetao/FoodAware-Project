@@ -72,6 +72,16 @@ export class RespuestaSalud {
   @ApiProperty({ example: "1.0.0" })
   version: string;
 
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    maxLength: 64,
+    description:
+      "Commit del repositorio que se está ejecutando (RENDER_GIT_COMMIT en Render, o GIT_COMMIT); null si no se conoce. Igual que el commit del /health de FastAPI.",
+    example: "55a40763d1e8c0f2b9a7e5d4c3b2a1f0e9d8c7b6",
+  })
+  commit: string | null;
+
   @ApiProperty({ format: "date-time", example: "2026-10-22T14:30:00Z" })
   verificado_en: string;
 

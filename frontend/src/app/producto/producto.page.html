@@ -103,12 +103,8 @@
         <h2 id="titulo-alergenos">Alérgenos</h2>
         @if (p.alergenos.length > 0) {
           <div class="chips">
-            @for (codigo of p.alergenos; track codigo) {
-              <ion-chip class="chip-alergeno">
-                <ion-icon name="warning-outline" aria-hidden="true"></ion-icon>
-                <span>{{ etiquetaAlergeno(codigo) }}</span>
-              </ion-chip>
-            }
+            <app-chips-alergenos [codigos]="p.alergenos" [alergiasUsuario]="alergiasPerfil()"
+              prefijo="Contiene:"></app-chips-alergenos>
           </div>
         } @else {
           <p class="vacio">No se detectaron alérgenos.</p>
@@ -116,9 +112,8 @@
         @if (p.trazas.length > 0) {
           <h3>Puede contener</h3>
           <div class="chips trazas">
-            @for (codigo of p.trazas; track codigo) {
-              <ion-chip class="chip-traza">{{ etiquetaAlergeno(codigo) }}</ion-chip>
-            }
+            <app-chips-alergenos [codigos]="p.trazas" [alergiasUsuario]="alergiasPerfil()"
+              tipo="traza"></app-chips-alergenos>
           </div>
         }
       </section>

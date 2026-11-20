@@ -96,6 +96,8 @@ describe('ProductoPage', () => {
     respuesta = of<DetalleProducto>({ producto: PRODUCTO, desdeRespaldo: false }),
     {
       conSesion = false,
+      // Alergias del perfil (solo con sesión).
+      alergias = [] as string[],
       compatible = of<Compatibilidad>(APTO),
       compatibilidadDesdeRespaldo = false,
     } = {},
@@ -112,7 +114,14 @@ describe('ProductoPage', () => {
       providers: [
         provideRouter([]),
         { provide: ProductsService, useValue: { obtener, compatibilidad } },
-        { provide: AuthService, useValue: { autenticado, esAdmin: signal(false) } },
+        {
+          provide: AuthService,
+          useValue: {
+            autenticado,
+            usuario: signal(conSesion ? { alergias } : null),
+            esAdmin: signal(false),
+          },
+        },
         {
           provide: ActivatedRoute,
           useValue: { paramMap: of(convertToParamMap({ codigo: '7801234000018' })) },
@@ -148,13 +157,50 @@ describe('ProductoPage', () => {
     expect(raiz().querySelector('.nutriscore')?.classList).toContain('nutri-c');
   });
 
-  it('muestra alérgenos en ámbar, trazas aparte como "Puede contener" y dieta en verde', async () => {
+  it('sin sesión muestra alérgenos y trazas en neutro, las trazas aparte como "Puede contener", y la dieta en verde', async () => {
     await crear();
 
-    expect(textos('ion-chip.chip-alergeno')).toEqual(['Gluten', 'Lácteos']);
+    expect(texto('section .prefijo')).toBe('Contiene:');
+    expect(textos('ion-chip.chip-alergeno-neutro')).toEqual(['Gluten', 'Lácteos']);
     expect(texto('section h3')).toBe('Puede contener');
-    expect(textos('ion-chip.chip-traza')).toEqual(['Maní']);
+    expect(textos('ion-chip.chip-traza-neutro')).toEqual(['Maní']);
+    expect(raiz().querySelectorAll('ion-chip.chip-alergeno, ion-chip.chip-traza')).toHaveLength(0);
+    expect(raiz().querySelectorAll('.chips ion-icon')).toHaveLength(0);
     expect(textos('ion-chip.chip-dieta')).toEqual(['Vegetariano']);
+  });
+
+  describe('alérgenos y trazas según el perfil', () => {
+    it('en ámbar con ícono y texto para lectores solo los que están en el perfil', async () => {
+      await crear(undefined, { conSesion: true, alergias: ['lacteos', 'mani'] });
+
+      expect(textos('ion-chip.chip-alergeno')).toEqual(['Lácteos (en tus alergias)']);
+      expect(textos('ion-chip.chip-alergeno-neutro')).toEqual(['Gluten']);
+      // La traza que choca: ámbar, borde discontinuo e ícono.
+      expect(textos('ion-chip.chip-traza')).toEqual(['Maní (en tus alergias)']);
+      expect(raiz().querySelectorAll('ion-chip.chip-traza-neutro')).toHaveLength(0);
+      expect(raiz().querySelectorAll('ion-chip.chip-alergeno ion-icon[name="warning-outline"]')).toHaveLength(1);
+      expect(raiz().querySelectorAll('ion-chip.chip-traza ion-icon[name="warning-outline"]')).toHaveLength(1);
+      expect(raiz().querySelectorAll('ion-chip.chip-alergeno-neutro ion-icon')).toHaveLength(0);
+      expect(textos('.chips .solo-lectores')).toEqual(['(en tus alergias)', '(en tus alergias)']);
+    });
+
+    it('el alérgeno del perfil va primero, antes de los neutros', async () => {
+      await crear(undefined, { conSesion: true, alergias: ['lacteos'] });
+
+      const clases = Array.from(raiz().querySelectorAll('[aria-labelledby="titulo-alergenos"] .chips:not(.trazas) ion-chip')).map((c) =>
+        c.classList.contains('chip-alergeno') ? 'perfil' : 'neutro',
+      );
+      expect(clases).toEqual(['perfil', 'neutro']);
+      expect(textos('ion-chip.chip-traza-neutro')).toEqual(['Maní']);
+    });
+
+    it('con sesión y sin alergias en común, todos en neutro', async () => {
+      await crear(undefined, { conSesion: true, alergias: ['soya'] });
+
+      expect(raiz().querySelectorAll('ion-chip.chip-alergeno, ion-chip.chip-traza')).toHaveLength(0);
+      expect(textos('ion-chip.chip-alergeno-neutro')).toEqual(['Gluten', 'Lácteos']);
+      expect(textos('ion-chip.chip-traza-neutro')).toEqual(['Maní']);
+    });
   });
 
   it('muestra el texto original y la lista de ingredientes', async () => {

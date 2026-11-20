@@ -34,3 +34,27 @@ export const ETIQUETAS_DIETA: Record<DietLabel, string> = {
 export function etiquetaDieta(codigo: string): string {
   return (ETIQUETAS_DIETA as Record<string, string | undefined>)[codigo] ?? codigo;
 }
+
+/** Alérgenos (o trazas) de un producto, según el perfil del usuario. */
+export interface AlergenosSeparados {
+  /** Los que están en las alergias del usuario: se advierten. */
+  enConflicto: string[];
+  /** El resto: solo informativos. */
+  otros: string[];
+}
+
+/**
+ * Separa los códigos del producto en los que chocan con las alergias del
+ * usuario y los demás, manteniendo el orden original. Sin perfil (lista
+ * vacía), ninguno choca.
+ */
+export function separarAlergenos(
+  codigos: readonly string[],
+  alergiasUsuario: readonly string[],
+): AlergenosSeparados {
+  const perfil = new Set(alergiasUsuario);
+  return {
+    enConflicto: codigos.filter((codigo) => perfil.has(codigo)),
+    otros: codigos.filter((codigo) => !perfil.has(codigo)),
+  };
+}
