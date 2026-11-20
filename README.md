@@ -206,6 +206,7 @@ En staging, Render genera los secretos (`JWT_SECRET`, `INGESTA_CLAVE`,
 | [docs/pipeline-devsecops.md](docs/pipeline-devsecops.md) | Workflows, quality gates, Variables y Secrets, pruebas y evidencia | Listo |
 | [docs/despliegue-staging.md](docs/despliegue-staging.md) | Despliegue en Render paso a paso y despliegue automático | Listo |
 | [docs/limitaciones.md](docs/limitaciones.md) | Limitaciones conocidas, su impacto y su mitigación | Listo |
+| [docs/modelo-amenazas.md](docs/modelo-amenazas.md) | Modelo de amenazas con STRIDE: activos, límites de confianza, controles con su evidencia, riesgos del dominio y riesgos pendientes | Listo |
 | [docs/estado-del-proyecto.md](docs/estado-del-proyecto.md) | Lo hecho en la EP2 por persona, correcciones de la EP1 y backlog para la EP3 y el Módulo 3 | Listo |
 
 ## Staging
