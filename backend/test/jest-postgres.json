@@ -1,0 +1,22 @@
+{
+  "rootDir": "..",
+  "moduleFileExtensions": ["js", "json", "ts"],
+  "testRegex": "test/postgres/.*\\.pg-spec\\.ts$",
+  "transform": {
+    "^.+\\.(t|j)s$": [
+      "ts-jest",
+      { "tsconfig": "<rootDir>/test/tsconfig.integracion.json" }
+    ]
+  },
+  "transformIgnorePatterns": [
+    "[\\\\/]node_modules[\\\\/](?!@nestjs[\\\\/]jwt[\\\\/])"
+  ],
+  "globalSetup": "<rootDir>/test/postgres/preparar-base.ts",
+  "globalTeardown": "<rootDir>/test/postgres/borrar-base.ts",
+  "setupFiles": [
+    "<rootDir>/test/integracion/entorno.ts",
+    "<rootDir>/test/postgres/entorno.ts"
+  ],
+  "testEnvironment": "node",
+  "testTimeout": 60000
+}

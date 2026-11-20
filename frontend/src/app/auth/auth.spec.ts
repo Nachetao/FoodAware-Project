@@ -252,5 +252,14 @@ describe('Autenticación', () => {
     it('sin sesión redirige a /login con la ruta de vuelta', () => {
       expect(url(ejecutar())).toBe('/login?volver=%2Fadmin');
     });
+
+    it.each([
+      ['sin rol (anterior a los roles)', jwt({ sub: 'u1', correo: 'ana@correo.cl' })],
+      ['con un rol desconocido', jwt({ sub: 'u1', rol: 'superusuario' })],
+      ['que no es un JWT', 'jwt-1'],
+    ])('con sesión y un token %s lo manda a /home', (_caso, token) => {
+      auth.token.set(token);
+      expect(url(ejecutar())).toBe('/home');
+    });
   });
 });
