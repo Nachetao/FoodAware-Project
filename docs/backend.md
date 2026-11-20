@@ -289,6 +289,9 @@ DB_HOST=localhost DB_PORT=5433 PYTHON_API_URL=http://localhost:8000 npm run star
 | Captura | Muestra |
 |---|---|
 | `docs/evidencia/respaldo-chocolate.png` | Búsqueda con FastAPI caído: respuesta desde la base con aviso |
+| [limite-login.png](evidencia/limite-login.png) | El sexto login en un minuto responde 429 y el frontend muestra "Demasiados intentos, espera un minuto." (límite de peticiones) |
+| [no-apto.png](evidencia/no-apto.png) | Veredicto del motor adaptativo en el detalle: "No apto para ti", con explicación, confianza y aviso |
+| [admin.png](evidencia/admin.png) | Ruta de administrador (`GET /api/usuarios` y `GET /api/food`): usuarios sin alergias y alimentos analizados |
 | `docs/evidencia/compatibles-swagger.png` | `/compatibles` con alergia a lácteos: 9 de 32 chocolates (de la EP2, cuando filtraba en SQL; hoy usa el motor) |
 
 ## Limitaciones
