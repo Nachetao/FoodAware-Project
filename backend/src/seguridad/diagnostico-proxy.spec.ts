@@ -121,6 +121,8 @@ describe("diagnosticarProxy", () => {
       req_ip_igual_cf_connecting_ip: true,
       req_ip_igual_true_client_ip: true,
       huella_ip: huellaIp(CLIENTE),
+      fuente_ip_limite: "cf-connecting-ip",
+      huella_ip_limite: huellaIp(CLIENTE),
     });
     const texto = JSON.stringify(resultado);
     for (const ip of [CLIENTE, CLOUDFLARE, BALANCEADOR]) {
@@ -144,6 +146,10 @@ describe("diagnosticarProxy", () => {
     expect(resultado.saltos_confiables).toBe(1);
     expect(resultado.req_ip_igual_cf_connecting_ip).toBe(false);
     expect(resultado.req_ip_igual_true_client_ip).toBeNull();
+    // El límite usa la IP de Cloudflare aunque req.ip sea otra.
+    expect(resultado.fuente_ip_limite).toBe("cf-connecting-ip");
+    expect(resultado.huella_ip).toBe(huellaIp(CLOUDFLARE));
+    expect(resultado.huella_ip_limite).toBe(huellaIp(CLIENTE));
     expect(JSON.stringify(resultado)).not.toContain("203.0.113.7");
   });
 
@@ -160,5 +166,7 @@ describe("diagnosticarProxy", () => {
       forwarded: false,
     });
     expect(resultado.req_ip_igual_cf_connecting_ip).toBeNull();
+    expect(resultado.fuente_ip_limite).toBe("req.ip");
+    expect(resultado.huella_ip_limite).toBe(huellaIp("127.0.0.1"));
   });
 });

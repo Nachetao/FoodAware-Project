@@ -9,6 +9,7 @@ import { ThrottlerGuard } from "@nestjs/throttler";
 import { Request } from "express";
 import { requestIdDe } from "../observabilidad/request-id";
 import { diagnosticarProxy, diagnosticoProxyActivo } from "./diagnostico-proxy";
+import { ipCliente } from "./ip-cliente";
 
 /** Mensaje del 429, el mismo en todas las rutas con límite. */
 export const MENSAJE_LIMITE = "Demasiados intentos, espera un minuto.";
@@ -33,8 +34,8 @@ export class DemasiadasPeticionesException extends HttpException {
 
 /**
  * ThrottlerGuard con la respuesta y el log de FoodAware. Identifica al
- * cliente por req.ip, que con "trust proxy" (SALTOS_PROXY) es la IP real y no
- * la de Cloudflare o del load balancer de Render.
+ * cliente por CF-Connecting-IP cuando viene y es válido (IP_DESDE_CLOUDFLARE),
+ * y si no, por req.ip con "trust proxy" (SALTOS_PROXY). Ver ip-cliente.ts.
  */
 @Injectable()
 export class LimitePeticionesGuard extends ThrottlerGuard {
@@ -51,6 +52,14 @@ export class LimitePeticionesGuard extends ThrottlerGuard {
       );
     }
     return super.canActivate(context);
+  }
+
+  /**
+   * La IP de ipCliente pasa por el getTracker original, que agrupa las IPv6
+   * por su prefijo /64 (un mismo cliente puede rotar dentro de él).
+   */
+  protected async getTracker(req: Record<string, unknown>): Promise<string> {
+    return super.getTracker({ ip: ipCliente(req as unknown as Request).ip });
   }
 
   protected async throwThrottlingException(

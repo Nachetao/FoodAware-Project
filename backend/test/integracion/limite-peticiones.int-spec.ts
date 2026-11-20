@@ -132,6 +132,77 @@ describe("Integración: límite de peticiones", () => {
     });
   });
 
+  describe("POST /api/auth/login con CF-Connecting-IP (Cloudflare)", () => {
+    const loginCloudflare = (cfConnectingIp: string, xffCompleto: string) =>
+      request(servidor())
+        .post("/api/auth/login")
+        .set("CF-Connecting-IP", cfConnectingIp)
+        .set("X-Forwarded-For", xffCompleto)
+        .send({ correo: "nadie@correo.cl", password: "no-es-la-clave" });
+
+    it("el curl con X-Forwarded-For falsificado recibe 429 en el sexto intento si CF-Connecting-IP es el mismo", async () => {
+      const cliente = nuevaIp();
+
+      const estados: number[] = [];
+      for (let i = 1; i <= 6; i++) {
+        // Como llegó en staging: la IP inventada queda donde se lee req.ip.
+        const res = await loginCloudflare(
+          cliente,
+          `192.0.2.${i}, ${CLOUDFLARE}`,
+        );
+        estados.push(res.status);
+      }
+
+      expect(estados).toEqual([401, 401, 401, 401, 401, 429]);
+    });
+
+    it("dos clientes con distinto CF-Connecting-IP no comparten contador", async () => {
+      const xffComun = `192.0.2.250, ${CLOUDFLARE}`;
+      const computador = nuevaIp();
+      for (let i = 0; i < 6; i++) {
+        await loginCloudflare(computador, xffComun);
+      }
+
+      const celular = await loginCloudflare(nuevaIp(), xffComun);
+
+      expect(celular.status).toBe(401);
+    });
+
+    it("sin el header usa req.ip (X-Forwarded-For con SALTOS_PROXY)", async () => {
+      const ip = nuevaIp();
+
+      const estados: number[] = [];
+      for (let i = 0; i < 6; i++) {
+        estados.push((await login(ip)).status);
+      }
+
+      expect(estados.at(-1)).toBe(429);
+    });
+
+    it("con un valor que no es una IP usa req.ip", async () => {
+      const ip = nuevaIp();
+
+      const estados: number[] = [];
+      for (let i = 1; i <= 6; i++) {
+        estados.push((await loginCloudflare(`no-es-ip-${i}`, xff(ip))).status);
+      }
+
+      expect(estados.at(-1)).toBe(429);
+    });
+
+    it("con IP_DESDE_CLOUDFLARE=false ignora el header", async () => {
+      process.env.IP_DESDE_CLOUDFLARE = "false";
+      const cfComun = nuevaIp();
+
+      const estados: number[] = [];
+      for (let i = 0; i < 6; i++) {
+        estados.push((await loginCloudflare(cfComun, xff(nuevaIp()))).status);
+      }
+
+      expect(estados).not.toContain(429);
+    });
+  });
+
   describe("POST /api/users", () => {
     const registro = (ip: string, password = "clave-segura") =>
       request(servidor())
