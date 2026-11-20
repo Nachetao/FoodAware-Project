@@ -16,6 +16,7 @@ import { IaAnalysisService } from "../ia/ia.service";
 import { Rol } from "../users/rol";
 import { User } from "../users/user.entity";
 import { UsersService } from "../users/users.service";
+import { UsuariosController } from "../users/usuarios.controller";
 import { ThrottlerModule } from "@nestjs/throttler";
 import { opcionesLimitePeticiones } from "../seguridad/limite-peticiones";
 
@@ -26,12 +27,14 @@ const ADMIN_ID = "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
 describe("JwtAuthGuard y RolesGuard (guards globales)", () => {
   let app: INestApplication;
   let base: string;
+  let raiz: string;
   const foodsService = { findAll: jest.fn().mockResolvedValue([]) };
   const iaService = { analizarProducto: jest.fn().mockResolvedValue({}) };
   // La "base": JwtStrategy busca aquí al usuario del token en cada petición.
   const usuarios = new Map<string, Partial<User>>();
   const usersService = {
     buscarPorId: jest.fn(async (id: string) => usuarios.get(id) ?? null),
+    perfil: jest.fn(async (id: string) => usuarios.get(id)),
   };
 
   beforeAll(async () => {
@@ -41,7 +44,7 @@ describe("JwtAuthGuard y RolesGuard (guards globales)", () => {
         PassportModule,
         ThrottlerModule.forRoot(opcionesLimitePeticiones),
       ],
-      controllers: [FoodsController, IaController],
+      controllers: [FoodsController, IaController, UsuariosController],
       providers: [
         JwtStrategy,
         // Mismo orden que AuthModule: primero el JWT, después los roles.
@@ -63,7 +66,8 @@ describe("JwtAuthGuard y RolesGuard (guards globales)", () => {
       }),
     );
     await app.listen(0, "127.0.0.1");
-    base = `${await app.getUrl()}/api/food`;
+    raiz = `${await app.getUrl()}/api`;
+    base = `${raiz}/food`;
   });
 
   afterAll(() => app.close());
@@ -134,6 +138,17 @@ describe("JwtAuthGuard y RolesGuard (guards globales)", () => {
       expect(foodsService.findAll).not.toHaveBeenCalled();
     });
 
+    it("responde 401 si al usuario lo hicieron administrador después del login", async () => {
+      usuarios.set(USUARIO_ID, {
+        ...usuarios.get(USUARIO_ID),
+        rol: Rol.ADMINISTRADOR,
+      });
+
+      // Con el token viejo (rol usuario) no entra: debe volver a iniciar sesión.
+      expect(await estado(token())).toBe(401);
+      expect(foodsService.findAll).not.toHaveBeenCalled();
+    });
+
     it("responde 401 si el token es anterior a los roles (sin rol)", async () => {
       expect(
         await estado(firmar({ sub: ADMIN_ID, correo: "admin@correo.cl" })),
@@ -144,6 +159,33 @@ describe("JwtAuthGuard y RolesGuard (guards globales)", () => {
       usuarios.delete(ADMIN_ID);
 
       expect(await estado(tokenAdmin())).toBe(401);
+    });
+  });
+
+  describe("ruta con sesión y sin @Roles: GET /api/usuarios/me", () => {
+    const estadoPerfil = async (t?: string) =>
+      (await fetch(`${raiz}/usuarios/me`, t ? { headers: conToken(t) } : {}))
+        .status;
+
+    it("responde 401 sin token", async () => {
+      expect(await estadoPerfil()).toBe(401);
+    });
+
+    it.each([
+      ["un usuario", () => token()],
+      ["un administrador", () => tokenAdmin()],
+    ])("responde 200 a %s", async (_caso, crear) => {
+      expect(await estadoPerfil(crear())).toBe(200);
+    });
+
+    it("responde 401 si el rol de la base ya no coincide con el del token", async () => {
+      usuarios.set(USUARIO_ID, {
+        ...usuarios.get(USUARIO_ID),
+        rol: Rol.ADMINISTRADOR,
+      });
+
+      expect(await estadoPerfil(token())).toBe(401);
+      expect(usersService.perfil).not.toHaveBeenCalled();
     });
   });
 
