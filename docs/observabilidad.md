@@ -33,8 +33,16 @@ El nivel mínimo se configura con `LOG_LEVEL` (por defecto `info`).
 | Uso del respaldo | warning | `FastAPI falló con 503 SOURCE_UNAVAILABLE; respondiendo desde la base: 3 de 61 productos` |
 | Respaldo sin resultados | warning | `… el respaldo no tiene resultados; se mantiene el error` |
 | Fallo del respaldo o del guardado | error | `No se pudieron guardar N productos: …` |
+| Límite de peticiones superado (`limite_peticiones_superado`) | warning | `[<request_id>] limite_peticiones_superado en POST /api/auth/login` |
+| Diagnóstico de la IP del cliente (`evento: diagnostico_proxy`) | info | Solo con `DIAGNOSTICO_PROXY=true` ([detalle abajo](#diagnóstico-de-la-ip-del-cliente-diagnostico_proxy)) |
 
 El log de acceso incluye `metodo`, `ruta`, `codigo_estado` y `duracion_ms`, igual que el de FastAPI.
+
+`limite_peticiones_superado` lleva el request id, el método y la ruta, **sin la IP ni el cuerpo** (el del login trae la contraseña). Se emite cuando una ruta con límite responde 429 ([backend.md](backend.md#seguridad)).
+
+### Datos que no se escriben
+
+El logger redacta (`[REDACTADO]`) los headers `Authorization`, `Cookie`, `Set-Cookie` y `X-Clave-Servicio` (la clave entre el backend y FastAPI) y los campos `password`, tanto en una petición como en la configuración de un error de axios. Es una defensa extra: el log de acceso no registra headers (solo `metodo`, `ruta`, `codigo_estado` y `duracion_ms`) y ningún log escribe IPs ni el perfil del usuario.
 
 ## Identificador de solicitud (`X-Request-ID`)
 
@@ -44,6 +52,17 @@ El log de acceso incluye `metodo`, `ruta`, `codigo_estado` y `duracion_ms`, igua
 4. Se devuelve en el header `X-Request-ID` de la respuesta y en `error.request_id` de los errores.
 
 CORS expone `X-Request-ID` y `X-Fuente-Datos` para que el frontend pueda leerlos.
+
+## Origen de los datos (`X-Fuente-Datos`)
+
+La búsqueda, el detalle, la compatibilidad, la búsqueda personalizada y `/compatibles` responden el header `X-Fuente-Datos`:
+
+| Valor | Significa |
+|---|---|
+| `fastapi` | La respuesta viene de FastAPI (búsqueda y detalle) o de su motor adaptativo |
+| `respaldo` | FastAPI falló (500, 502, 503 o 504 tras los reintentos) y el backend respondió desde `products`, con `estado_fuente: "cache"`. En la compatibilidad y la búsqueda personalizada es una revisión básica, con confianza baja y nunca "apto" |
+
+El frontend lo usa para mostrar el aviso de respaldo. Junto con el log de uso del respaldo (arriba), permite saber de dónde salió cada respuesta. Ver [backend.md](backend.md#motor-adaptativo).
 
 ## Endpoint de salud: `GET /api/health`
 
