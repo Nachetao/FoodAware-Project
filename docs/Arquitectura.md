@@ -7,12 +7,109 @@ buscador, y que staging ya no es Docker Compose sino Render.
 
 ## Diagrama de contexto
 
+FoodAware visto desde afuera: quién lo usa y con qué sistemas externos se
+relaciona. Los tres actores de la izquierda corresponden a los roles reales
+del backend (sin sesión, `usuario` y `administrador`).
+
 ```mermaid
 flowchart LR
-    Usuario([Usuario]) -->|"Busca un producto o ingresa ingredientes"| FoodAware[FoodAware]
-    FoodAware -->|"Productos con alérgenos, trazas y si es apto"| Usuario
-    FoodAware -->|"API v3 (producto) y v2/search (ingesta)"| OFF[("Open Food Facts<br/>fuente web abierta")]
+    Visitante([Visitante<br/>sin sesión])
+    Usuario([Usuario registrado<br/>rol usuario])
+    Admin([Administrador<br/>rol administrador])
+    Equipo([Equipo de desarrollo])
+
+    FoodAware["FoodAware<br/>PWA, app Android, backend NestJS<br/>y python-service FastAPI"]
+
+    OFF[("Open Food Facts<br/>fuente de productos")]
+    Render["Render<br/>aloja staging"]
+    GHA["GitHub Actions<br/>CI, CD y rollback"]
+    HCP["HCP Terraform<br/>estado de la configuración de GitHub"]
+
+    Visitante -->|"busca, ve productos y métricas,<br/>analiza ingredientes, se registra"| FoodAware
+    Usuario -->|"guarda alergias y dietas,<br/>recibe veredictos"| FoodAware
+    Admin -->|"revisa usuarios y<br/>alimentos analizados"| FoodAware
+    FoodAware -->|"lee productos: API v3 y v2/search,<br/>con límites de tasa"| OFF
+    Render -->|"aloja los 4 recursos de staging"| FoodAware
+    Equipo -->|"push y Pull Requests"| GHA
+    GHA -->|"despliega con la API de Render"| Render
+    GHA -->|"plan de Terraform, solo lectura"| HCP
+    Equipo -.->|"apply en local"| HCP
 ```
+
+### Actores
+
+| Actor | Cómo se identifica | Qué puede hacer | Dónde se controla |
+|---|---|---|---|
+| **Visitante** | Sin token | Buscar productos, ver el detalle de un producto, ver el panel de métricas, analizar ingredientes a mano, registrarse e iniciar sesión. Ve los alérgenos y trazas de cada producto y el aviso de que la información es orientativa (en el inicio), pero no recibe veredictos personalizados: el detalle lo invita a iniciar sesión | Rutas marcadas con `@Public()` en el backend; en el frontend, las páginas de inicio, búsqueda, producto, métricas, login y registro |
+| **Usuario registrado** | JWT con rol `usuario`. Todo registro nace con este rol | Todo lo del visitante, más: guardar sus alergias, dietas y modo estricto; recibir el veredicto de cada producto ("Apto para ti", "Apto con advertencia" o "No apto"); buscar solo productos compatibles con su perfil; analizar ingredientes contra su perfil; borrar su cuenta | Guard JWT global del backend (todo lo que no es `@Public()`); página `/perfil` con `authGuard` |
+| **Administrador** | JWT con rol `administrador`. Se asigna solo con el script `npm run admin:asignar` del backend, nunca desde la API | Todo lo del usuario registrado, más: ver la lista de usuarios (sin contraseñas ni datos de salud) y la de alimentos analizados | `@Roles(Rol.ADMINISTRADOR)` y `RolesGuard` en `GET /api/usuarios` y `GET /api/food`; página `/admin` con `adminGuard`. El rol del token se compara con el de la base en cada petición |
+
+Las rutas de cada rol están en [backend.md](backend.md), y los riesgos de
+cada uno en el [modelo de amenazas](modelo-amenazas.md).
+
+### Sistemas externos
+
+| Sistema | Para qué lo usamos | Qué se intercambia | Detalle |
+|---|---|---|---|
+| **Open Food Facts** | Fuente de los productos (base abierta, licencia ODbL) | El python-service lee productos con su User-Agent, dentro de los límites de la API (12 lecturas y 8 búsquedas por minuto). Nunca escribimos en ella | [fuente-web.md](fuente-web.md) |
+| **Render** | Aloja staging en el plan gratuito: frontend, backend, python-service y PostgreSQL | Recibe los despliegues y genera los secretos (`JWT_SECRET`, `CLAVE_SERVICIO`, `INGESTA_CLAVE`) | [despliegue-staging.md](despliegue-staging.md) |
+| **GitHub Actions** | Los 7 workflows de CI, CD Staging y Rollback staging | Corre las pruebas y los análisis de seguridad, y despliega en Render solo los commits de `main` con todo el CI en verde | [pipeline-devsecops.md](pipeline-devsecops.md) |
+| **HCP Terraform** | Guarda y bloquea el estado de `terraform/`, que administra la configuración de GitHub (el ruleset de `main` y el Environment `staging`) | En CI solo se lee el estado para el `plan`; el `apply` se hace en local | [pipeline-devsecops.md](pipeline-devsecops.md#terraform-la-configuración-de-github-como-código) |
+
+## Clasificación de compatibilidad, no garantía de seguridad
+
+FoodAware **clasifica** cada producto según el perfil de la persona. **No
+garantiza** que sea seguro comerlo. La diferencia importa porque una persona
+alérgica podría tomar el veredicto como una promesa.
+
+**Qué decide el sistema.** Compara los datos del producto con las alergias,
+las dietas y el modo estricto del perfil, y devuelve uno de tres veredictos:
+
+| Veredicto | En la interfaz | Cuándo |
+|---|---|---|
+| `apto` | "Apto para ti" | Solo si no aplica ninguna otra regla: ningún alérgeno ni traza del perfil, datos suficientes y las dietas confirmadas por la fuente |
+| `apto_con_advertencia` | "Apto con advertencia" | Hay trazas, un alérgeno posible, datos incompletos o una dieta que el producto no declara cumplir |
+| `no_apto` | "No apto" | Contiene un alérgeno del perfil, o contradice una de sus dietas. En modo estricto, también las trazas, los alérgenos posibles y los datos incompletos |
+
+Cada veredicto trae su explicación, los conflictos encontrados y una
+confianza (alta, media o baja) según la calidad de los datos. Las reglas
+completas están en el [contrato](contratos/README.md#capacidad-adaptativa).
+
+**Qué no garantiza.** El veredicto depende de los datos de Open Food Facts,
+que es una base colaborativa: puede tener alérgenos sin declarar,
+ingredientes mal escritos o una receta que el fabricante ya cambió.
+FoodAware tampoco puede saber de contaminación cruzada que la etiqueta no
+menciona. No es un dispositivo médico ni reemplaza leer la etiqueta del
+envase.
+
+**Aviso permanente.** Cada veredicto incluye el texto "Clasificación
+orientativa según tu perfil y los datos de Open Food Facts. No es una
+garantía de que el producto sea seguro para ti: revisa siempre la etiqueta
+del envase." El frontend lo muestra siempre en el inicio, también sin sesión
+([`aviso-orientativo.ts`](../frontend/src/app/compartido/aviso-orientativo.ts)),
+y junto a cada veredicto en la búsqueda personalizada y en el detalle del
+producto: en el frontend, un veredicto siempre aparece junto al aviso.
+
+**Por qué el error más grave es un falso "apto".** Los dos errores posibles
+no cuestan lo mismo. Un falso "no apto" le quita a la persona una opción que
+sí podía comer: es molesto, pero no hace daño. Un falso "apto" la puede
+llevar a comer su alérgeno. Por eso el sistema se equivoca a propósito hacia
+el lado seguro:
+
+- "Apto" es lo último que se decide, no lo que se asume: cualquier duda lo
+  baja a "apto con advertencia" o a "no apto".
+- Si el python-service no responde, el respaldo del backend nunca dice
+  "apto".
+- La evaluación sobre productos etiquetados a mano dio 0 falsos "apto" en 6
+  perfiles y 2 modos
+  ([recuperacion-y-evaluacion.md](recuperacion-y-evaluacion.md#8-evaluación-de-la-capacidad-adaptativa)).
+  Después de cada despliegue, el CD repite esa evaluación en staging y falla
+  si aparece un falso "apto".
+
+El costo es que el sistema marca como "no apto" algunos productos que sí
+eran aptos. Lo aceptamos a cambio de no decir "apto" cuando no corresponde.
+Los riesgos que quedan están en el
+[modelo de amenazas](modelo-amenazas.md#4-riesgos-del-dominio).
 
 ## Diagrama de contenedores
 
@@ -129,10 +226,23 @@ La caché del python-service no está en este modelo porque vive en otra base
 
 ## Decisiones de arquitectura
 
+Las tres decisiones de fondo tienen su propio registro (ADR), con contexto,
+alternativas y consecuencias, en [adr/](adr/README.md):
+
+| ADR | Decisión |
+|---|---|
+| [0001](adr/0001-estilo-servicios-separados.md) | Servicios separados por responsabilidad (un backend principal y un servicio especializado), no microservicios completos |
+| [0002](adr/0002-python-fastapi.md) | Python y FastAPI como servicio independiente |
+| [0003](adr/0003-rest-entre-servicios.md) | REST con contrato OpenAPI entre NestJS y FastAPI, en vez de gRPC o colas |
+| 0004 | PostgreSQL y TypeORM (pendiente) |
+
+Las de abajo son las decisiones más acotadas de cada entrega.
+
 ### De la EP1
 
-**Servicio Python separado:** el análisis de alérgenos va en un microservicio
-aparte con FastAPI, pensando en que a futuro podamos usar algo más
+**Servicio Python separado:** el análisis de alérgenos va en un servicio
+aparte con FastAPI (ver [ADR 0001](adr/0001-estilo-servicios-separados.md)
+y [ADR 0002](adr/0002-python-fastapi.md)), pensando en que a futuro podamos usar algo más
 sofisticado que reglas simples. El costo es una llamada HTTP extra entre
 NestJS y Python. En la EP2 la decisión se mantuvo: el python-service ahora
 también hace la ingesta, la preparación de datos y la búsqueda.

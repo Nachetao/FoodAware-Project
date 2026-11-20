@@ -69,6 +69,33 @@ según el perfil. La especificación preliminar, con lo que ya está
 implementado en la EP2, está en
 [docs/capacidad-adaptativa.md](docs/capacidad-adaptativa.md).
 
+## Clasificación, no garantía de seguridad
+
+FoodAware **clasifica** la compatibilidad de un producto con el perfil de la
+persona; **no garantiza** que sea seguro comerlo.
+
+- **Qué decide:** compara los alérgenos, las trazas y las dietas del producto
+  con las alergias, las dietas y el modo estricto del perfil, y responde
+  "Apto para ti", "Apto con advertencia" o "No apto", con su explicación y
+  una confianza según la calidad de los datos.
+- **Qué no garantiza:** los datos vienen de Open Food Facts, una base
+  colaborativa que puede tener alérgenos sin declarar, errores o recetas
+  desactualizadas. Tampoco ve la contaminación cruzada que la etiqueta no
+  menciona. No reemplaza leer la etiqueta del envase ni es un dispositivo
+  médico.
+- **Aviso permanente:** el frontend muestra siempre en el inicio, y junto a
+  cada veredicto, el texto "Clasificación orientativa según tu perfil y los
+  datos de Open Food Facts. No es una garantía de que el producto sea seguro
+  para ti: revisa siempre la etiqueta del envase."
+- **El error más grave es un falso "apto",** porque puede llevar a una
+  persona a comer su alérgeno; un falso "no apto" solo le quita una opción.
+  Por eso "apto" sale solo cuando no hay ninguna duda, el respaldo del
+  backend nunca dice "apto", y la evaluación con productos etiquetados a
+  mano (0 falsos "apto") se repite en cada despliegue a staging.
+
+El detalle está en
+[docs/Arquitectura.md](docs/Arquitectura.md#clasificación-de-compatibilidad-no-garantía-de-seguridad).
+
 ## Arquitectura
 
 ```mermaid
@@ -100,8 +127,11 @@ flowchart LR
 | CI/CD | GitHub Actions | Lint, pruebas, integración, seguridad, infraestructura y despliegue a staging |
 | Staging | Render (Blueprint `render.yaml`) | Ambiente de staging en el plan gratuito |
 
-Los diagramas de contexto, contenedores y despliegue, junto con las
-decisiones de arquitectura, están en [docs/Arquitectura.md](docs/Arquitectura.md).
+Los diagramas de contexto (con los actores y los sistemas externos),
+contenedores y despliegue, junto con las decisiones de arquitectura, están en
+[docs/Arquitectura.md](docs/Arquitectura.md). Las decisiones de fondo tienen su
+ADR en [docs/adr/](docs/adr/README.md): por qué servicios separados y no
+microservicios, por qué Python y FastAPI, y por qué REST entre los servicios.
 
 ## Levantar el proyecto en local
 
@@ -193,7 +223,8 @@ En staging, Render genera los secretos (`JWT_SECRET`, `INGESTA_CLAVE`,
 
 | Documento | Contenido | Estado |
 |---|---|---|
-| [docs/Arquitectura.md](docs/Arquitectura.md) | Diagramas de contexto, contenedores y despliegue; modelo de datos; decisiones de arquitectura | Actualizado a la EP2 (modelo de BD pendiente del backend) |
+| [docs/Arquitectura.md](docs/Arquitectura.md) | Diagrama de contexto con actores y sistemas externos; clasificación frente a garantía de seguridad; diagramas de contenedores y despliegue; modelo de datos; decisiones de arquitectura y ADR | Actualizado a la Entrega Final (modelo de BD pendiente del backend) |
+| [docs/adr/](docs/adr/README.md) | Registros de decisiones de arquitectura: estilo de servicios, Python y FastAPI, REST entre servicios | Listo (falta el de PostgreSQL y TypeORM) |
 | [docs/Flujo de Datos.md](docs/Flujo%20de%20Datos.md) | Flujo de búsqueda (EP2) y de análisis manual (EP1) | Actualizado a la EP2 |
 | [docs/contratos/README.md](docs/contratos/README.md) | API FastAPI: endpoints, errores, headers, búsqueda y métricas ([OpenAPI](docs/contratos/fastapi-openapi.json)) | Listo |
 | [docs/backend.md](docs/backend.md) | API NestJS: endpoints, persistencia, robustez frente a FastAPI y seguridad | Listo |
