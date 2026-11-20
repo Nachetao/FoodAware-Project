@@ -9,6 +9,9 @@ La más importante va primero, aunque se repita en varios documentos: la
 información de alérgenos de FoodAware es orientativa y no reemplaza leer la
 etiqueta del producto.
 
+Los riesgos de seguridad, ordenados por categoría STRIDE y con los controles
+que ya existen, están en el [modelo de amenazas](modelo-amenazas.md).
+
 ## 1. Fuente de datos
 
 | Limitación | Impacto | Mitigación o plan |
@@ -33,7 +36,6 @@ etiqueta del producto.
 | Las trazas dependen de frases conocidas | Una advertencia escrita de otra forma ("se fabrica junto a productos con...") puede no reconocerse | La lista de frases cubre las formas más comunes en español e inglés; se amplía igual que el diccionario |
 | Productos sin texto de ingredientes | No se pueden revisar | Se marcan como inválidos y no aparecen en la búsqueda |
 | El análisis manual de la EP1 (`/analizar`) usa otra lista | Da resultados distintos a la búsqueda para los mismos ingredientes, y devuelve "lácteos" con tilde en vez del código `lacteos` | Pendiente: hacer que `/analizar` use la misma detección que la búsqueda |
-| La interfaz no muestra un aviso de que la información es orientativa | Una persona podría confiar en la app sin leer la etiqueta | Pendiente en el frontend |
 | Las dietas vegana y vegetariana solo se revisan por alérgenos | La carne, la miel y la gelatina no son alérgenos, así que el veredicto no puede saber si un producto las tiene | Un producto sin la etiqueta de la dieta queda en `apto_con_advertencia` ("No declara cumplir la dieta vegana"), nunca en `apto`. Solo es `apto` si Open Food Facts lo etiqueta con esa dieta, y `no_apto` si trae un alérgeno de origen animal (lácteos, huevo, pescado, crustáceos o moluscos para la vegana; los tres últimos para la vegetariana). Ver la tabla de reglas en el [contrato](contratos/README.md#capacidad-adaptativa) |
 
 ## 3. Búsqueda
@@ -101,10 +103,11 @@ de Trivy.
 | El estado del Blueprint lo guarda Render | No hay un `plan` local que muestre los cambios antes de aplicarlos | CI valida `render.yaml` contra la API de Render (que muestra lo que crearía un sync), Auto Sync está desactivado y los cambios se aplican a mano con *Manual Sync* después del merge |
 | Si se pasara a un plan pagado | Se podrían llevar los servicios de Render a Terraform (el backend remoto ya existe en HCP Terraform), pero ese estado guardaría las contraseñas de la base | Por ahora no es necesario |
 
-## 7. Resueltas en la EP2
+## 7. Resueltas
 
 Estas limitaciones aparecían en versiones anteriores de este documento y ya
-están corregidas en `main`. Las que venían de la EP1 están también en
+están corregidas en `main`; las primeras se resolvieron en la EP2. Las que
+venían de la EP1 están también en
 [estado-del-proyecto.md](estado-del-proyecto.md#correcciones-de-la-ep1).
 
 | Limitación | Cómo se resolvió |
@@ -115,3 +118,4 @@ están corregidas en `main`. Las que venían de la EP1 están también en
 | Endpoints de prueba de la EP1 sin autenticación (`GET /api/food/test-alergia` creaba usuarios) | Se quitaron, y el backend exige JWT en todas las rutas salvo las públicas (PR #17) |
 | El frontend no leía `API_URL` y en Render llamaba a `http://localhost:3000` | La compilación toma la URL del backend de `API_URL` (PR #17) |
 | El backend no leía `CORS_ORIGINS` y aceptaba cualquier origen | CORS queda restringido a los orígenes de `CORS_ORIGINS`, y el backend escucha en `PORT` (PR #17) |
+| La interfaz no mostraba un aviso de que la información es orientativa | El frontend muestra un aviso permanente ([`aviso-orientativo.ts`](../frontend/src/app/compartido/aviso-orientativo.ts)) en el inicio, en la búsqueda y en el detalle del producto, con el mismo texto que el campo `aviso` de cada veredicto: "revisa siempre la etiqueta del envase" (PR #39) |

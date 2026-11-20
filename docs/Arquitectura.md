@@ -41,6 +41,8 @@ El frontend solo habla con el backend. El backend es el único que habla con
 el python-service y con PostgreSQL. El python-service es el único que habla
 con Open Food Facts y el único dueño de la caché SQLite. El contrato entre
 backend y python-service está en [contratos/README.md](contratos/README.md).
+Los límites de confianza entre estos componentes, y cómo se protege cada uno,
+están en el [modelo de amenazas](modelo-amenazas.md).
 
 ## Diagramas de despliegue
 
