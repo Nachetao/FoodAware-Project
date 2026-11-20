@@ -131,12 +131,8 @@
               }
               @if (producto.alergenos.length > 0) {
                 <div class="alergenos" aria-label="Alérgenos">
-                  @for (codigo of producto.alergenos; track codigo) {
-                    <ion-chip class="chip-alergeno">
-                      <ion-icon name="warning-outline" aria-hidden="true"></ion-icon>
-                      <span>{{ etiquetaAlergeno(codigo) }}</span>
-                    </ion-chip>
-                  }
+                  <app-chips-alergenos [codigos]="producto.alergenos" [alergiasUsuario]="alergiasPerfil()"
+                    prefijo="Contiene:"></app-chips-alergenos>
                 </div>
               }
             </div>

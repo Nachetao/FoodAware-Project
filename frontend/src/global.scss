@@ -67,7 +67,10 @@ ion-thumbnail {
 
 // Compartido por búsqueda y detalle de producto.
 
-// Alérgenos: advertencia de salud, en ámbar.
+// Alérgenos y trazas (app-chips-alergenos): en ámbar y con ícono solo los que
+// chocan con el perfil del usuario; el resto, en neutro.
+
+// Alérgeno que choca con el perfil: advertencia de salud, en ámbar.
 .chip-alergeno {
   --background: var(--app-alerta-fondo);
   --color: var(--app-alerta-texto);
@@ -80,12 +83,36 @@ ion-thumbnail {
   }
 }
 
-// Trazas ("Puede contener"): misma familia de color, más suave.
+// Traza ("Puede contener") que choca con el perfil: misma familia de color,
+// más suave.
 .chip-traza {
   --background: transparent;
   --color: var(--app-alerta-texto);
   margin: 0;
   border: 1px dashed var(--app-alerta-borde);
+
+  ion-icon {
+    color: var(--app-alerta-texto);
+  }
+}
+
+// Alérgeno o traza que no choca con el perfil (o sin sesión): informativo,
+// en neutro. Texto #0e150e y borde #555555 sobre el fondo crema o blanco:
+// contraste AA (texto ~17:1, borde ~6,7:1).
+.chip-alergeno-neutro,
+.chip-traza-neutro {
+  --background: transparent;
+  --color: var(--ion-text-color);
+  margin: 0;
+  border: 1px solid var(--ion-color-medium);
+}
+
+.chip-alergeno-neutro {
+  font-weight: 600;
+}
+
+.chip-traza-neutro {
+  border-style: dashed;
 }
 
 // Etiquetas de dieta: verdes, no son advertencias.

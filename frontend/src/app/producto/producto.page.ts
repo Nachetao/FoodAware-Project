@@ -31,6 +31,11 @@ export class ProductoPage implements OnInit {
 
   // Sin sesión no hay veredicto: se invita a iniciar sesión.
   readonly conSesion = computed(() => this.auth.autenticado());
+  // Alergias del perfil, para marcar los alérgenos y trazas que chocan con
+  // ellas. Sin sesión (o mientras carga el perfil), vacía: todos en neutro.
+  readonly alergiasPerfil = computed(() =>
+    this.auth.autenticado() ? (this.auth.usuario()?.alergias ?? []) : [],
+  );
 
   // Veredicto del motor: solo con sesión. Si la consulta falla, el detalle se
   // muestra igual, sin veredicto.
@@ -84,7 +89,6 @@ export class ProductoPage implements OnInit {
       .map(explicarProblema),
   );
 
-  readonly etiquetaAlergeno = etiquetaAlergeno;
   readonly etiquetaDieta = etiquetaDieta;
   readonly fecha = fecha;
 

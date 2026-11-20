@@ -15,7 +15,6 @@ import {
 } from 'rxjs';
 import { AuthService } from '../auth/auth.service';
 import { ProductsService } from '../products/products.service';
-import { etiquetaAlergeno } from '../products/models/alergenos';
 import { ModoBusqueda } from '../products/models/busqueda-personalizada';
 import { ErrorApi } from '../products/models/error';
 import { Producto } from '../products/models/producto';
@@ -111,7 +110,11 @@ export class BusquedaPage {
   readonly resumen = signal<ResumenPersonalizado | null>(null);
 
   readonly minCaracteres = MIN_CARACTERES;
-  readonly etiquetaAlergeno = etiquetaAlergeno;
+  // Alergias del perfil, para marcar los alérgenos que chocan con ellas. Sin
+  // sesión (o mientras carga el perfil), vacía: todos en neutro.
+  readonly alergiasPerfil = computed(() =>
+    this.auth.autenticado() ? (this.auth.usuario()?.alergias ?? []) : [],
+  );
 
   private consultas = new Subject<Consulta>();
 

@@ -182,6 +182,12 @@ describe("Integración NestJS ↔ FastAPI simulado", () => {
         servicio: "backend",
         dependencias: { postgresql: "ok", fastapi: "ok" },
       });
+      // Como el /health de FastAPI: el campo siempre está (null sin
+      // RENDER_GIT_COMMIT ni GIT_COMMIT).
+      expect(res.body).toHaveProperty("commit");
+      expect(
+        res.body.commit === null || typeof res.body.commit === "string",
+      ).toBe(true);
       expect(res.headers["x-response-time-ms"]).toBeDefined();
     });
 

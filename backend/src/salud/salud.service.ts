@@ -21,9 +21,28 @@ const VERSION: string = JSON.parse(
   readFileSync(join(__dirname, "../../package.json"), "utf8"),
 ).version;
 
+/**
+ * Commit del repositorio que se está ejecutando, como en el python-service:
+ * Render define RENDER_GIT_COMMIT en cada despliegue; en otro lado se puede
+ * pasar GIT_COMMIT. Sin ninguna de las dos (o vacías), null.
+ */
+export function commitDesplegado(
+  env: Record<string, string | undefined>,
+): string | null {
+  for (const variable of ["RENDER_GIT_COMMIT", "GIT_COMMIT"]) {
+    const valor = env[variable]?.trim();
+    if (valor) {
+      return valor;
+    }
+  }
+  return null;
+}
+
 @Injectable()
 export class SaludService {
   private readonly pythonApiUrl: string;
+  // Se lee una vez: no cambia mientras el proceso corre.
+  private readonly commit = commitDesplegado(process.env);
 
   constructor(
     private readonly dataSource: DataSource,
@@ -59,6 +78,7 @@ export class SaludService {
       estado,
       servicio: SERVICIO,
       version: VERSION,
+      commit: this.commit,
       verificado_en: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
       dependencias,
       detalle: { postgresql, fastapi },

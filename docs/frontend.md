@@ -52,6 +52,7 @@ El detalle de cada producto muestra la fecha de recuperación, un enlace a la fi
 ## Tema visual
 
 - Paleta propia en las variables de Ionic: fondo crema, verde bosque como color principal, lima solo para el botón principal, ámbar para los alérgenos y rojo para los errores, con contraste AA verificado.
+- **Alérgenos y trazas según el perfil** (`app-chips-alergenos`, en la búsqueda y el detalle): solo los que están en las alergias del usuario van en ámbar, primero, con ícono de advertencia y el texto "(en tus alergias)" para lectores de pantalla, así no dependen solo del color. Los demás van en neutro (texto casi negro y borde gris, contraste AA) después de "Contiene:"; las trazas conservan el borde discontinuo. Sin sesión, todos en neutro.
 - Fuente Inter empaquetada (`@fontsource-variable/inter`), disponible sin conexión.
 - Solo tema claro. `index.html` con `lang="es"` y `translate="no"` para evitar que el navegador traduzca la app y rompa los componentes de Ionic.
 
