@@ -83,6 +83,30 @@ describe('ProductsService', () => {
       await resultado;
     });
 
+    it('pide el texto normalizado: sin espacios de más y en minúsculas', async () => {
+      const resultado = firstValueFrom(service.buscar('  Leche   Entera '));
+
+      const req = esperarBusqueda();
+      expect(req.request.params.get('q')).toBe('leche entera');
+      req.flush(respuestaBusqueda);
+
+      await resultado;
+    });
+
+    it('"Leche" y "leche" piden la misma URL (la caché de la PWA las comparte)', async () => {
+      const primera = firstValueFrom(service.buscar('Leche', 20, 0));
+      const urlPrimera = esperarBusqueda();
+      const conParametros = urlPrimera.request.urlWithParams;
+      urlPrimera.flush(respuestaBusqueda);
+      await primera;
+
+      const segunda = firstValueFrom(service.buscar('leche', 20, 0));
+      const urlSegunda = esperarBusqueda();
+      expect(urlSegunda.request.urlWithParams).toBe(conParametros);
+      urlSegunda.flush(respuestaBusqueda);
+      await segunda;
+    });
+
     it('usa limit 10 y offset 0 por defecto', async () => {
       const resultado = firstValueFrom(service.buscar('leche'));
 
@@ -314,6 +338,25 @@ describe('ProductsService', () => {
       req.flush(respuesta, { headers: { 'X-Fuente-Datos': 'fastapi' } });
 
       await expect(resultado).resolves.toEqual({ respuesta, desdeRespaldo: false });
+    });
+
+    it('pide el texto normalizado y "Chocolate Sin Leche" comparte URL con la minúscula', async () => {
+      const primera = firstValueFrom(
+        service.buscarPersonalizado('  Chocolate   Sin Leche ', 'filtrar', 20, 0),
+      );
+      const reqPrimera = httpMock.expectOne((r) => r.url === URL);
+      expect(reqPrimera.request.params.get('q')).toBe('chocolate sin leche');
+      const conParametros = reqPrimera.request.urlWithParams;
+      reqPrimera.flush(respuesta);
+      await primera;
+
+      const segunda = firstValueFrom(
+        service.buscarPersonalizado('chocolate sin leche', 'filtrar', 20, 0),
+      );
+      const reqSegunda = httpMock.expectOne((r) => r.url === URL);
+      expect(reqSegunda.request.urlWithParams).toBe(conParametros);
+      reqSegunda.flush(respuesta);
+      await segunda;
     });
 
     it('usa limit 10 y offset 0 por defecto y marca el respaldo', async () => {

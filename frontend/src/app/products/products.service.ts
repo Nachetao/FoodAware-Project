@@ -16,6 +16,7 @@ import {
 import { Compatibilidad, DetalleCompatibilidad } from './models/compatibilidad';
 import { ErrorApi, esErrorContrato } from './models/error';
 import { DetalleProducto, Producto } from './models/producto';
+import { normalizarConsulta } from './normalizar-consulta';
 
 /** Header del backend que indica si los datos vienen de FastAPI o del respaldo. */
 const HEADER_FUENTE_DATOS = 'X-Fuente-Datos';
@@ -65,7 +66,7 @@ export class ProductsService {
     offset = 0,
   ): Observable<BusquedaPersonalizada> {
     const params = new HttpParams()
-      .set('q', q)
+      .set('q', normalizarConsulta(q))
       .set('modo', modo)
       .set('limit', limit)
       .set('offset', offset);
@@ -93,7 +94,7 @@ export class ProductsService {
     offset: number,
   ): Observable<BusquedaProductos> {
     const params = new HttpParams()
-      .set('q', q)
+      .set('q', normalizarConsulta(q))
       .set('limit', limit)
       .set('offset', offset);
 
