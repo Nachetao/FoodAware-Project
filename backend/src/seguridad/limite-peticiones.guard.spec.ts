@@ -15,6 +15,11 @@ import {
   opcionesLimitePeticiones,
 } from "./limite-peticiones";
 import { MENSAJE_LIMITE } from "./limite-peticiones.guard";
+import { aplicarSaltosProxy } from "../config/proxy-confiable";
+import { huellaIp } from "./diagnostico-proxy";
+
+/** IP de Cloudflare compartida por muchos clientes (la que veía req.ip). */
+const CLOUDFLARE = "172.70.1.1";
 
 @Controller("prueba")
 class ControladorDePrueba {
@@ -63,8 +68,8 @@ describe("LimitePeticionesGuard", () => {
       controllers: [ControladorDePrueba],
     }).compile();
     app = modulo.createNestApplication({ logger: false });
-    // Como configurar-app.ts: la IP sale de X-Forwarded-For.
-    app.getHttpAdapter().getInstance().set("trust proxy", 1);
+    // Como configurar-app.ts: SALTOS_PROXY por defecto (2).
+    aplicarSaltosProxy(app, undefined);
     await app.listen(0, "127.0.0.1");
     url = `${await app.getUrl()}/prueba`;
   });
@@ -81,10 +86,12 @@ describe("LimitePeticionesGuard", () => {
     return `203.0.113.${ipSiguiente++}`;
   }
 
-  function pedir(ruta: string, ip: string, metodo = "GET") {
+  /** Como llega en Render: X-Forwarded-For "<cliente>, <Cloudflare>". */
+  function pedir(ruta: string, ip: string, metodo = "GET", antes?: string) {
+    const xff = [antes, ip, CLOUDFLARE].filter(Boolean).join(", ");
     return fetch(`${url}/${ruta}`, {
       method: metodo,
-      headers: { "X-Forwarded-For": ip },
+      headers: { "X-Forwarded-For": xff },
     });
   }
 
@@ -129,6 +136,27 @@ describe("LimitePeticionesGuard", () => {
     const otra = await pedir("login", nuevaIp(), "POST");
 
     expect(otra.status).toBe(201);
+  });
+
+  it("dos clientes que pasan por la misma IP de Cloudflare no comparten contador", async () => {
+    const computador = nuevaIp();
+    await pedirVeces(LIMITE_LOGIN_POR_DEFECTO + 1, "login", computador, "POST");
+
+    const celular = await pedir("login", nuevaIp(), "POST");
+
+    expect(celular.status).toBe(201);
+  });
+
+  it("inventar la IP de la izquierda en X-Forwarded-For no evita el límite", async () => {
+    const atacante = nuevaIp();
+
+    const estados: number[] = [];
+    for (let i = 1; i <= LIMITE_LOGIN_POR_DEFECTO + 1; i++) {
+      const res = await pedir("login", atacante, "POST", `192.0.2.${i}`);
+      estados.push(res.status);
+    }
+
+    expect(estados.at(-1)).toBe(429);
   });
 
   it("cada ruta lleva su propio contador", async () => {
@@ -205,5 +233,39 @@ describe("LimitePeticionesGuard", () => {
       "limite_peticiones_superado en POST /prueba/login",
     );
     expect(mensaje).not.toContain(ip);
+  });
+
+  it("sin DIAGNOSTICO_PROXY no escribe el diagnóstico", async () => {
+    const log = jest.spyOn(Logger.prototype, "log").mockImplementation();
+    delete process.env.DIAGNOSTICO_PROXY;
+
+    await pedir("login", nuevaIp(), "POST");
+
+    expect(log).not.toHaveBeenCalled();
+  });
+
+  it("con DIAGNOSTICO_PROXY=true escribe el diagnóstico sin ninguna IP", async () => {
+    const log = jest.spyOn(Logger.prototype, "log").mockImplementation();
+    process.env.DIAGNOSTICO_PROXY = "true";
+    const ip = nuevaIp();
+
+    await pedir("login", ip, "POST", "192.0.2.50");
+
+    expect(log).toHaveBeenCalledTimes(1);
+    const [datos, mensaje] = log.mock.calls[0] as [unknown, string];
+    expect(datos).toMatchObject({
+      evento: "diagnostico_proxy",
+      entradas_xff: 3,
+      saltos_confiables: 2,
+      tipos_xff: ["publica", "publica", "publica"],
+      tipo_conexion: "loopback",
+      req_ip_igual_cf_connecting_ip: null,
+      huella_ip: huellaIp(ip),
+    });
+    expect(mensaje).toContain("diagnostico_proxy en POST /prueba/login");
+    const texto = JSON.stringify(log.mock.calls);
+    for (const valor of [ip, CLOUDFLARE, "192.0.2.50", "127.0.0.1"]) {
+      expect(texto).not.toContain(valor);
+    }
   });
 });

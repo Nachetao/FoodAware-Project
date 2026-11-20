@@ -4,6 +4,7 @@ import { HEADER_REQUEST_ID } from "../products/contrato/request-id";
 import { HEADER_FUENTE_DATOS } from "../products/fuente-datos";
 import { requestIdMiddleware } from "../observabilidad/request-id";
 import { origenesCors } from "./despliegue";
+import { aplicarSaltosProxy } from "./proxy-confiable";
 
 /**
  * Configuración global de la app, compartida por main.ts y las pruebas de
@@ -12,10 +13,11 @@ import { origenesCors } from "./despliegue";
 export function configurarApp(app: INestApplication): void {
   // Todos los Logger de NestJS escriben en JSON con el formato acordado.
   app.useLogger(app.get(Logger));
-  // En Render las peticiones llegan por su proxy: confiar en un salto hace
-  // que req.ip sea la IP real del cliente (de X-Forwarded-For) y no la del
-  // proxy. La usa el límite de peticiones.
-  app.getHttpAdapter().getInstance().set("trust proxy", 1);
+  // En Render las peticiones pasan por Cloudflare y por su load balancer:
+  // "trust proxy" con SALTOS_PROXY saltos (2 por defecto) hace que req.ip sea
+  // la IP real del cliente y no la de un proxy. La usa el límite de
+  // peticiones. Detalle en proxy-confiable.ts.
+  aplicarSaltosProxy(app);
   // Primero que todo: el request id queda disponible para el resto de la petición.
   app.use(requestIdMiddleware);
   // Todas las rutas estarán bajo el prefijo /api
