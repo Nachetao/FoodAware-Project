@@ -117,12 +117,10 @@ Las listas usan `text[]` (no `simple-array`) para admitir comas dentro de un ing
 | Índice | Uso |
 |---|---|
 | PK `codigo_barras` | Upsert y detalle |
-| GIN `alergenos` | Filtrar por alérgenos (`alergenos && $1`) en `/compatibles` |
-| GIN `trazas` | Filtrar por trazas |
-| GIN `etiquetas_dieta` | Filtrar por dieta (`@>`) |
-| Parcial `WHERE es_valido` sobre `(completitud DESC, codigo_barras)` | Respaldo y compatibles, ya ordenados |
+| GIN `alergenos`, `trazas` y `etiquetas_dieta` | **Hoy sin uso.** Se crearon en la EP2 para filtrar `/compatibles` en SQL (`alergenos && $1`); desde que la compatibilidad considera trazas, dietas y modo estricto, el respaldo aplica la regla local en TypeScript sobre las coincidencias por texto y ninguna consulta los usa ([ADR 0004](adr/0004-postgresql-typeorm.md#consecuencias)) |
+| Parcial `WHERE es_valido` sobre `(completitud DESC, codigo_barras)` | Coincide con el filtro `es_valido` de la búsqueda de respaldo y de las coincidencias de `/compatibles` y la búsqueda personalizada |
 
-Verificados con `EXPLAIN` (Bitmap Index Scan / Index Only Scan).
+En la EP2 los verificamos con `EXPLAIN` (Bitmap Index Scan / Index Only Scan), cuando `/compatibles` filtraba en SQL; después del cambio a la regla local no lo volvimos a comprobar.
 
 ### Tabla `users`
 
