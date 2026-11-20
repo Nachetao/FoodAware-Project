@@ -137,6 +137,15 @@ La evaluación completa (método, etiquetado manual, resultados y limitaciones) 
 | Edición del perfil: alergias, dietas, modo estricto | `frontend/src/app/cuenta` |
 | Alérgenos del perfil destacados; los demás, neutros | `frontend/src/app/compartido/chips-alergenos.component.ts` |
 
+**Evidencia de la Entrega Final** (más en [frontend.md](frontend.md#evidencia)):
+
+| Captura | Muestra |
+|---|---|
+| [no-apto.png](evidencia/no-apto.png) | Veredicto "No apto para ti" con explicación, confianza alta y aviso orientativo |
+| [busqueda-personalizada.png](evidencia/busqueda-personalizada.png) | Búsqueda con el perfil: chips de veredicto, resumen de los productos ocultos y aviso |
+| [android-con-advertencia.png](evidencia/android-con-advertencia.png) | Resultados "Con advertencia" junto a "Apto", en Android |
+| [perfil.png](evidencia/perfil.png) | Alergias, dietas y modo estricto, que forman el perfil enviado al motor |
+
 **Ejemplo (EP2):** la búsqueda "chocolate" devolvió 32 productos guardados. Para un usuario alérgico a los lácteos, el filtro de aquella versión devolvió 9. Hoy esa decisión la toma el motor y además considera trazas, dietas y el modo estricto. Evidencia de la EP2: `docs/evidencia/compatibles-swagger.png`.
 
 ## 10. Riesgos, sesgos y limitaciones

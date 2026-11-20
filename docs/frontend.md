@@ -152,7 +152,7 @@ npm run android:apk    # lo anterior y compila el APK de depuración (android/ap
 - Por defecto apunta al backend de **staging**; `API_URL` lo cambia.
 - `android:apk` necesita `JAVA_HOME` (JDK 21) y `ANDROID_HOME` (SDK de Android) o `android/local.properties`. El APK queda firmado con la clave de depuración local.
 - **CORS:** la app tiene el origen `https://localhost`, que **ya está en `CORS_ORIGINS` de staging**. Si se despliega otro backend, hay que agregarlo.
-- **Estado de la prueba:** la app se probó en un emulador de Android contra staging. No se probó en un dispositivo físico, y el APK es de depuración, no de publicación.
+- **Estado de la prueba:** la app se probó en un emulador de Android contra staging ([capturas](#android)). No se probó en un dispositivo físico, y el APK es de depuración, no de publicación.
 
 ## Configuración y build
 
@@ -190,13 +190,43 @@ npm start   # http://localhost:4200
 
 ## Evidencia
 
+Las capturas web se tomaron en el escritorio y las de Android, en un emulador contra staging. Los correos de otras personas están pixelados.
+
+### Web
+
 | Captura | Muestra |
 |---|---|
-| `docs/evidencia/respaldo-chocolate.png` | Aviso de respaldo con resultados desde la base |
-| `docs/evidencia/panel-metricas.png` | Panel de métricas con la ingesta completada (P@5 = 56 %, valor de la EP2; el de referencia actual es 0,53, ver [recuperacion-y-evaluacion.md](recuperacion-y-evaluacion.md)) |
-| `docs/evidencia/detalle-producto.png` | Detalle con alérgenos, procedencia y atribución ODbL |
-| `docs/evidencia/apto-para-ti.png` | Franja "Apto para ti" con sesión iniciada |
-| `docs/evidencia/no-apto.png` | Franja "No apto: contiene …" (texto de la EP2; hoy dice "No apto para ti") |
+| [respaldo-chocolate.png](evidencia/respaldo-chocolate.png) | Aviso de respaldo con resultados desde la base |
+| [busqueda.png](evidencia/busqueda.png) | Búsqueda "Leche" sin sesión: 197 resultados, alérgenos en neutro e invitación a iniciar sesión para personalizar |
+| [busqueda-personalizada.png](evidencia/busqueda-personalizada.png) | Búsqueda "Chocolate" con "Personalizar según mi perfil" y "Ocultar no aptos": 23 resultados con chip "Apto", resumen de los 84 ocultos (75 por lácteos y 49 por gluten) y aviso orientativo |
+| [chips-alergenos.png](evidencia/chips-alergenos.png) | "Chocolate" con la personalización apagada: con sesión, solo lácteos y gluten (las alergias del perfil) van en ámbar con ícono de advertencia, y los demás alérgenos en neutro |
+| [detalle-producto.png](evidencia/detalle-producto.png) | Detalle con alérgenos, procedencia y atribución ODbL |
+| [producto.png](evidencia/producto.png) | Detalle sin sesión: sin veredicto, con la invitación "Inicia sesión para saber si es apto para ti" y el alérgeno en neutro |
+| [apto-para-ti.png](evidencia/apto-para-ti.png) | Franja "Apto para ti" con sesión iniciada |
+| [no-apto.png](evidencia/no-apto.png) | Franja "No apto para ti: Contiene lácteos, que está en tu perfil", con "Confianza alta" y el aviso orientativo |
+| [perfil.png](evidencia/perfil.png) | Perfil: nombre, alergias (lácteos y gluten marcadas), dietas, modo estricto, guardar cambios, cerrar sesión y borrar la cuenta |
+| [admin.png](evidencia/admin.png) | Panel de administración: usuarios (nombre, correo y rol, sin alergias) y alimentos analizados |
+| [panel-metricas.png](evidencia/panel-metricas.png) | Panel de métricas con el botón de administración visible: Precision@5 = 53 %, Recall@5 = 48,2 %, 20 consultas y 385 productos (ver [recuperacion-y-evaluacion.md](recuperacion-y-evaluacion.md)) |
+| [limite-login.png](evidencia/limite-login.png) | Login tras superar el límite de peticiones: "Demasiados intentos, espera un minuto." |
+
+### PWA
+
+| Captura | Muestra |
+|---|---|
+| [pwa-instalada.png](evidencia/pwa-instalada.png) | La app instalada, en su propia ventana, con sesión de administrador |
+| [pwa-sin-conexion.png](evidencia/pwa-sin-conexion.png) | Sin conexión: la búsqueda "Leche" ya visitada se sigue viendo desde la caché y aparece el aviso "Sin conexión" |
+| [pwa-sin-conexion-busqueda-nueva.png](evidencia/pwa-sin-conexion-busqueda-nueva.png) | Sin conexión, una búsqueda que no se había hecho ("chocolate"): "No hay conexión a internet." |
+
+### Android
+
+| Captura | Muestra |
+|---|---|
+| [android-home.png](evidencia/android-home.png) | Inicio sin sesión, con "Inicia sesión para personalizar" |
+| [android-registro.png](evidencia/android-registro.png) | Registro: contraseña de mínimo 8 caracteres y selección de alergias |
+| [android-busqueda-personalizada.png](evidencia/android-busqueda-personalizada.png) | Búsqueda personalizada con "Ocultar no aptos": 10 resultados con chip "Apto" y 97 ocultos por soya, lácteos y maní |
+| [android-con-advertencia.png](evidencia/android-con-advertencia.png) | Resultados con chip "Con advertencia" (borde discontinuo) junto a otros "Apto" |
+| [android-no-apto.png](evidencia/android-no-apto.png) | Detalle con "No apto para ti", confianza alta, aviso orientativo y el alérgeno del perfil en ámbar |
+| [android-admin.png](evidencia/android-admin.png) | Panel de administración en el celular |
 
 ## Limitaciones
 
