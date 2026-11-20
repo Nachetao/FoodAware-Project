@@ -14,9 +14,17 @@ const MENSAJE = "Demasiados intentos, espera un minuto.";
 /**
  * Límite de peticiones por IP (riesgo P1 de docs/modelo-amenazas.md) con la
  * app real: mismo AppModule y misma configuración que main.ts, incluido
- * "trust proxy". Cada prueba usa su propia IP en X-Forwarded-For, como haría
- * el proxy de Render, para empezar con el contador en cero.
+ * "trust proxy" (SALTOS_PROXY, 2 por defecto). Cada prueba usa su propia IP
+ * de cliente para empezar con el contador en cero, y X-Forwarded-For llega
+ * como en Render: "<cliente>, <Cloudflare>", con la misma IP de Cloudflare
+ * para todos.
  */
+const CLOUDFLARE = "172.70.1.1";
+
+/** X-Forwarded-For como lo arman Cloudflare y el load balancer de Render. */
+const xff = (ip: string, inventada?: string) =>
+  [inventada, ip, CLOUDFLARE].filter(Boolean).join(", ");
+
 describe("Integración: límite de peticiones", () => {
   const fastapi = new FastApiFalso();
   let app: INestApplication;
@@ -52,7 +60,7 @@ describe("Integración: límite de peticiones", () => {
   const login = (ip: string) =>
     request(servidor())
       .post("/api/auth/login")
-      .set("X-Forwarded-For", ip)
+      .set("X-Forwarded-For", xff(ip))
       .send({ correo: "nadie@correo.cl", password: "no-es-la-clave" });
 
   describe("POST /api/auth/login", () => {
@@ -76,7 +84,7 @@ describe("Integración: límite de peticiones", () => {
       expect(Number(sexto.headers["retry-after"])).toBeGreaterThan(0);
     });
 
-    it("usa la IP real del cliente (X-Forwarded-For): otra IP no queda bloqueada", async () => {
+    it("usa la IP real del cliente: otro cliente detrás de la misma IP de Cloudflare no queda bloqueado", async () => {
       const bloqueada = nuevaIp();
       for (let i = 0; i < 6; i++) {
         await login(bloqueada);
@@ -86,13 +94,49 @@ describe("Integración: límite de peticiones", () => {
 
       expect(otra.status).toBe(401);
     });
+
+    it("cambiar la IP inventada a la izquierda de X-Forwarded-For no evita el 429", async () => {
+      const atacante = nuevaIp();
+
+      const estados: number[] = [];
+      for (let i = 1; i <= 6; i++) {
+        const res = await request(servidor())
+          .post("/api/auth/login")
+          .set("X-Forwarded-For", xff(atacante, `192.0.2.${i}`))
+          .send({ correo: "nadie@correo.cl", password: "no-es-la-clave" });
+        estados.push(res.status);
+      }
+
+      expect(estados).toEqual([401, 401, 401, 401, 401, 429]);
+    });
+
+    it("con SALTOS_PROXY=1 todos comparten la IP de Cloudflare (el error que se corrigió)", async () => {
+      process.env.SALTOS_PROXY = "1";
+      const otraApp = (await crearApp(fastapi.url)).app;
+      try {
+        const intentar = (ip: string) =>
+          request(otraApp.getHttpServer())
+            .post("/api/auth/login")
+            .set("X-Forwarded-For", xff(ip))
+            .send({ correo: "nadie@correo.cl", password: "no-es-la-clave" });
+        for (let i = 0; i < 5; i++) {
+          await intentar(nuevaIp());
+        }
+
+        const otroCliente = await intentar(nuevaIp());
+
+        expect(otroCliente.status).toBe(429);
+      } finally {
+        await otraApp.close();
+      }
+    });
   });
 
   describe("POST /api/users", () => {
     const registro = (ip: string, password = "clave-segura") =>
       request(servidor())
         .post("/api/users")
-        .set("X-Forwarded-For", ip)
+        .set("X-Forwarded-For", xff(ip))
         .send({
           nombre: "Ana",
           correo: `ana${ipSiguiente}@correo.cl`,
@@ -116,7 +160,7 @@ describe("Integración: límite de peticiones", () => {
       // recibiendo 401 (credenciales) y no 400 (validación).
       const corta = await request(servidor())
         .post("/api/auth/login")
-        .set("X-Forwarded-For", ip)
+        .set("X-Forwarded-For", xff(ip))
         .send({ correo: "antigua@correo.cl", password: "x1" });
 
       expect(res.status).toBe(201);
@@ -151,7 +195,7 @@ describe("Integración: límite de peticiones", () => {
     const analizar = () =>
       request(servidor())
         .post("/api/food/analizar")
-        .set("X-Forwarded-For", ip)
+        .set("X-Forwarded-For", xff(ip))
         .send({ nombre: "Galletas", ingredientes: ["avena"] });
 
     const primero = await analizar();
@@ -173,7 +217,7 @@ describe("Integración: límite de peticiones", () => {
     const obtener = () =>
       request(servidor())
         .get(`/api/products/${CODIGO}`)
-        .set("X-Forwarded-For", ip)
+        .set("X-Forwarded-For", xff(ip))
         .set("X-Request-ID", "int-limite");
 
     const primero = await obtener();
@@ -203,7 +247,7 @@ describe("Integración: límite de peticiones", () => {
     for (let i = 0; i < 3; i++) {
       const res = await request(servidor())
         .get("/api/products/search?q=leche")
-        .set("X-Forwarded-For", ip);
+        .set("X-Forwarded-For", xff(ip));
       estados.push(res.status);
     }
 

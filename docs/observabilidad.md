@@ -94,6 +94,30 @@ docker compose stop python-service   # /api/health → degradado (200)
 docker compose start python-service
 ```
 
+## Diagnóstico de la IP del cliente (`diagnostico_proxy`)
+
+El límite de peticiones identifica al cliente por `req.ip`, que depende de `SALTOS_PROXY` ([backend.md](backend.md#seguridad)). Para comprobar en staging que el valor es correcto, sin escribir IPs en los logs, existe un diagnóstico **apagado por defecto**. Solo se activa con `DIAGNOSTICO_PROXY=true`, y solo hace falta si la prueba funcional falla (un cliente bloqueado bloquea a otro de otra red).
+
+Con la variable activa, cada petición a una ruta con límite (login, registro, análisis y detalle) escribe un log `diagnostico_proxy`:
+
+| Campo | Qué dice |
+|---|---|
+| `entradas_xff` | Cuántas IPs trae `X-Forwarded-For` |
+| `saltos_confiables` | El valor de `SALTOS_PROXY` en uso |
+| `tipos_xff` | Tipo de cada entrada, de izquierda a derecha: `publica`, `privada`, `loopback` o `invalida` |
+| `tipo_conexion` | Tipo de la IP de la conexión directa (el load balancer) |
+| `headers` | Si llegaron `cf-connecting-ip`, `true-client-ip`, `x-real-ip` y `forwarded` (`true` o `false`, sin el valor) |
+| `req_ip_igual_cf_connecting_ip`, `req_ip_igual_true_client_ip` | Si `req.ip` coincide con la IP que informa Cloudflare; `null` si el header no llegó |
+| `huella_ip` | 8 caracteres de un hash de `req.ip` con una sal aleatoria que se genera en cada arranque y no se guarda. Permite ver si dos peticiones tienen la misma IP sin poder recuperarla |
+
+Cómo leerlo:
+
+- **El valor es correcto** si `req_ip_igual_cf_connecting_ip` es `true` y dos dispositivos de redes distintas tienen `huella_ip` distinta.
+- **Faltan saltos** si `req.ip` no coincide y la `huella_ip` se repite entre dispositivos: se sube `SALTOS_PROXY` en 1. `entradas_xff` sin nada inventado por el cliente indica cuántos proxies agregan IPs.
+- **Render conserva el `X-Forwarded-For` del cliente** si, al mandar uno inventado con `curl`, `entradas_xff` sube en 1. Con el valor correcto de `SALTOS_PROXY`, la `huella_ip` no cambia.
+
+Al terminar la prueba se vuelve a apagar `DIAGNOSTICO_PROXY`.
+
 ## Limitaciones
 
 - Las rutas inexistentes (404 de NestJS) no pasan por el interceptor, así que no llevan `X-Response-Time-ms` ni log de acceso.

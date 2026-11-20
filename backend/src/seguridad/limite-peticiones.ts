@@ -50,7 +50,7 @@ export const opcionesLimitePeticiones: ThrottlerModuleOptions = {
 
 /**
  * Limita la ruta a N peticiones por minuto por IP (la IP real del cliente,
- * gracias a "trust proxy" en configurar-app.ts). Cada ruta lleva su propio
+ * gracias a "trust proxy" con SALTOS_PROXY, en proxy-confiable.ts). Cada ruta lleva su propio
  * contador. Al superarlo responde 429 "Demasiados intentos, espera un minuto."
  */
 export const LimitarPeticiones = (tipo: TipoLimite) =>

@@ -8,6 +8,7 @@ import {
 import { ThrottlerGuard } from "@nestjs/throttler";
 import { Request } from "express";
 import { requestIdDe } from "../observabilidad/request-id";
+import { diagnosticarProxy, diagnosticoProxyActivo } from "./diagnostico-proxy";
 
 /** Mensaje del 429, el mismo en todas las rutas con límite. */
 export const MENSAJE_LIMITE = "Demasiados intentos, espera un minuto.";
@@ -32,12 +33,25 @@ export class DemasiadasPeticionesException extends HttpException {
 
 /**
  * ThrottlerGuard con la respuesta y el log de FoodAware. Identifica al
- * cliente por req.ip, que con "trust proxy" es la IP real y no la del proxy
- * de Render.
+ * cliente por req.ip, que con "trust proxy" (SALTOS_PROXY) es la IP real y no
+ * la de Cloudflare o del load balancer de Render.
  */
 @Injectable()
 export class LimitePeticionesGuard extends ThrottlerGuard {
   private readonly log = new Logger(LimitePeticionesGuard.name);
+
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    // Solo con DIAGNOSTICO_PROXY=true: un log sin IPs para ajustar
+    // SALTOS_PROXY (ver diagnostico-proxy.ts).
+    if (diagnosticoProxyActivo()) {
+      const req = context.switchToHttp().getRequest<Request>();
+      this.log.log(
+        diagnosticarProxy(req),
+        `[${requestIdDe(req)}] diagnostico_proxy en ${req.method} ${req.baseUrl}${req.route?.path ?? req.path}`,
+      );
+    }
+    return super.canActivate(context);
+  }
 
   protected async throwThrottlingException(
     context: ExecutionContext,
