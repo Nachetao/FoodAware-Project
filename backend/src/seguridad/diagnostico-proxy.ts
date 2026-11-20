@@ -1,13 +1,14 @@
 import { createHash, randomBytes } from "node:crypto";
 import { BlockList, isIP } from "node:net";
 import { Request } from "express";
+import { FuenteIp, ipCliente, normalizarIp } from "./ip-cliente";
 
 /**
  * Diagnóstico de la IP del cliente detrás de Render, para ajustar
- * SALTOS_PROXY. Apagado por defecto: solo con DIAGNOSTICO_PROXY=true.
- * Nunca escribe una IP: solo cuántas entradas trae X-Forwarded-For, de qué
- * tipo es cada una, qué headers de Cloudflare llegaron y si req.ip coincide
- * con ellos.
+ * SALTOS_PROXY e IP_DESDE_CLOUDFLARE. Apagado por defecto: solo con
+ * DIAGNOSTICO_PROXY=true. Nunca escribe una IP: solo cuántas entradas trae
+ * X-Forwarded-For, de qué tipo es cada una, qué headers de Cloudflare
+ * llegaron, si req.ip coincide con ellos y qué IP usa el límite (como huella).
  */
 export function diagnosticoProxyActivo(
   valor: string | undefined = process.env.DIAGNOSTICO_PROXY,
@@ -30,13 +31,6 @@ PRIVADAS.addSubnet("100.64.0.0", 10, "ipv4");
 PRIVADAS.addSubnet("169.254.0.0", 16, "ipv4");
 PRIVADAS.addSubnet("fc00::", 7, "ipv6");
 PRIVADAS.addSubnet("fe80::", 10, "ipv6");
-
-/** Quita espacios y el prefijo de IPv4 mapeada en IPv6 (::ffff:1.2.3.4). */
-export function normalizarIp(valor: string): string {
-  const ip = valor.trim();
-  const mapeada = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(ip);
-  return mapeada ? mapeada[1] : ip;
-}
 
 export function tipoIp(valor: string): TipoIp {
   const ip = normalizarIp(valor);
@@ -109,12 +103,17 @@ export interface DiagnosticoProxy {
   req_ip_igual_cf_connecting_ip: boolean | null;
   req_ip_igual_true_client_ip: boolean | null;
   huella_ip: string | null;
+  /** De dónde sale la IP que usa el límite de peticiones (ip-cliente.ts). */
+  fuente_ip_limite: FuenteIp;
+  /** Huella de la IP que usa el límite. */
+  huella_ip_limite: string | null;
 }
 
 /** Resumen de la petición sin ninguna IP. */
 export function diagnosticarProxy(req: Request): DiagnosticoProxy {
   const xff = entradasXff(req.headers["x-forwarded-for"]);
   const saltos: unknown = req.app?.get("trust proxy");
+  const limite = ipCliente(req);
   return {
     evento: "diagnostico_proxy",
     entradas_xff: xff.length,
@@ -136,5 +135,7 @@ export function diagnosticarProxy(req: Request): DiagnosticoProxy {
       req.headers["true-client-ip"],
     ),
     huella_ip: huellaIp(req.ip),
+    fuente_ip_limite: limite.fuente,
+    huella_ip_limite: huellaIp(limite.ip),
   };
 }

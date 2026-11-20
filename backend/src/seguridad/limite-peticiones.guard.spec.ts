@@ -159,6 +159,82 @@ describe("LimitePeticionesGuard", () => {
     expect(estados.at(-1)).toBe(429);
   });
 
+  /** Login con CF-Connecting-IP y el X-Forwarded-For que se indique. */
+  function loginCloudflare(cfConnectingIp: string, xff: string) {
+    return fetch(`${url}/login`, {
+      method: "POST",
+      headers: { "CF-Connecting-IP": cfConnectingIp, "X-Forwarded-For": xff },
+    });
+  }
+
+  async function intentosCloudflare(
+    n: number,
+    cf: (i: number) => string,
+    xff: (i: number) => string,
+  ) {
+    const estados: number[] = [];
+    for (let i = 1; i <= n; i++) {
+      estados.push((await loginCloudflare(cf(i), xff(i))).status);
+    }
+    return estados;
+  }
+
+  describe("con CF-Connecting-IP", () => {
+    it("un X-Forwarded-For distinto en cada intento no evita el 429 si CF-Connecting-IP es el mismo", async () => {
+      const cliente = nuevaIp();
+
+      const estados = await intentosCloudflare(
+        LIMITE_LOGIN_POR_DEFECTO + 1,
+        () => cliente,
+        (i) => `192.0.2.${i}, ${CLOUDFLARE}`,
+      );
+
+      expect(estados.at(-1)).toBe(429);
+      expect(estados.slice(0, -1).every((estado) => estado === 201)).toBe(true);
+    });
+
+    it("dos clientes con distinto CF-Connecting-IP no comparten contador", async () => {
+      const xffComun = `192.0.2.200, ${CLOUDFLARE}`;
+      const computador = nuevaIp();
+      await intentosCloudflare(
+        LIMITE_LOGIN_POR_DEFECTO + 1,
+        () => computador,
+        () => xffComun,
+      );
+
+      const celular = await loginCloudflare(nuevaIp(), xffComun);
+
+      expect(celular.status).toBe(201);
+    });
+
+    it("con un valor que no es una IP usa req.ip", async () => {
+      const cliente = nuevaIp();
+
+      // Distinto texto en cada intento: si se usara el header, no habría 429.
+      const estados = await intentosCloudflare(
+        LIMITE_LOGIN_POR_DEFECTO + 1,
+        (i) => `no-es-ip-${i}`,
+        () => `${cliente}, ${CLOUDFLARE}`,
+      );
+
+      expect(estados.at(-1)).toBe(429);
+    });
+
+    it("con IP_DESDE_CLOUDFLARE=false ignora el header y usa req.ip", async () => {
+      process.env.IP_DESDE_CLOUDFLARE = "false";
+      const cfComun = nuevaIp();
+
+      // Mismo CF-Connecting-IP, distinto cliente en X-Forwarded-For.
+      const estados = await intentosCloudflare(
+        LIMITE_LOGIN_POR_DEFECTO + 1,
+        () => cfComun,
+        () => `${nuevaIp()}, ${CLOUDFLARE}`,
+      );
+
+      expect(estados).not.toContain(429);
+    });
+  });
+
   it("cada ruta lleva su propio contador", async () => {
     const ip = nuevaIp();
     await pedirVeces(LIMITE_LOGIN_POR_DEFECTO + 1, "login", ip, "POST");

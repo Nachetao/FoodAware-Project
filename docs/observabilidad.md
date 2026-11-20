@@ -96,7 +96,7 @@ docker compose start python-service
 
 ## Diagnóstico de la IP del cliente (`diagnostico_proxy`)
 
-El límite de peticiones identifica al cliente por `req.ip`, que depende de `SALTOS_PROXY` ([backend.md](backend.md#seguridad)). Para comprobar en staging que el valor es correcto, sin escribir IPs en los logs, existe un diagnóstico **apagado por defecto**. Solo se activa con `DIAGNOSTICO_PROXY=true`, y solo hace falta si la prueba funcional falla (un cliente bloqueado bloquea a otro de otra red).
+El límite de peticiones identifica al cliente por `CF-Connecting-IP` cuando viene con una IP válida (`IP_DESDE_CLOUDFLARE`, activado por defecto), y si no, por `req.ip`, que depende de `SALTOS_PROXY` ([backend.md](backend.md#seguridad)). Para revisar en staging qué IP usa, sin escribir IPs en los logs, existe un diagnóstico **apagado por defecto**. Solo se activa con `DIAGNOSTICO_PROXY=true`, y solo hace falta si la prueba funcional falla.
 
 Con la variable activa, cada petición a una ruta con límite (login, registro, análisis y detalle) escribe un log `diagnostico_proxy`:
 
@@ -109,12 +109,43 @@ Con la variable activa, cada petición a una ruta con límite (login, registro, 
 | `headers` | Si llegaron `cf-connecting-ip`, `true-client-ip`, `x-real-ip` y `forwarded` (`true` o `false`, sin el valor) |
 | `req_ip_igual_cf_connecting_ip`, `req_ip_igual_true_client_ip` | Si `req.ip` coincide con la IP que informa Cloudflare; `null` si el header no llegó |
 | `huella_ip` | 8 caracteres de un hash de `req.ip` con una sal aleatoria que se genera en cada arranque y no se guarda. Permite ver si dos peticiones tienen la misma IP sin poder recuperarla |
+| `fuente_ip_limite` | De dónde sale la IP que usa el límite: `cf-connecting-ip` o `req.ip` |
+| `huella_ip_limite` | Huella (igual que `huella_ip`) de la IP que usa el límite |
 
 Cómo leerlo:
 
-- **El valor es correcto** si `req_ip_igual_cf_connecting_ip` es `true` y dos dispositivos de redes distintas tienen `huella_ip` distinta.
-- **Faltan saltos** si `req.ip` no coincide y la `huella_ip` se repite entre dispositivos: se sube `SALTOS_PROXY` en 1. `entradas_xff` sin nada inventado por el cliente indica cuántos proxies agregan IPs.
-- **Render conserva el `X-Forwarded-For` del cliente** si, al mandar uno inventado con `curl`, `entradas_xff` sube en 1. Con el valor correcto de `SALTOS_PROXY`, la `huella_ip` no cambia.
+- **Lo normal en Render** es `fuente_ip_limite: "cf-connecting-ip"`, con una `huella_ip_limite` distinta para cada dispositivo y que no cambia al mandar un `X-Forwarded-For` inventado.
+- **Si `fuente_ip_limite` es `req.ip`**, no llegó `CF-Connecting-IP` (ver `headers`) o el valor no era una IP válida. El límite queda dependiendo de `SALTOS_PROXY`, que se puede falsificar con `X-Forwarded-For`.
+- **`req_ip_igual_cf_connecting_ip` en `false`** al mandar un `X-Forwarded-For` inventado muestra que `req.ip` no es confiable en Render. Por eso el límite usa `CF-Connecting-IP`.
+
+### Comprobación en staging
+
+La prueba funcional no necesita el diagnóstico. Desde Git Bash:
+
+```bash
+# 1. X-Forwarded-For inventado distinto en cada intento: el sexto debe responder 429.
+for i in 1 2 3 4 5 6; do
+  printf "Intento %s: " "$i"
+  curl -s -o /dev/null --max-time 90 -w "%{http_code}\n" \
+    -X POST https://foodaware-staging-backend.onrender.com/api/auth/login \
+    -H "Content-Type: application/json" \
+    -H "X-Forwarded-For: 203.0.113.$i" \
+    -d '{"correo":"prueba-limite@correo.cl","password":"no-es-la-clave"}'
+done
+
+# 2. Esperar un minuto. CF-Connecting-IP inventado distinto en cada intento:
+#    Cloudflare lo reemplaza por la IP real, así que el sexto también debe responder 429.
+for i in 1 2 3 4 5 6; do
+  printf "Intento %s: " "$i"
+  curl -s -o /dev/null --max-time 90 -w "%{http_code}\n" \
+    -X POST https://foodaware-staging-backend.onrender.com/api/auth/login \
+    -H "Content-Type: application/json" \
+    -H "CF-Connecting-IP: 198.51.100.$i" \
+    -d '{"correo":"prueba-limite@correo.cl","password":"no-es-la-clave"}'
+done
+```
+
+En las dos pruebas se esperan cinco 401 y luego 429. Si la segunda no llega a 429, Cloudflare no está reemplazando el header y no conviene confiar en él: se pone `IP_DESDE_CLOUDFLARE=false` y se revisa con el diagnóstico.
 
 Al terminar la prueba se vuelve a apagar `DIAGNOSTICO_PROXY`.
 

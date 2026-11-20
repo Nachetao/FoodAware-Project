@@ -96,7 +96,8 @@ El resto de las rutas (login, registro, análisis) usa el formato por defecto de
 | `LIMITE_LOGIN_POR_MINUTO` | No | `5` | Intentos de `POST /api/auth/login` por minuto y por IP |
 | `LIMITE_PUBLICO_POR_MINUTO` | No | `30` | Peticiones por minuto y por IP en `POST /api/users`, `POST /api/food/analizar` y `GET /api/products/:codigo_barras` |
 | `SALTOS_PROXY` | No | `2` | Proxies delante del backend que agregan una IP a `X-Forwarded-For` (en Render, Cloudflare y su load balancer). Entero de 0 a 5; un valor inválido, incluido `true`, usa 2 |
-| `DIAGNOSTICO_PROXY` | No | `false` | Con `true`, las rutas con límite escriben el log `diagnostico_proxy` (sin IPs) para ajustar `SALTOS_PROXY` |
+| `IP_DESDE_CLOUDFLARE` | No | `true` | El límite de peticiones identifica al cliente por `CF-Connecting-IP` cuando viene con una IP válida. Solo `false` lo apaga (si el backend no está detrás de Cloudflare) |
+| `DIAGNOSTICO_PROXY` | No | `false` | Con `true`, las rutas con límite escriben el log `diagnostico_proxy` (sin IPs) para revisar qué IP usa el límite |
 
 ## Persistencia
 
@@ -165,11 +166,21 @@ npm run migration:revert   # revertir la última
 
   - Se aplica con el decorador `@LimitarPeticiones("login" | "publico")` ([`seguridad/limite-peticiones.ts`](../backend/src/seguridad/limite-peticiones.ts)); las demás rutas, incluida la búsqueda, no tienen límite. Cada ruta lleva su propio contador: fallar el login no bloquea el registro.
   - Al superarlo responde **429** con "Demasiados intentos, espera un minuto." y el header `Retry-After` (segundos). El formato es el mismo que el resto de los errores de esa ruta: el de NestJS en login, registro y análisis, y el del contrato (`TOO_MANY_REQUESTS`) en el detalle de producto. El log registra `limite_peticiones_superado` con el request id y la ruta, sin la IP ni el cuerpo.
-  - **IP real:** en Render las peticiones pasan por Cloudflare y por el load balancer de Render ([artículo de Render](https://render.com/articles/how-render-handles-ddos-attacks)), y cada uno agrega una IP al final de `X-Forwarded-For`: `<cliente>, <Cloudflare>`. [`config/proxy-confiable.ts`](../backend/src/config/proxy-confiable.ts) activa `trust proxy` con `SALTOS_PROXY` saltos (2 por defecto), así que `req.ip` es la entrada que agregó Cloudflare, es decir, la IP del cliente.
-    - Con un salto, como estaba antes, `req.ip` era la IP de Cloudflare y clientes de redes distintas compartían el contador.
-    - No se puede falsificar: lo que el cliente escriba en `X-Forwarded-For` queda a la izquierda, y Express solo cuenta saltos desde la derecha. Por eso nunca se usa `trust proxy` en `true`, que tomaría la IP de la izquierda.
-    - Render no documenta cuántas IPs agrega. Si una prueba en staging muestra que hay más proxies, se cambia `SALTOS_PROXY` en Render sin tocar el código; para medirlo está el log `diagnostico_proxy` ([observabilidad.md](observabilidad.md#diagnóstico-de-la-ip-del-cliente-diagnostico_proxy)).
-    - En local, sin proxy delante, un cliente sí podría elegir su IP escribiendo `X-Forwarded-For`. Solo importa en Render, donde los dos proxies siempre agregan sus entradas.
+  - **IP real:** en Render todas las peticiones pasan por Cloudflare y por el load balancer de Render ([artículo de Render](https://render.com/articles/how-render-handles-ddos-attacks)). El límite identifica al cliente así ([`seguridad/ip-cliente.ts`](../backend/src/seguridad/ip-cliente.ts)):
+    1. **`CF-Connecting-IP`**, si viene y trae exactamente una IP válida (IPv4 o IPv6). Cloudflare lo arma con la IP de la conexión del cliente y recomienda leerlo en vez de `X-Forwarded-For` ([documentación de Cloudflare](https://developers.cloudflare.com/fundamentals/reference/http-headers/)). Se desactiva con `IP_DESDE_CLOUDFLARE=false`.
+    2. **`req.ip`** en cualquier otro caso: sin el header, vacío, con algo que no es una IP o con varias. Sale de `X-Forwarded-For` con `trust proxy` en `SALTOS_PROXY` saltos (2 por defecto, [`config/proxy-confiable.ts`](../backend/src/config/proxy-confiable.ts)).
+
+    Por qué no basta con `X-Forwarded-For`:
+    - **Con un salto**, `req.ip` era la IP de Cloudflare y clientes de redes distintas compartían el contador.
+    - **Con dos saltos** funciona para un navegador, que no manda el header. Pero la prueba en staging mostró que un cliente que manda su propio `X-Forwarded-For` logra que `req.ip` sea la IP que inventó: con una distinta en cada intento, el sexto login no respondía 429. Render no documenta cómo arma este header, así que no sirve para seguridad.
+    - **Nunca se usa `trust proxy` en `true`**: tomaría la IP de la izquierda, que el cliente elige.
+
+    Suposiciones y casos límite:
+    - **Todo el tráfico pasa por Cloudflare.** Cloudflare advierte que, si se acepta tráfico que no viene de él, el header se puede falsificar. Render dice que todo el tráfico entrante de sus web services pasa por Cloudflare. Si el backend se despliega en otro lado sin Cloudflare, hay que poner `IP_DESDE_CLOUDFLARE=false`.
+    - **IPv6:** el contador agrupa las IPv6 por prefijo /64, como hace `@nestjs/throttler`.
+    - **Workers de Cloudflare:** las peticiones que llegan desde un Worker de otra zona traen una IP fija de Cloudflare y comparten un contador.
+    - **En local** no hay Cloudflare: un cliente podría escribir `CF-Connecting-IP` o `X-Forwarded-For` y elegir su IP. Solo importa en Render.
+    - **Para revisar qué IP se usa** sin escribirla en los logs está el log `diagnostico_proxy` ([observabilidad.md](observabilidad.md#diagnóstico-de-la-ip-del-cliente-diagnostico_proxy)).
   - Los límites se leen en cada petición, así que basta cambiar la variable de entorno en Render (sin tocar el código) si hace falta subirlos, por ejemplo en una demo con muchas personas detrás de la misma red, que comparten IP.
   - El contador vive en memoria: alcanza para la única instancia de staging, se reinicia con cada despliegue y, con varias instancias, cada una contaría por su lado (habría que pasar a Redis).
 - CORS restringido con `CORS_ORIGINS`.
@@ -180,10 +191,10 @@ npm run migration:revert   # revertir la última
 
 | Suite | Comando | Cantidad | Qué cubre |
 |---|---|---|---|
-| Unitarias | `npm test` | 399 | Servicios, controladores, guards (JWT, roles y límite de peticiones), mapper, normalización, configuración (incluido `trust proxy`) |
-| Integración | `npm run test:integration` | 94 (~55 s) | App NestJS real contra un FastAPI simulado (`node:http`), sin PostgreSQL |
+| Unitarias | `npm test` | 421 | Servicios, controladores, guards (JWT, roles y límite de peticiones), IP del cliente, mapper, normalización, configuración (incluido `trust proxy`) |
+| Integración | `npm run test:integration` | 99 (~55 s) | App NestJS real contra un FastAPI simulado (`node:http`), sin PostgreSQL |
 
-La suite de integración cubre: búsqueda y guardado, `X-Request-ID`, validación, reintentos y respaldo ante 503, FastAPI apagado, timeout, `/api/health` (ok, degradado, error), `X-Response-Time-ms`, métricas, detalle, perfil, alergias, compatibilidad, 401 sin token y el límite de peticiones ([`limite-peticiones.int-spec.ts`](../backend/test/integracion/limite-peticiones.int-spec.ts): el sexto login en un minuto responde 429, otro cliente detrás de la misma IP de Cloudflare no queda bloqueado, inventar la IP de la izquierda de `X-Forwarded-For` no evita el 429, con `SALTOS_PROXY=1` se reproduce el contador compartido y el detalle responde `TOO_MANY_REQUESTS`). Corre en el CI sin Docker.
+La suite de integración cubre: búsqueda y guardado, `X-Request-ID`, validación, reintentos y respaldo ante 503, FastAPI apagado, timeout, `/api/health` (ok, degradado, error), `X-Response-Time-ms`, métricas, detalle, perfil, alergias, compatibilidad, 401 sin token y el límite de peticiones ([`limite-peticiones.int-spec.ts`](../backend/test/integracion/limite-peticiones.int-spec.ts): el sexto login en un minuto responde 429, otro cliente detrás de la misma IP de Cloudflare no queda bloqueado, inventar la IP de la izquierda de `X-Forwarded-For` no evita el 429, con `SALTOS_PROXY=1` se reproduce el contador compartido, con el mismo `CF-Connecting-IP` un `X-Forwarded-For` distinto en cada intento recibe 429 en el sexto, dos `CF-Connecting-IP` distintos no comparten contador, sin el header o con uno inválido se usa `req.ip`, `IP_DESDE_CLOUDFLARE=false` ignora el header y el detalle responde `TOO_MANY_REQUESTS`). Corre en el CI sin Docker.
 
 Cada archivo de integración levanta su propia app, así que los contadores del límite no se comparten entre archivos, y las pruebas del límite usan una IP de cliente distinta en cada caso, con `X-Forwarded-For` armado como en Render (`<cliente>, <Cloudflare>`). Si una prueba futura necesita más intentos, se puede subir el límite con las variables de entorno.
 
