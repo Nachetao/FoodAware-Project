@@ -208,6 +208,15 @@ describe('BusquedaPage', () => {
     expect(buscar).toHaveBeenCalledWith('leche', 20, 0);
   });
 
+  it('muestra el texto como lo escribió el usuario (la normalización es del servicio)', () => {
+    buscar.mockReturnValue(of(respuesta(rango(1, 3), 3)));
+
+    page.buscar('  Leche Entera ');
+
+    expect(buscar).toHaveBeenCalledWith('Leche Entera', 20, 0);
+    expect(texto()).toContain('3 resultados para «Leche Entera»');
+  });
+
   it('muestra un spinner mientras espera la respuesta', () => {
     buscar.mockReturnValue(new Subject<BusquedaProductos>());
 

@@ -174,7 +174,7 @@ npm run test:scripts
 
 | Suite | Cantidad | Qué cubre |
 |---|---|---|
-| `npm test` (Vitest) | 367 (22 archivos) | Servicios, interceptor, guards (sesión y administrador), formato, veredicto y confianza, chips de alérgenos, la configuración del service worker, el aviso sin conexión, la instalación, la tabla de navegación y las páginas: búsqueda (normal y personalizada), detalle, métricas, login, registro, perfil y administración |
+| `npm test` (Vitest) | 378 (23 archivos) | Servicios, interceptor, guards (sesión y administrador), formato, veredicto y confianza, chips de alérgenos, la configuración del service worker, el aviso sin conexión, la instalación, la tabla de navegación y las páginas: búsqueda (normal y personalizada), detalle, métricas, login, registro, perfil y administración |
 | `npm run test:scripts` (`node --test`) | 6 | El servidor de `pwa:local` (qué rutas va al backend y cuáles no) y `index.html` |
 
 Cifras del 20 de noviembre de 2026. Las dos corren sin el backend.
