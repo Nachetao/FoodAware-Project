@@ -74,11 +74,12 @@ services:
       # aquí y el backend la toma con fromService, así no hay que copiarla.
       - key: CLAVE_SERVICIO
         generateValue: true
-      # Transición: "false" mientras el backend no envía la clave (sin
-      # header se acepta con una advertencia; una clave incorrecta da 403).
-      # Pasa a "true" cuando el backend la envíe.
+      # "true": sin la clave, o con una incorrecta, 403 (/health sigue
+      # público). El backend la envía en todas sus llamadas. "false" solo
+      # sirve como vuelta atrás de emergencia: sin header se acepta con una
+      # advertencia en el log.
       - key: CLAVE_SERVICIO_OBLIGATORIA
-        value: "false"
+        value: "true"
 
   - type: web
     name: foodaware-staging-backend

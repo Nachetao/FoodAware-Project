@@ -20,6 +20,13 @@ frontend se compila en Render y toma la URL del backend de `API_URL`. El
 backend escucha en `PORT` y solo acepta por CORS los orígenes de
 `CORS_ORIGINS` (la URL del frontend).
 
+El frontend, al ser un sitio estático, no usa `frontend/nginx.conf`: sus
+headers están en `render.yaml`, incluido `Cache-Control: no-cache` para
+`ngsw-worker.js`, `ngsw.json`, `safety-worker.js`, `worker-basic.min.js`,
+`manifest.webmanifest`, `index.html` y `/`, para que una versión nueva de la
+PWA llegue sin esperar a que venza la caché HTTP. Render aplica los cambios de
+headers con *Manual Sync* (ver "Cambiar la infraestructura").
+
 Las URL de la tabla son las reales de nuestro staging: Render no les agregó
 sufijo. Si el Blueprint se crea en otra cuenta y el nombre ya está ocupado,
 Render agrega uno (por ejemplo `foodaware-staging-python-a1b2.onrender.com`).
@@ -80,7 +87,7 @@ endpoint *Validate Blueprint* de la API, que no crea ni modifica recursos.
 | `JWT_SECRET` | Render (backend) | `generateValue: true` (Render genera 256 bits aleatorios) |
 | `INGESTA_CLAVE` | Render (python-service) | `generateValue: true` |
 | `CLAVE_SERVICIO` | Render (python-service y backend) | `generateValue: true` en python-service; el backend la toma de ahí con `fromService`, así los dos tienen la misma sin copiarla |
-| `CLAVE_SERVICIO_OBLIGATORIA` | `render.yaml` (python-service) | `"false"` durante la transición (ver "Activar la clave entre servicios") |
+| `CLAVE_SERVICIO_OBLIGATORIA` | `render.yaml` (python-service) | `"true"`: sin la clave, 403 (ver "Activar la clave entre servicios") |
 | `OFF_USER_AGENT` | Render (python-service) | `sync: false`: se escribe al crear el Blueprint, con el correo del equipo |
 | `PYTHON_API_URL`, `CORS_ORIGINS` (backend) y `API_URL` (frontend) | Render | `sync: false`: se escriben al crear el Blueprint. No son secretas, pero dependen de las URL que asigne Render |
 | Lo demás (puertos, timeouts, opciones de ingesta) | `render.yaml` | Valores no sensibles, versionados |
@@ -384,41 +391,80 @@ PostgreSQL no se pueden cambiar después de crearla.
 
 Los endpoints de FastAPI que consume el backend exigen el header
 `X-Clave-Servicio` con el valor de `CLAVE_SERVICIO` (detalle en el
-[contrato](contratos/README.md#endpoints)). Mientras el backend no envíe la
-clave, `CLAVE_SERVICIO_OBLIGATORIA` queda en `"false"`: FastAPI atiende las
-peticiones sin header y deja una advertencia en el log, pero rechaza con 403
-una clave incorrecta. Se activa en tres pasos:
+[contrato](contratos/README.md#endpoints)). **Hoy la clave es obligatoria**:
+`CLAVE_SERVICIO_OBLIGATORIA` está en `"true"` en `render.yaml`,
+`docker-compose.yml` y `.env.example`, y FastAPI responde 403 si la clave
+falta o no coincide. `/health` sigue público para el health check de Render.
 
-1. **Antes de unir a `main` el cambio que agrega la clave**, en Render:
-   servicio `foodaware-staging-python` → *Environment* → agregar
-   `CLAVE_SERVICIO_OBLIGATORIA` con el valor `false`. Hace falta porque las
-   variables nuevas de `render.yaml` no llegan con el despliegue automático,
-   solo con *Manual Sync*: si el CD despliega el código nuevo antes que la
-   variable, el servicio usa el valor por defecto (`true`), el backend recibe
-   403 en todo y las pruebas de salud del CD fallan.
-2. **Después del merge**, abrir el Blueprint en Render y pulsar *Manual Sync*.
-   Render crea `CLAVE_SERVICIO` en python-service (con un valor aleatorio), la
-   copia al backend con `fromService` y deja `CLAVE_SERVICIO_OBLIGATORIA` en
-   `false`, igual que en el paso 1. En los logs de python-service aparecen
-   advertencias `clave_servicio_ausente` en cada llamada del backend: es lo
-   esperado mientras el backend no envíe el header.
-3. **Cuando el backend envíe la clave en todas sus llamadas** (y ese cambio
-   esté desplegado): comprobar en los logs de python-service que ya no
-   aparecen advertencias `clave_servicio_ausente`, cambiar
-   `CLAVE_SERVICIO_OBLIGATORIA` a `"true"` en `render.yaml` con un PR y, después
-   del merge, volver a pulsar *Manual Sync*. Para probarlo:
+**Cómo fue la transición.** Se activó en dos etapas para no dejar al backend
+sin acceso:
+
+1. Con `CLAVE_SERVICIO_OBLIGATORIA` en `"false"`, Render creó `CLAVE_SERVICIO`
+   en python-service y la copió al backend con `fromService`. FastAPI atendía
+   las peticiones sin header (con una advertencia `clave_servicio_ausente` en
+   el log) y rechazaba con 403 una clave incorrecta.
+2. Cuando el backend empezó a enviar la clave en todas sus llamadas (el cliente
+   del contrato y `POST /analizar`) y ese cambio quedó desplegado, se pasó a
+   `"true"` con un PR y un *Manual Sync*.
+
+**Orden para aplicar el cambio a `"true"` sin dejar el servicio caído:**
+
+1. **Antes del merge**, comprobar que el backend desplegado ya envía la clave
+   correcta. Con la variable todavía en `"false"`, una búsqueda por el backend
+   que responde `X-Fuente-Datos: fastapi`, sin advertencias
+   `clave_servicio_ausente` en los logs de python-service, lo demuestra: una
+   clave incorrecta daría 403 y el backend respondería desde el respaldo.
+2. **Merge y CD.** El CD despliega el código, pero no cambia las variables de
+   Render (eso solo lo hace *Manual Sync*), así que la clave sigue opcional y
+   las pruebas de salud pasan igual que antes. Esperar el CD en verde.
+3. **Manual Sync.** El plan debe mostrar `CLAVE_SERVICIO_OBLIGATORIA`
+   `false` → `true` en `foodaware-staging-python`. Render redespliega los
+   servicios afectados; si en la pestaña *Events* de python-service no aparece
+   un deploy después del sync, hacerlo con *Manual Deploy* → *Deploy latest
+   commit*. Las variables solo se leen al desplegar (un *Restart* no basta), y
+   el deploy no tiene downtime: la instancia anterior atiende hasta que la
+   nueva pasa `/health`.
+4. **Verificar** (PowerShell; la clave está en Render → `foodaware-staging-python`
+   → *Environment* → `CLAVE_SERVICIO`):
 
    ```powershell
-   # Sin clave: debe responder 403 FORBIDDEN.
-   Invoke-WebRequest -UseBasicParsing "https://foodaware-staging-python.onrender.com/metrics/quality"
-   # Por el backend, que sí envía la clave: debe responder las métricas.
-   Invoke-RestMethod "https://foodaware-staging-backend.onrender.com/api/metricas/calidad"
+   $py = "https://foodaware-staging-python.onrender.com"
+   $be = "https://foodaware-staging-backend.onrender.com"
+   $segura = Read-Host "CLAVE_SERVICIO" -AsSecureString
+   $clave = (New-Object System.Net.NetworkCredential("", $segura)).Password
+
+   # /health sigue público: 200.
+   curl.exe -s -o NUL -w '%{http_code}\n' "$py/health"
+   # Sin clave y con una incorrecta: 403.
+   curl.exe -s -o NUL -w '%{http_code}\n' "$py/metrics/quality"
+   curl.exe -s -o NUL -w '%{http_code}\n' -H "X-Clave-Servicio: incorrecta" "$py/metrics/quality"
+   # Con la clave correcta: 200.
+   curl.exe -s -o NUL -w '%{http_code}\n' -H "X-Clave-Servicio: $clave" "$py/metrics/quality"
+   # Por el backend: la búsqueda debe venir de FastAPI, no del respaldo.
+   curl.exe -s -D - -o NUL "$be/api/products/search?q=galletas" | Select-String '^x-fuente-datos'
+   Remove-Variable clave, segura
    ```
 
+**Vuelta atrás.** Si el backend queda con `X-Fuente-Datos: respaldo` y
+python-service registra `clave_servicio_rechazada`, no hay caída (la búsqueda
+y el detalle responden desde el respaldo), pero hay que ver la causa:
+
+- **El backend no tiene `CLAVE_SERVICIO`** (no envía el header): servicio
+  `foodaware-staging-python` → *Environment* → `CLAVE_SERVICIO_OBLIGATORIA` =
+  `false` → *Save and deploy*. El próximo *Manual Sync* vuelve a dejarla en
+  `"true"`, así que hay que corregir la causa o cambiar también `render.yaml`
+  con un PR.
+- **El backend envía una clave distinta**: `false` no sirve, porque una clave
+  incorrecta da 403 igual. Hay que revisar que `CLAVE_SERVICIO` del backend
+  venga de python-service (`fromService`) y redesplegar el backend.
+
 En local es lo mismo: `CLAVE_SERVICIO` en `.env` (la leen los dos
-contenedores) y `CLAVE_SERVICIO_OBLIGATORIA=true` cuando el backend la envíe.
-Si `.env` no define `CLAVE_SERVICIO_OBLIGATORIA`, `docker-compose.yml` la deja
-en `false`, que es lo que pasa en CI Integración.
+contenedores). Si `.env` no define `CLAVE_SERVICIO_OBLIGATORIA`,
+`docker-compose.yml` la deja en `true`; con `CLAVE_SERVICIO` vacía, FastAPI
+rechaza al backend y la app funciona solo con el respaldo. CI Integración
+genera una clave aleatoria en cada ejecución, se la pasa a los dos servicios
+por el mismo `.env` y prueba los tres casos (incorrecta, sin clave y
+correcta).
 
 ## Lanzar una ingesta manual en staging
 
@@ -556,7 +602,7 @@ Según la [documentación de Render](https://render.com/docs/free):
 | Rollback staging dice que no hay versiones verificadas | Ningún CD pasó todavía todas las pruebas desde que existe el tag `staging-verificado-*` | Esperar al primer CD verde o desplegar a mano un commit conocido desde Render |
 | CD Staging falla en las pruebas de salud | Un servicio no despertó en 5 minutos, o el despliegue quedó funcionando mal | La tabla del resumen dice qué prueba falló y qué respondió; repetir con *Re-run failed jobs* si fue un arranque lento |
 | Búsqueda con `X-Fuente-Datos: respaldo` | python-service dormido o lento | Despertar python-service (`/health`) y repetir |
-| La búsqueda, el detalle y las métricas del backend responden 403 `FORBIDDEN` (el backend propaga los 4xx de FastAPI y no usa el respaldo); FastAPI registra `clave_servicio_rechazada` | El backend envía una `CLAVE_SERVICIO` distinta, o `CLAVE_SERVICIO_OBLIGATORIA` está en `true` y el backend todavía no envía la clave | Revisar que `CLAVE_SERVICIO` del backend venga de python-service (`fromService`) o dejar `CLAVE_SERVICIO_OBLIGATORIA` en `"false"` (ver "Activar la clave entre servicios") |
+| La búsqueda responde con `X-Fuente-Datos: respaldo` aunque python-service está despierto, las métricas responden 502, el backend registra "revisar CLAVE_SERVICIO" y FastAPI registra `clave_servicio_rechazada` | FastAPI rechaza la clave con 403: el backend envía una `CLAVE_SERVICIO` distinta o no tiene ninguna | Revisar que `CLAVE_SERVICIO` del backend venga de python-service (`fromService`) y redesplegar el backend. Si el backend no tiene clave, `CLAVE_SERVICIO_OBLIGATORIA` en `false` sirve como vuelta atrás; con una clave distinta no (ver "Activar la clave entre servicios") |
 | `/api/health` del backend con `fastapi: error` | `PYTHON_API_URL` no coincide con la URL real o python-service está dormido | Revisar el paso 6; despertar python-service |
 | El frontend no llega al backend (error de red o CORS) | `API_URL` o `CORS_ORIGINS` con una URL distinta, o `API_URL` terminada en `/api` | Revisar el paso 6 y redesplegar el frontend |
 | El deploy falla porque Render no detecta un puerto abierto | El servicio no escucha en `PORT` | Revisar `PORT` en `render.yaml` (8000 y 3000) |

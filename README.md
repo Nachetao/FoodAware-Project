@@ -179,7 +179,7 @@ no se sube al repositorio.
 | `CACHE_DB_PATH` | python-service | Ruta de la caché SQLite | `/data/foodaware-cache.sqlite3` |
 | `INGESTA_CLAVE` | python-service | Clave de `POST /ingest/runs`; vacía, el endpoint queda cerrado | vacía |
 | `CLAVE_SERVICIO` | python-service, backend | Clave compartida del header `X-Clave-Servicio`, que FastAPI exige en los endpoints que consume el backend | vacía |
-| `CLAVE_SERVICIO_OBLIGATORIA` | python-service | `true`: sin la clave, 403. `false`: transición mientras el backend no la envía (sin header se acepta con una advertencia) | `true` en el código; `false` en `.env.example`, `docker-compose.yml` y Render |
+| `CLAVE_SERVICIO_OBLIGATORIA` | python-service | `true`: sin la clave, o con una incorrecta, 403. `false`: solo como vuelta atrás (sin header se acepta con una advertencia) | `true` en el código, `.env.example`, `docker-compose.yml` y Render |
 | `CARGAR_SEMILLA_SI_VACIA` | python-service | Cargar la semilla del corpus si la caché está vacía | `true` |
 | `INGESTA_AL_INICIAR`, `INGESTA_INTERVALO_HORAS`, `CACHE_TTL_HORAS` | python-service | Estrategia de actualización | `true`, `24`, `72` |
 | `INGESTA_CATEGORIAS`, `INGESTA_MAX_PRODUCTOS` | python-service | Categorías y tope de productos de cada ingesta | 7 categorías, `500` |
@@ -268,7 +268,7 @@ rollback a mano:
 | CI Backend (NestJS) | `npm audit`, lint, 192 pruebas unitarias y 36 de integración contra un FastAPI simulado |
 | CI Frontend (Angular) | Lint, 121 pruebas unitarias, `npm audit` y compilación |
 | CI Python (FastAPI) | flake8, 293 pruebas unitarias, 543 pruebas del proceso de recuperación, contrato OpenAPI al día y `pip-audit` |
-| CI Integración | La app completa con Docker Compose y 5 pruebas entre NestJS y FastAPI |
+| CI Integración | La app completa con Docker Compose y 6 pruebas entre NestJS y FastAPI |
 | CI Seguridad | Gitleaks, Bandit, CodeQL (Python y TypeScript) y Trivy sobre las 3 imágenes |
 | CI Render Blueprint | `render.yaml` contra el esquema oficial y contra la API de Render |
 | Terraform CI | `fmt` y `validate` de `terraform/` (la configuración de GitHub: ruleset de `main` y Environment `staging`), y `plan` de solo lectura contra GitHub; el `apply` es solo local |

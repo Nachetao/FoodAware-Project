@@ -39,7 +39,7 @@ flowchart LR
     F --> F1["lint, vitest, audit, build"]
     P --> P1["flake8, pytest unitarias,<br/>pytest recuperación, contrato"]
     P --> P2["pip-audit"]
-    I --> I1["docker compose +<br/>5 pruebas de integración"]
+    I --> I1["docker compose +<br/>6 pruebas de integración"]
     S --> S1["Gitleaks"]
     S --> S2["Bandit"]
     S --> S3["CodeQL x2"]
@@ -98,21 +98,24 @@ funcionen juntos:
 
 1. Genera un `.env` de CI. Lo sensible sale de Secrets y lo demás de
    Variables; si los Secrets no existen, genera valores aleatorios para esa
-   ejecución. `OFF_BASE_URL` apunta a `http://off.invalid`, un dominio que
+   ejecución. `CLAVE_SERVICIO` siempre es aleatoria y la reciben el backend y
+   FastAPI desde ese mismo `.env`, con `CLAVE_SERVICIO_OBLIGATORIA=true` como
+   en staging. `OFF_BASE_URL` apunta a `http://off.invalid`, un dominio que
    nunca resuelve, para que ninguna prueba llame a Open Food Facts.
 2. Construye las imágenes y carga productos de prueba ficticios en la caché
    con `scripts/cargar_fixtures.py`.
 3. Levanta todo con `docker compose up --wait` y espera a que el backend
    responda `/api/health`.
-4. Corre 5 pruebas:
+4. Corre 6 pruebas:
 
 | Prueba | Qué comprueba |
 |---|---|
-| 1 | `/health` del python-service responde `ok` o `degradado` |
+| 1 | `/health` del python-service responde `ok` o `degradado` (sin clave: es público) |
 | 2 | `/api/health` del backend reporta PostgreSQL `ok` y FastAPI `ok` o `degradado` |
-| 3 | Una búsqueda por NestJS devuelve los productos de prueba con `X-Fuente-Datos: fastapi`, el mismo `X-Request-ID` que se envió y los mismos resultados, en el mismo orden, que el `/search` de FastAPI |
+| 3 | Una búsqueda por NestJS devuelve los productos de prueba con `X-Fuente-Datos: fastapi`, el mismo `X-Request-ID` que se envió y los mismos resultados, en el mismo orden, que el `/search` de FastAPI. Con la clave obligatoria, esto también prueba que el backend envía la misma `CLAVE_SERVICIO` que tiene FastAPI |
 | 4 | El `X-Request-ID` enviado a NestJS aparece en los logs JSON del python-service |
-| 5 | Con el python-service detenido, NestJS sigue arriba y responde desde el respaldo (o con un error con el formato del contrato), y `/api/health` reporta FastAPI `error` |
+| 5 | FastAPI exige `X-Clave-Servicio`: 403 `FORBIDDEN` con una clave incorrecta, 403 sin clave y 200 con la correcta. Los dos rechazos quedan en el log como `clave_servicio_rechazada`, sin la clave recibida |
+| 6 | Con el python-service detenido, NestJS sigue arriba y responde desde el respaldo (o con un error con el formato del contrato), y `/api/health` reporta FastAPI `error` |
 
 Al principio las pruebas partían antes de que el backend terminara las
 migraciones y fallaban sin razón. Por eso agregamos un healthcheck al backend
@@ -233,7 +236,7 @@ Estos son los nuestros y por qué elegimos cada umbral:
 | Gitleaks | Cero secretos | Un secreto en el historial queda expuesto aunque se borre después |
 | Bandit | Sin severidad alta | Lo medio y bajo se revisa en la pestaña Security |
 | Trivy | Sin CRITICAL con arreglo disponible | Lo que no tiene arreglo no lo podemos corregir nosotros; las HIGH se reportan pero no bloquean |
-| Integración | Las 5 pruebas de CI Integración y las 36 de integración del backend pasan | Son las que prueban los servicios juntos: con Docker Compose, y el backend completo contra un FastAPI simulado |
+| Integración | Las 6 pruebas de CI Integración y las 36 de integración del backend pasan | Son las que prueban los servicios juntos: con Docker Compose, y el backend completo contra un FastAPI simulado |
 | Render Blueprint | Válido contra el esquema y la API | Un `render.yaml` roto solo se notaría al desplegar |
 | Integración a `main` | Pull Request con los 15 checks de CI en verde (ver [Protección de main](#protección-de-main)) | Lo que falla no llega a `main`, y por lo tanto tampoco al CD |
 | Despliegue a staging | Los 7 workflows de CI en verde para el commit de `main` | Lo que no pasó todos los gates anteriores no se publica |
@@ -298,10 +301,10 @@ Si se regenera la clave en Render, hay que actualizar este Secret.
 | Backend, unitarias | Jest | 192 (18 archivos) | Guard JWT, puerto y CORS, cliente de FastAPI y reintentos, respaldo, mapeo, repositorio, controlador y servicio de productos, métricas, salud, observabilidad, usuarios y alergias |
 | Backend, integración | Jest (`npm run test:integration`) | 36 (4 archivos) | La app NestJS completa contra un FastAPI simulado: búsqueda y salud, detalle de producto, métricas, y perfil, alergias y compatibilidad con JWT |
 | Frontend | Vitest | 121 (12 archivos) | Búsqueda (incluidos los avisos de respaldo y "Despertando el servidor…"), detalle de producto, métricas, login, registro y perfil, sesión, servicios y etiquetas de alérgenos |
-| Integración | bash + curl en CI | 5 | Los servicios juntos, ver arriba |
+| Integración | bash + curl en CI | 6 | Los servicios juntos, ver arriba |
 | Posteriores al despliegue | bash + curl en CD Staging y Rollback staging | 9 (más 1 informativa) | Lo desplegado en Render, por sus URL públicas: salud, commit desplegado y un recorrido funcional que no escribe datos |
 
-En total son 1185 pruebas automatizadas más las 5 de CI Integración y las 9
+En total son 1185 pruebas automatizadas más las 6 de CI Integración y las 9
 posteriores al despliegue. Las de Python las contamos el 25 de octubre de 2026 y
 las del backend y el frontend el 24 de octubre de 2026, corriendo cada grupo;
 todas pasaron.
