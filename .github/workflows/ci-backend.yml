@@ -26,6 +26,26 @@ jobs:
     name: Lint, pruebas y auditoría
     runs-on: ubuntu-latest
 
+    # PostgreSQL desechable para npm run test:postgres: nace y muere con el
+    # job, sin datos reales. La contraseña no es un secreto: solo sirve para
+    # este contenedor, que no es accesible desde fuera del runner. Por eso
+    # sus dos líneas llevan "gitleaks:allow" (Gitleaks las marcaría por la
+    # palabra PASSWORD y la entropía del valor).
+    services:
+      postgres:
+        # Misma versión que docker-compose.yml y render.yaml.
+        image: postgres:15
+        env:
+          POSTGRES_USER: foodaware
+          POSTGRES_PASSWORD: postgres-ci-efimera # gitleaks:allow
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U foodaware"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     defaults:
       run:
         working-directory: ./backend
@@ -58,3 +78,14 @@ jobs:
       # llamar a Open Food Facts.
       - name: Ejecutar pruebas de integración (FastAPI simulado)
         run: npm run test:integration
+
+      # Las mismas migraciones y repositorios de producción contra el
+      # PostgreSQL del servicio de arriba. Cada ejecución crea una base
+      # foodaware_prueba_* y la borra al terminar.
+      - name: Ejecutar pruebas con PostgreSQL real
+        env:
+          PRUEBA_DB_HOST: localhost
+          PRUEBA_DB_PORT: 5432
+          PRUEBA_DB_USER: foodaware
+          PRUEBA_DB_PASSWORD: postgres-ci-efimera # gitleaks:allow
+        run: npm run test:postgres

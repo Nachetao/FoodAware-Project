@@ -59,11 +59,15 @@ flowchart LR
 
 [`ci-backend.yml`](../.github/workflows/ci-backend.yml), un job: instala con
 `npm ci`, corre `npm audit --audit-level=critical`, `npm run lint`,
-`npm run test` (192 pruebas unitarias de Jest) y `npm run test:integration`
-(36 pruebas de integración). Las de integración levantan la app NestJS
-completa contra un FastAPI simulado y repositorios en memoria, sin Docker ni
-PostgreSQL, y tardan unos 20 segundos. Falla si hay una dependencia con una
-vulnerabilidad crítica, un error de lint o una prueba que no pasa.
+`npm run test` (432 pruebas unitarias de Jest), `npm run test:integration`
+(99 pruebas de integración) y `npm run test:postgres` (30 pruebas con
+PostgreSQL real). Las de integración levantan la app NestJS completa contra
+un FastAPI simulado y repositorios en memoria, sin Docker ni PostgreSQL. Las
+de PostgreSQL usan la misma app contra un `postgres:15` desechable, que el job
+levanta como servicio: crean una base `foodaware_prueba_*`, aplican las
+migraciones y la borran al terminar. Falla si hay una dependencia con una
+vulnerabilidad crítica, un error de lint o una prueba que no pasa. Las cifras
+son las de [backend.md](backend.md#pruebas) (20 de noviembre de 2026).
 
 ### CI Frontend (Angular)
 
