@@ -303,6 +303,23 @@ el CD no lo vuelve a desplegar solo porque ya figura como desplegado. Para
 avanzar hay que unir un arreglo a `main` (el CD lo despliega con su CI) o
 correr *Run workflow* en CD Staging.
 
+**El procedimiento está probado, no solo definido.** Para la Entrega Final lo
+corrimos de punta a punta en staging, con el motivo "Prueba del procedimiento
+de rollback para la Entrega Final":
+
+1. **Rollback:** con `b03cd8f` desplegado, *Run workflow* sin commit eligió
+   solo `1853e3a`, el último verificado anterior al desplegado. Volvió a
+   desplegar los tres servicios, que quedaron `live`, en 2 min 48 s
+   ([`ep3-rollback.png`](evidencia/ep3-rollback.png)).
+2. **Pruebas después del rollback:** pasaron las 10, incluido que
+   python-service y el backend informan `1853e3a` y que la evaluación
+   adaptativa sigue con 0 falsos "apto" (30 de 30 productos, P@5 de 0,2 a
+   0,825) ([`ep3-rollback-pruebas.png`](evidencia/ep3-rollback-pruebas.png)).
+3. **Vuelta a la versión actual:** como se explica arriba, el CD no vuelve
+   solo a `b03cd8f`. Lo lanzamos a mano (*Run workflow* en CD Staging): verificó
+   el CI del commit, lo desplegó y pasó las pruebas, con los 3 jobs en verde
+   ([`ep3-cd-staging.png`](evidencia/ep3-cd-staging.png)).
+
 ### Qué hacer en cada caso
 
 | Caso | Qué pasa en staging | Qué hacer |
