@@ -557,7 +557,14 @@ El backlog con más detalle está en
 | Qué | Enlace |
 |---|---|
 | Prototipo interactivo en Figma | <https://www.figma.com/design/5ckGTwcAkx4wRjsVI7VfEw/FoodAware?node-id=0-1&t=bg6G2XpqgT3mjuvQ-1> |
-| Tablero de gestión | **Pendiente:** falta agregar el enlace al tablero |
+| Tablero de gestión en GitHub Projects (público) | <https://github.com/users/Nachetao/projects/1> |
+
+Para ser honestos con el tablero: lo armamos al cierre de la Entrega Final, a
+partir del historial de Pull Requests, no durante el desarrollo. Los PR #29 a
+#53 están en la columna "Hecho", y lo pendiente quedó como issues (#54 a #57).
+Durante el proyecto nos organizamos con una rama y un Pull Request por
+funcionalidad; el detalle de cada uno está en
+[docs/estado-del-proyecto.md](docs/estado-del-proyecto.md).
 
 ## Licencia
 

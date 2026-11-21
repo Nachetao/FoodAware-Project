@@ -5,6 +5,11 @@ qué hicimos en cada entrega, qué corregimos de la EP1, cómo respondimos la
 retroalimentación de la profesora y qué queda pendiente. Lo hecho sale del
 historial de git y de los Pull Requests de `main`.
 
+El [tablero de gestión en GitHub Projects](https://github.com/users/Nachetao/projects/1)
+es público. Lo armamos al cierre de la Entrega Final a partir de ese mismo
+historial, no durante el desarrollo: los PR #29 a #53 están en "Hecho", y lo
+pendiente quedó como issues (#54 a #57).
+
 ## Resumen
 
 - La aplicación funciona de punta a punta en local y en staging (Render), en
@@ -157,6 +162,9 @@ de la Entrega Final está en el [README](../README.md#demostración-de-la-entreg
 | 10 | Manejo de un escenario de error | Con FastAPI caído, el backend responde desde la base con `X-Fuente-Datos: respaldo` y el frontend lo avisa. En staging: un [código de barras inválido](https://foodaware-staging-backend.onrender.com/api/products/123) responde 422 `VALIDATION_ERROR` con su `request_id`, y `POST /ingest/runs` sin la clave responde 403 | [respaldo-chocolate.png](evidencia/respaldo-chocolate.png), [backend.md](backend.md#robustez-frente-a-fastapi), [limitaciones.md](limitaciones.md) |
 
 ## Pendiente después de la Entrega Final
+
+Lo pendiente también está como issues (#54 a #57) en el
+[tablero de gestión](https://github.com/users/Nachetao/projects/1).
 
 ### Capacidad adaptativa
 
