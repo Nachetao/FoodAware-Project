@@ -50,6 +50,11 @@ jobs:
       - name: Ejecutar pruebas unitarias
         run: npm test -- --configuration ci
 
+      # Los scripts de Node del frontend (servidor de pwa:local e index.html),
+      # con node --test: no necesitan el build ni el backend.
+      - name: Ejecutar pruebas de los scripts
+        run: npm run test:scripts
+
       - name: Auditar dependencias vulnerables
         run: npm audit --audit-level=critical
 

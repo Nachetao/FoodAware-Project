@@ -1,9 +1,11 @@
 # Flujo de datos entre frontend, NestJS, Python y PostgreSQL
 
 En la EP1 la app tenía un solo flujo: la persona escribía los ingredientes a
-mano y el sistema los analizaba. En la EP2 el flujo principal es la búsqueda
-de productos reales, que vienen de Open Food Facts. Los dos siguen existiendo,
-y aquí describimos ambos.
+mano y el sistema los analizaba. En la EP2 el flujo principal pasó a ser la
+búsqueda de productos reales, que vienen de Open Food Facts. En la Entrega
+Final se sumó la capacidad adaptativa: la búsqueda personalizada y el
+veredicto según el perfil. Los tres siguen existiendo, y aquí describimos
+cada uno.
 
 ## Flujo principal (EP2): buscar un producto
 
@@ -58,6 +60,59 @@ Los detalles internos del backend (cómo arma la búsqueda de respaldo, cómo
 mapea el contrato a la entidad, qué errores usan el respaldo) le
 corresponden a [backend.md](backend.md). El formato de cada respuesta está en
 el [contrato](contratos/README.md).
+
+## Flujo de la Entrega Final: búsqueda personalizada y veredicto
+
+Con sesión iniciada, la búsqueda y el detalle del producto se adaptan al
+perfil de la persona (alergias, dietas y modo estricto).
+
+```mermaid
+sequenceDiagram
+    actor U as Usuario con sesión
+    participant F as Frontend
+    participant B as Backend (NestJS)
+    participant DB as PostgreSQL
+    participant P as python-service (FastAPI)
+
+    U->>F: Busca "chocolate sin leche" con "Personalizar según mi perfil"
+    F->>B: GET /api/products/search/personalizada?q=... (Authorization: Bearer)
+    B->>DB: lee el perfil del usuario (alergias, dietas, modo estricto)
+    B->>P: POST /search/personalized (consulta + perfil, sin identidad,<br/>X-Clave-Servicio y X-Request-ID)
+    P->>P: interpreta "sin leche", busca con BM25,<br/>calcula el veredicto de cada producto y reordena
+    P-->>B: resultados con veredicto, productos ocultos y aviso
+    B->>DB: upsert de los productos en products
+    B-->>F: respuesta + X-Fuente-Datos: fastapi
+    F-->>U: Chips "Apto", "Con advertencia" o "No apto" y el aviso orientativo
+
+    Note over B,P: Si FastAPI no responde tras los reintentos
+    B->>DB: revisión básica con los productos guardados
+    B-->>F: X-Fuente-Datos: respaldo (nunca "apto", confianza baja)
+```
+
+Paso a paso:
+
+1. El frontend llama a `GET /api/products/search/personalizada` con el token.
+   Sin sesión, la búsqueda es la normal (flujo anterior).
+2. El backend lee el perfil del usuario desde PostgreSQL y le envía al motor
+   **solo el perfil** (alergias, dietas y modo estricto), nunca su nombre ni
+   su correo, con la clave entre servicios.
+3. El python-service interpreta las restricciones escritas en la consulta
+   ("sin leche" suma lácteos al perfil de esa búsqueda), busca con BM25 y
+   calcula el veredicto de cada producto con las reglas del
+   [contrato](contratos/README.md#capacidad-adaptativa). Ordena los aptos
+   primero y, en el modo "Ocultar no aptos", deja fuera los `no_apto` y dice
+   cuántos ocultó y por qué.
+4. Cada veredicto y cada respuesta traen el aviso orientativo, que el frontend
+   muestra siempre junto al resultado.
+5. Si el motor no responde, el backend hace una revisión básica con los
+   productos guardados: nunca responde "apto", y marca la confianza como
+   baja.
+
+El veredicto de un solo producto sigue el mismo camino:
+`GET /api/products/:codigo_barras/compatibilidad` en el backend y
+`POST /products/{codigo_barras}/compatibility` en FastAPI. Por qué el
+sistema es conservador está en
+[Arquitectura.md](Arquitectura.md#clasificación-de-compatibilidad-no-garantía-de-seguridad).
 
 ## Cómo llegan los productos a la caché
 

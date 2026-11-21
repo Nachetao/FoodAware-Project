@@ -1,21 +1,61 @@
 # Estado del proyecto y backlog
 
-Estado de FoodAware al cierre de la EP2 (25 de octubre de 2026): qué hicimos
-en esta entrega, qué corregimos de la EP1 y qué queda para la EP3 y el
-Módulo 3. Lo hecho sale del historial de git y de los Pull Requests de
-`main`.
+Estado de FoodAware al cierre de la Entrega Final (21 de noviembre de 2026):
+qué hicimos en cada entrega, qué corregimos de la EP1, cómo respondimos la
+retroalimentación de la profesora y qué queda pendiente. Lo hecho sale del
+historial de git y de los Pull Requests de `main`.
+
+El [tablero de gestión en GitHub Projects](https://github.com/users/Nachetao/projects/1)
+es público. Lo armamos al cierre de la Entrega Final a partir de ese mismo
+historial, no durante el desarrollo: los PR #29 a #53 están en "Hecho", y lo
+pendiente quedó como issues (#54 a #57).
 
 ## Resumen
 
-- La aplicación funciona de punta a punta en local y en staging (Render):
-  búsqueda BM25 sobre 385 productos chilenos de Open Food Facts, detalle con
-  alérgenos y trazas, panel de métricas, registro con perfil de alergias y
-  veredicto "Apto para ti" o "No apto".
-- El pipeline tiene 7 workflows de CI y, desde esta entrega, un workflow de
-  despliegue automático a staging con pruebas de salud.
+- La aplicación funciona de punta a punta en local y en staging (Render), en
+  la web, como PWA instalable y como app de Android: búsqueda BM25 sobre 385
+  productos chilenos de Open Food Facts, detalle con alérgenos y trazas,
+  panel de métricas, roles de usuario y administrador, y la capacidad
+  adaptativa (veredicto y búsqueda personalizada según el perfil).
+- La evaluación de la capacidad adaptativa dio 0 falsos "apto" y subió la
+  Precision@5 de las consultas con restricción de 0,20 a 0,83.
+- El pipeline tiene 7 workflows de CI, un despliegue automático a staging con
+  10 pruebas posteriores y un rollback a la última versión verificada. `main`
+  exige los 15 checks en verde.
 - Valores de referencia en staging (semilla del 25 de octubre de 2026):
   Precision@5 = 0,53, 75,47 % de válidos, 70,96 % de duplicados y 75,31 % de
   cobertura de ingredientes.
+
+## Lo hecho en la Entrega Final
+
+Como en la EP2, una rama por funcionalidad y un Pull Request a `main` para
+cada una. La autoría sale de los commits de cada PR.
+
+### Ignacio Reyes
+
+| PR | Qué incluye |
+|---|---|
+| #27 | Historial real de las ingestas en la semilla |
+| #30 a #33 | Contrato de la capacidad adaptativa, motor del veredicto, búsqueda personalizada, etiquetado manual y evaluación, y lectura de trazas a mitad de un fragmento |
+| #34 | Commit desplegado en `/health` y workflow Rollback staging |
+| #42 | `Cache-Control` del service worker en staging y `X-Clave-Servicio` obligatoria, con su prueba en CI Integración |
+| #43 | Modelo de amenazas STRIDE |
+| #44 | Respuesta a la retroalimentación de la EP1: actores, clasificación frente a garantía, ADR 0001 a 0003 y el fallo de Trivy documentado |
+| `docs/cierre-final` | Límite de peticiones en el modelo de amenazas, `test:postgres` en CI Backend, README y revisión final de la documentación |
+
+### Joaquín Muñoz
+
+| PR | Qué incluye |
+|---|---|
+| #35 a #37 | Compatibilidad que nunca responde "apto" con alérgenos, trazas o datos insuficientes; cliente del motor adaptativo con `X-Clave-Servicio`; veredicto completo y búsqueda personalizada en el frontend |
+| #38 y #39 | Barra superior compartida, y el inicio rediseñado con el aviso orientativo y un servicio de análisis sin `HttpClient` en la página |
+| #40 | Roles de usuario y administrador, guard de roles y script `admin:asignar` |
+| #41 | PWA, app de Android con Capacitor, accesibilidad y diseño adaptable |
+| #45, #48 y #49 | Límite de peticiones por IP (con la IP desde `CF-Connecting-IP`) y contraseña mínima de 8 caracteres |
+| #46 | ADR 0004 (PostgreSQL y TypeORM) y modelo de base de datos actualizado |
+| #47 | Commit en `/api/health` y alérgenos en neutro salvo los del perfil |
+| #50 | Pruebas de guards, roles y navegación, y pruebas con PostgreSQL real |
+| #51 a #53 | Búsqueda normalizada para la caché de la PWA, documentación del backend, del frontend, de la observabilidad y de la capacidad adaptativa, y las capturas de la entrega |
 
 ## Lo hecho en la EP2
 
@@ -98,21 +138,43 @@ Final.
 | "Separar componentes de interfaz y servicios HTTP en el frontend" | Corregido: `home.page.ts` ya no inyecta `HttpClient` y usa `AnalisisService`. En todo el frontend, `HttpClient` solo se inyecta en los servicios (`admin`, `analisis`, `auth`, `metricas` y `products`) | Commit `30b3b71` (PR #39), [`home.page.ts`](../frontend/src/app/home/home.page.ts), [`analisis.service.ts`](../frontend/src/app/analisis/analisis.service.ts) y sus pruebas (`analisis.service.spec.ts`, `home.page.spec.ts`) |
 | "Documentar los fallos controlados" | Una sección explícita con el caso real de Trivy: la CVE-2026-59873 de `tar` en la imagen del backend, el bloqueo de CI Seguridad, la corrección en el PR #17, la verificación y lo que aprendimos (el ruleset de `main`). Se suma al fallo provocado de Gitleaks de la EP1 | [pipeline-devsecops.md](pipeline-devsecops.md#fallo-de-seguridad-detectado-bloqueo-del-pipeline-y-corrección), [`ep2-trivy-backend-critical.png`](evidencia/ep2-trivy-backend-critical.png) y [`ep2-ci-verde.png`](evidencia/ep2-ci-verde.png) |
 
-## Pendiente para la EP3 y el Módulo 3
+## Demostración de la EP2
+
+Los 10 puntos de la demostración mínima de la EP2 y dónde se ve cada uno. Los
+valores son los de staging con la semilla del 25 de octubre de 2026: 385
+productos, Precision@5 = 0,53, 75,47 % de válidos, 70,96 % de duplicados y
+75,31 % de cobertura de ingredientes. Desde la Entrega Final, los endpoints de
+FastAPI que consume el backend exigen `X-Clave-Servicio`, así que los datos
+de las ingestas y de la calidad se consultan por el backend. La demostración
+de la Entrega Final está en el [README](../README.md#demostración-de-la-entrega-final).
+
+| # | Punto | Qué mostrar | Evidencia |
+|---|---|---|---|
+| 1 | Recuperación automatizada de información real | Las ingestas desde la API de Open Food Facts, por país y categoría, con límites de tasa, reintentos y segunda ronda. La última que trajo datos al corpus (25 de octubre de 2026, 387 productos recuperados) se ve en [`/api/ingesta/ultima`](https://foodaware-staging-backend.onrender.com/api/ingesta/ultima), con `origen: "semilla"` | [fuente-web.md](fuente-web.md), [extraccion-y-preparacion.md](extraccion-y-preparacion.md) |
+| 2 | Validación y preparación | Limpieza de ingredientes, alérgenos y trazas, reglas de calidad y deduplicación. En [`/api/metricas/calidad`](https://foodaware-staging-backend.onrender.com/api/metricas/calidad): 75,47 % de válidos | [extraccion-y-preparacion.md](extraccion-y-preparacion.md), [detalle-producto.png](evidencia/detalle-producto.png) |
+| 3 | Procesamiento mediante FastAPI | El [Swagger del python-service](https://foodaware-staging-python.onrender.com/docs): `/search` con BM25 y `/products/{codigo_barras}` con alérgenos, calidad y procedencia | [contratos/README.md](contratos/README.md) |
+| 4 | Comunicación NestJS-FastAPI | [Búsqueda por el backend](https://foodaware-staging-backend.onrender.com/api/products/search?q=galletas&limit=5) con `X-Fuente-Datos: fastapi`; el mismo `X-Request-ID` aparece en los logs de los dos servicios | [observabilidad.md](observabilidad.md), [backend.md](backend.md), [ep2-cd-staging.png](evidencia/ep2-cd-staging.png) |
+| 5 | Persistencia o indexación | Caché SQLite con el payload crudo y la procedencia, índice invertido BM25 en memoria (385 productos en `detalle.indice` de [`/health`](https://foodaware-staging-python.onrender.com/health)) y tabla `products` de PostgreSQL como respaldo | [recuperacion-y-evaluacion.md](recuperacion-y-evaluacion.md#1-persistencia-e-indexación), [backend.md](backend.md#persistencia) |
+| 6 | Consulta y visualización desde el frontend | En el [frontend de staging](https://foodaware-staging-frontend.onrender.com): buscar "galletas de avena", abrir un producto y, con sesión, ver "Apto para ti" o "No apto" | [frontend.md](frontend.md), [detalle-producto.png](evidencia/detalle-producto.png), [apto-para-ti.png](evidencia/apto-para-ti.png), [no-apto.png](evidencia/no-apto.png) |
+| 7 | Ejecución del pipeline DevSecOps | La pestaña Actions: los 7 workflows de CI y CD Staging, con los quality gates y los Secrets y Variables | [pipeline-devsecops.md](pipeline-devsecops.md), [ep2-ci-verde.png](evidencia/ep2-ci-verde.png), [ep2-trivy-backend-critical.png](evidencia/ep2-trivy-backend-critical.png), [ep2-github-secrets.png](evidencia/ep2-github-secrets.png), [ep2-github-variables.png](evidencia/ep2-github-variables.png) |
+| 8 | Acceso a la versión en staging | Las tres URL de staging y el despliegue automático del último commit de `main` | [despliegue-staging.md](despliegue-staging.md), [ep2-render-servicios.png](evidencia/ep2-render-servicios.png), [ep2-cd-staging.png](evidencia/ep2-cd-staging.png) |
+| 9 | Presentación de una métrica de evaluación | La página [Métricas](https://foodaware-staging-frontend.onrender.com/metricas): Precision@5 = 0,53 sobre 20 consultas (0,75 en las de producto y 0,20 en las de restricción), más las métricas de calidad | [recuperacion-y-evaluacion.md](recuperacion-y-evaluacion.md#7-métricas), [panel-metricas.png](evidencia/panel-metricas.png) |
+| 10 | Manejo de un escenario de error | Con FastAPI caído, el backend responde desde la base con `X-Fuente-Datos: respaldo` y el frontend lo avisa. En staging: un [código de barras inválido](https://foodaware-staging-backend.onrender.com/api/products/123) responde 422 `VALIDATION_ERROR` con su `request_id`, y `POST /ingest/runs` sin la clave responde 403 | [respaldo-chocolate.png](evidencia/respaldo-chocolate.png), [backend.md](backend.md#robustez-frente-a-fastapi), [limitaciones.md](limitaciones.md) |
+
+## Pendiente después de la Entrega Final
+
+Lo pendiente también está como issues (#54 a #57) en el
+[tablero de gestión](https://github.com/users/Nachetao/projects/1).
 
 ### Capacidad adaptativa
 
-La especificación preliminar está en
-[capacidad-adaptativa.md](capacidad-adaptativa.md). Lo que falta:
-
-- Llevar el veredicto apto o no apto a la búsqueda principal, no solo a
-  `/compatibles`, que busca entre los productos guardados.
-- Medir la utilidad de la adaptación con las métricas de la sección 8 de la
-  especificación: tasa de falsos "apto" (objetivo cercano a 0), precisión del
-  veredicto y Precision@5 en búsquedas con restricción, comparando la búsqueda
-  no adaptativa con la adaptativa.
-- En el Módulo 3: la comparación formal entre las dos versiones (prueba A/B si
-  corresponde), la evaluación con usuarios y el registro de uso.
+- Evaluarla con usuarios reales: una comparación formal (prueba A/B) entre la
+  búsqueda normal y la personalizada, y el registro de uso.
+- Ampliar el conjunto etiquetado a mano: con pocos casos, 0 falsos "apto" no
+  prueba que no existan
+  ([recuperacion-y-evaluacion.md](recuperacion-y-evaluacion.md#8-evaluación-de-la-capacidad-adaptativa)).
+- Si hay datos suficientes, probar un clasificador entrenado frente a las
+  reglas actuales.
 
 ### Producto
 
@@ -121,12 +183,18 @@ La especificación preliminar está en
   búsqueda.
 - Corrección de errores de tipeo en la búsqueda.
 - Ampliar el corpus (más categorías o más productos por ingesta).
+- Escaneo de códigos de barras con la cámara, iOS y la publicación de la app.
+
+### Seguridad
+
+Los riesgos pendientes del [modelo de amenazas](modelo-amenazas.md#5-riesgos-pendientes):
+verificar el correo, comparar contra un hash falso en el login, una
+Content-Security-Policy, un contador del límite de peticiones compartido
+(Redis), una clave por consumidor entre servicios y proteger los tags
+`staging-verificado-*`.
 
 ### Técnico
 
-- Protección de la rama `main` con los checks obligatorios antes del merge.
-- Actualizar el modelo de datos de [Arquitectura.md](Arquitectura.md) con las
-  tablas de la EP2.
 - Migrar el frontend de `IonicModule` a `provideIonicAngular()` y subir
   Angular a 22.2.3 y Nest a la versión 12 por las vulnerabilidades altas
   pendientes ([frontend.md](frontend.md), [backend.md](backend.md)).
@@ -134,11 +202,16 @@ La especificación preliminar está en
 
 ### Operación del staging
 
-- Recrear la base de Render antes de que venza: es gratuita, dura 30 días y
-  la nuestra vence el 24 de noviembre de 2026
+- **Recrear la base de Render**: es gratuita, dura 30 días y la nuestra vence
+  el 24 de noviembre de 2026
   ([despliegue-staging.md](despliegue-staging.md#recrear-la-base-cada-30-días)).
 - Regenerar la semilla cuando haya ingestas nuevas en local, para que staging
   no se quede con datos cada vez más antiguos.
+
+Ya resueltos en la Entrega Final, del backlog de la EP2: la protección de
+`main` con los checks obligatorios, el modelo de datos de
+[Arquitectura.md](Arquitectura.md), el veredicto en la búsqueda principal
+(búsqueda personalizada) y la medición de los falsos "apto".
 
 El resto de lo que sabemos que falta, con su impacto, está en
 [limitaciones.md](limitaciones.md).

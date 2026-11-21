@@ -264,7 +264,7 @@ La caché del python-service no está en este modelo porque vive en otra base
 
 ## Decisiones de arquitectura
 
-Las tres decisiones de fondo tienen su propio registro (ADR), con contexto,
+Las cuatro decisiones de fondo tienen su propio registro (ADR), con contexto,
 alternativas y consecuencias, en [adr/](adr/README.md):
 
 | ADR | Decisión |
