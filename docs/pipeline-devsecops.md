@@ -227,6 +227,14 @@ posteriores al despliegue y comparte con el CD el grupo de concurrencia. La
 estrategia por caso está en
 [despliegue-staging.md](despliegue-staging.md#versión-desplegada-y-rollback).
 
+Lo probamos en staging para la Entrega Final: volvió de `b03cd8f` a `1853e3a`
+(el último verificado anterior) con las 10 pruebas en verde, y después CD
+Staging, lanzado a mano, desplegó de nuevo `b03cd8f`
+([`ep3-rollback.png`](evidencia/ep3-rollback.png),
+[`ep3-rollback-pruebas.png`](evidencia/ep3-rollback-pruebas.png) y
+[`ep3-cd-staging.png`](evidencia/ep3-cd-staging.png); el detalle está en
+[despliegue-staging.md](despliegue-staging.md#rollback-staging)).
+
 ## Quality gates
 
 Un quality gate es una condición que, si no se cumple, detiene el pipeline.
@@ -567,9 +575,9 @@ seguridad, subimos a propósito un secreto falso en una rama de prueba. El job
 de Gitleaks lo detectó de inmediato y falló, indicando el archivo, la línea y
 la regla.
 
-![Checks fallando](evidencia/7dd0b35e-ced6-458c-be62-37fe8d19b212.png)
-![Log de detección](evidencia/4e13e96e-90f3-4be7-b47b-b2ddeba5c437.png)
-![Log de detección 2](evidencia/a2601e1e-e4bc-463b-be64-5f0f5800a625.png)
+![Checks fallando](evidencia/ep1-gitleaks-checks.png)
+![Log de detección](evidencia/ep1-gitleaks-log-1.png)
+![Log de detección 2](evidencia/ep1-gitleaks-log-2.png)
 
 Después de eliminar el secreto (limpiando también el historial, porque
 Gitleaks revisa los commits y no solo el código final), el pipeline volvió a
@@ -596,6 +604,18 @@ Las capturas del pipeline de la EP2 están en [`docs/evidencia/`](evidencia/):
 ![Variables de Actions](evidencia/ep2-github-variables.png)
 ![Recursos del Blueprint en Render](evidencia/ep2-render-servicios.png)
 ![CD Staging con las pruebas de salud](evidencia/ep2-cd-staging.png)
+
+### Entrega Final: rollback probado en staging
+
+| Archivo | Qué muestra |
+|---|---|
+| `ep3-rollback.png` | Rollback staging en verde: volvió de `b03cd8f` a `1853e3a` (el último verificado anterior al desplegado), con los 3 servicios `live` |
+| `ep3-rollback-pruebas.png` | Las 10 pruebas posteriores al rollback en verde, incluidos los commits desplegados y la evaluación adaptativa con 0 falsos "apto" |
+| `ep3-cd-staging.png` | CD Staging lanzado a mano, que volvió a desplegar `b03cd8f`, con sus 3 jobs en verde |
+
+![Rollback staging de b03cd8f a 1853e3a](evidencia/ep3-rollback.png)
+![Pruebas después del rollback](evidencia/ep3-rollback-pruebas.png)
+![CD Staging vuelve a desplegar b03cd8f](evidencia/ep3-cd-staging.png)
 
 Las capturas de la aplicación (búsqueda con respaldo, panel de métricas,
 detalle del producto y compatibilidad) están en
