@@ -35,7 +35,7 @@ flowchart LR
     Evento --> R["CI Render Blueprint"]
     Evento --> T["Terraform CI"]
 
-    B --> B1["audit, lint, jest unitarias,<br/>jest integración"]
+    B --> B1["audit, lint, jest unitarias,<br/>jest integración, PostgreSQL real"]
     F --> F1["lint, vitest, audit, build"]
     P --> P1["flake8, pytest unitarias,<br/>pytest recuperación, contrato"]
     P --> P2["pip-audit"]
@@ -50,7 +50,7 @@ flowchart LR
 
     B & F & P & I & S & R & T -.->|"los 7 en verde<br/>en main"| CD["CD Staging"]
     CD --> CD1["deploy en Render:<br/>python, backend, frontend"]
-    CD1 --> CD2["5 pruebas de salud<br/>contra las URL públicas"]
+    CD1 --> CD2["10 pruebas posteriores<br/>contra las URL públicas"]
 ```
 
 ## Los workflows
@@ -72,8 +72,9 @@ son las de [backend.md](backend.md#pruebas) (20 de noviembre de 2026).
 ### CI Frontend (Angular)
 
 [`ci-frontend.yml`](../.github/workflows/ci-frontend.yml), un job: `npm ci`,
-`npm run lint`, las 121 pruebas unitarias con Vitest
-(`npm test -- --configuration ci`), `npm audit --audit-level=critical` y
+`npm run lint`, las 378 pruebas unitarias con Vitest
+(`npm test -- --configuration ci`), las 6 de los scripts de Node
+(`npm run test:scripts`), `npm audit --audit-level=critical` y
 `npm run build`. Que el build esté en el pipeline importa: un error de
 plantilla de Angular a veces solo aparece al compilar para producción.
 
@@ -82,8 +83,8 @@ plantilla de Angular a veces solo aparece al compilar para producción.
 [`ci-python.yml`](../.github/workflows/ci-python.yml), dos jobs:
 
 - Lint, pruebas y contrato: `flake8 .`, luego las pruebas unitarias
-  (`pytest -m "not recuperacion"`, 293), después las del proceso de
-  recuperación (`pytest -m recuperacion`, 543) y al final
+  (`pytest -m "not recuperacion"`, 488), después las del proceso de
+  recuperación (`pytest -m recuperacion`, 636) y al final
   `python scripts/export_openapi.py --check`, que falla si
   [`fastapi-openapi.json`](contratos/fastapi-openapi.json) no coincide con el
   código. Así el contrato que lee el backend nunca queda atrasado.
@@ -206,12 +207,13 @@ Las pruebas posteriores al despliegue son de dos tipos:
 | Búsqueda personalizada "chocolate sin leche" con alergia al maní, por FastAPI | La consulta suma `lacteos` al perfil, hay resultados y ninguno es `no_apto` ni tiene lácteos |
 | Veredicto de un producto conocido de la semilla (Leche Semidescremada, 0400050270413) con alergia a lácteos | `no_apto`, con `lacteos` en conflicto y el aviso presente |
 | Evaluación adaptativa (`GET /metrics/evaluation/adaptive`) | Todo el etiquetado está en el índice, ningún perfil tiene falsos "apto", la búsqueda personalizada no muestra no aptos y su P@5 supera a la base |
-| Commit del backend | Informativa: si `/api/health` informa `commit`, debe ser el desplegado; si no, queda "Pendiente" |
+| backend informa el commit desplegado | `commit` de `/api/health` es el commit que se acaba de desplegar (el backend lo informa desde la Entrega Final; si algún día no lo trajera, la fila queda "Pendiente" sin hacer fallar el CD) |
 
 El recorrido funcional no escribe nada: no crea usuarios ni ingestas, solo
-consulta. Llama a FastAPI directo, porque el backend todavía no expone la
-búsqueda personalizada, y se identifica con la clave entre servicios del
-Secret `CLAVE_SERVICIO_STAGING`. La evaluación adaptativa sirve como
+consulta. Llama a FastAPI directo y se identifica con la clave entre
+servicios del Secret `CLAVE_SERVICIO_STAGING`: el backend también expone la
+búsqueda personalizada, pero exige una sesión, y el recorrido no crea
+usuarios. La evaluación adaptativa sirve como
 protección también en staging: si un cambio hiciera aparecer un falso "apto"
 sobre el etiquetado, el CD falla.
 
@@ -240,11 +242,11 @@ Estos son los nuestros y por qué elegimos cada umbral:
 | Gitleaks | Cero secretos | Un secreto en el historial queda expuesto aunque se borre después |
 | Bandit | Sin severidad alta | Lo medio y bajo se revisa en la pestaña Security |
 | Trivy | Sin CRITICAL con arreglo disponible | Lo que no tiene arreglo no lo podemos corregir nosotros; las HIGH se reportan pero no bloquean |
-| Integración | Las 6 pruebas de CI Integración y las 36 de integración del backend pasan | Son las que prueban los servicios juntos: con Docker Compose, y el backend completo contra un FastAPI simulado |
+| Integración | Las 6 pruebas de CI Integración, las 99 de integración del backend y sus 30 con PostgreSQL real pasan | Son las que prueban los servicios juntos: con Docker Compose, el backend completo contra un FastAPI simulado y contra un PostgreSQL real |
 | Render Blueprint | Válido contra el esquema y la API | Un `render.yaml` roto solo se notaría al desplegar |
 | Integración a `main` | Pull Request con los 15 checks de CI en verde (ver [Protección de main](#protección-de-main)) | Lo que falla no llega a `main`, y por lo tanto tampoco al CD |
 | Despliegue a staging | Los 7 workflows de CI en verde para el commit de `main` | Lo que no pasó todos los gates anteriores no se publica |
-| Pruebas posteriores al despliegue | Las 9 pasan dentro de 5 minutos cada una, incluido el commit desplegado y el recorrido funcional | Confirman que lo desplegado es la versión esperada y responde de punta a punta, no solo que el build terminó. Solo los commits que las pasan quedan como versión verificada para el rollback |
+| Pruebas posteriores al despliegue | Las 10 pasan dentro de 5 minutos cada una, incluidos los commits desplegados de python-service y del backend y el recorrido funcional | Confirman que lo desplegado es la versión esperada y responde de punta a punta, no solo que el build terminó. Solo los commits que las pasan quedan como versión verificada para el rollback |
 
 Las HIGH que dejamos pasar no las ignoramos: están listadas, con su plan, en
 [limitaciones.md](limitaciones.md#5-seguridad-y-vulnerabilidades).
@@ -300,18 +302,24 @@ Si se regenera la clave en Render, hay que actualizar este Secret.
 
 | Grupo | Herramienta | Cantidad | Qué cubren |
 |---|---|---:|---|
-| Python, unitarias | pytest | 293 | Esquemas del contrato, errores, request id, logs, simulación de errores, cliente de Open Food Facts, limitador, clave de ingesta, caché, catálogo, salud, `/analizar` |
-| Python, proceso de recuperación | pytest (`-m recuperacion`) | 543 | Ingesta por categorías y segunda ronda, mapeo, limpieza de ingredientes, alérgenos, calidad, planificador, semilla, reprocesamiento, BM25, endpoint de búsqueda, métricas y evaluación |
-| Backend, unitarias | Jest | 192 (18 archivos) | Guard JWT, puerto y CORS, cliente de FastAPI y reintentos, respaldo, mapeo, repositorio, controlador y servicio de productos, métricas, salud, observabilidad, usuarios y alergias |
-| Backend, integración | Jest (`npm run test:integration`) | 36 (4 archivos) | La app NestJS completa contra un FastAPI simulado: búsqueda y salud, detalle de producto, métricas, y perfil, alergias y compatibilidad con JWT |
-| Frontend | Vitest | 121 (12 archivos) | Búsqueda (incluidos los avisos de respaldo y "Despertando el servidor…"), detalle de producto, métricas, login, registro y perfil, sesión, servicios y etiquetas de alérgenos |
+| Python, unitarias | pytest | 488 | Esquemas del contrato, errores, request id, logs, simulación de errores, cliente de Open Food Facts, limitador, claves de ingesta y entre servicios, caché, catálogo, salud, `/analizar` |
+| Python, proceso de recuperación | pytest (`-m recuperacion`) | 636 | Ingesta por categorías y segunda ronda, mapeo, limpieza de ingredientes, alérgenos, calidad, planificador, semilla, reprocesamiento, BM25, búsqueda, métricas y evaluación, y la capacidad adaptativa (veredicto, búsqueda personalizada y su evaluación) |
+| Backend, unitarias | Jest | 432 | Detalle en [backend.md](backend.md#pruebas) |
+| Backend, integración | Jest (`npm run test:integration`) | 99 | La app NestJS completa contra un FastAPI simulado ([backend.md](backend.md#pruebas)) |
+| Backend, PostgreSQL real | Jest (`npm run test:postgres`) | 30 | La app NestJS contra un PostgreSQL 15 real: migraciones, esquema, repositorios y sesión ([backend.md](backend.md#pruebas)) |
+| Frontend | Vitest | 378 (23 archivos) | Detalle en [frontend.md](frontend.md) |
+| Frontend, scripts | `node --test` (`npm run test:scripts`) | 6 | El servidor de `pwa:local` y `index.html` |
 | Integración | bash + curl en CI | 6 | Los servicios juntos, ver arriba |
-| Posteriores al despliegue | bash + curl en CD Staging y Rollback staging | 9 (más 1 informativa) | Lo desplegado en Render, por sus URL públicas: salud, commit desplegado y un recorrido funcional que no escribe datos |
+| Posteriores al despliegue | bash + curl en CD Staging y Rollback staging | 10 | Lo desplegado en Render, por sus URL públicas: salud, los commits desplegados de python-service y del backend, y un recorrido funcional que no escribe datos |
 
-En total son 1185 pruebas automatizadas más las 6 de CI Integración y las 9
-posteriores al despliegue. Las de Python las contamos el 25 de octubre de 2026 y
-las del backend y el frontend el 24 de octubre de 2026, corriendo cada grupo;
-todas pasaron.
+En total son 2069 pruebas automatizadas, más las 6 de CI Integración y las 10
+posteriores al despliegue. Las del backend y el frontend son las de
+[backend.md](backend.md#pruebas) y [frontend.md](frontend.md), del 20 de
+noviembre de 2026. Las de Python las contamos el 21 de noviembre de 2026
+leyendo los archivos de prueba (funciones `test_*` por sus casos de
+`parametrize`), sin ejecutarlas; el mismo conteo da las cifras que medimos
+corriendo pytest el 25 de octubre (293 y 543). Todas pasan en `main`, porque
+el ruleset exige los checks en verde.
 
 Las pruebas de Python nunca llaman a Open Food Facts. Usan un cliente falso
 (`ClienteOFFFalso` en [`conftest.py`](../python-service/tests/conftest.py))

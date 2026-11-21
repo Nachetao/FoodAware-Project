@@ -216,7 +216,7 @@ despliega por sí solo. Lo hace el workflow
    | Búsqueda `galletas` por el backend | Devuelve productos con `X-Fuente-Datos: fastapi` (con `respaldo` no quedaría probada la comunicación con FastAPI) |
    | `GET /api/metricas/calidad` | `porcentaje_validos` es mayor que 0 |
    | Frontend | Responde 200 con el HTML de la aplicación (`<app-root>`) |
-   | Commit del backend | Si `/api/health` informa `commit`, es el desplegado. Mientras no lo informe queda como "Pendiente" y no hace fallar el CD |
+   | Commit del backend | `commit` de `/api/health` es el commit que se acaba de desplegar. Si algún día no lo informara, la fila queda "Pendiente" y no hace fallar el CD |
    | Recorrido funcional por FastAPI | Una búsqueda personalizada, el veredicto de un producto conocido de la semilla y la evaluación adaptativa sin falsos "apto". Usa el Secret `CLAVE_SERVICIO_STAGING` y no escribe datos ([pipeline-devsecops.md](pipeline-devsecops.md#cd-staging-render)) |
 
    Al final escribe una tabla con el resultado y el detalle de cada prueba en
@@ -263,10 +263,13 @@ orden: python-service, backend y frontend.
   queda con el tag `staging-verificado-<7 caracteres del commit>` en GitHub.
   Es la lista de versiones a las que se puede volver:
   `git fetch --tags` y después `git tag -l "staging-verificado-*"`.
-- **Backend:** todavía no informa el commit. Le toca a backend: leer
-  `RENDER_GIT_COMMIT` y devolverlo como `commit` en `GET /api/health`, con el
-  mismo formato que python-service (`null` si no existe). Apenas lo haga, el
-  CD lo compara solo; mientras tanto esa fila aparece como "Pendiente".
+- **Backend:** desde la Entrega Final, `GET /api/health` también informa
+  `commit` (de `RENDER_GIT_COMMIT`, con el mismo formato que python-service), y
+  el CD lo compara con el que acaba de desplegar:
+
+  ```powershell
+  (Invoke-RestMethod https://foodaware-staging-backend.onrender.com/api/health).commit
+  ```
 - **Frontend:** es un sitio estático y no tiene endpoint de salud. Opcional:
   escribir el commit en el build (Render también define `RENDER_GIT_COMMIT` al
   compilar) y mostrarlo, por ejemplo, en un `version.json`.

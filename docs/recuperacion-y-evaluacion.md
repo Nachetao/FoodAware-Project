@@ -532,9 +532,11 @@ Por eso subir la precisión de estas consultas no se arregla con más
 sinónimos ni ajustando pesos. Hay que entender que la consulta expresa una
 restricción ("sin leche") y filtrar por los alérgenos y trazas que ya
 detectamos en cada producto, en vez de buscar la palabra. Eso es lo que
-aporta la capacidad adaptativa del Módulo 3: usar el perfil y las
-restricciones de la persona para filtrar y reordenar. La especificación
-preliminar está en [capacidad-adaptativa.md](capacidad-adaptativa.md).
+aporta la capacidad adaptativa: usar el perfil y las restricciones de la
+persona para filtrar y reordenar. Está implementada desde la Entrega Final
+([capacidad-adaptativa.md](capacidad-adaptativa.md)), y su resultado (de 0,20
+a 0,83 en estas consultas) está en la
+[sección 8](#8-evaluación-de-la-capacidad-adaptativa).
 
 La evaluación ya deja lista la forma de medirlo. Las 8 consultas con
 restricción y su P@5 de 0,20 son la línea de comparación. Si la capacidad

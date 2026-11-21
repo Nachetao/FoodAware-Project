@@ -192,8 +192,10 @@ for prueba in "${pruebas[@]}"; do
   echo "| $titulo | $resultado | ${DETALLE//|//} |" >> "$RESUMEN"
 done
 
-# El commit del backend solo se compara si /api/health lo informa: hasta que
-# el backend lo agregue, queda como pendiente y no hace fallar las pruebas.
+# El backend informa su commit en /api/health desde la Entrega Final, y aquí
+# se compara con el desplegado. Si alguna vez no lo trajera (por ejemplo, al
+# volver con un rollback a una versión anterior a ese cambio), la fila queda
+# como pendiente y no hace fallar las pruebas.
 commit_backend=$(curl -sS --max-time 60 "$URL_BACKEND/api/health" | jq -r '.commit // ""' || true)
 if [[ -z "$commit_backend" ]]; then
   echo "| backend: informa el commit desplegado | Pendiente | /api/health todavía no informa el commit |" >> "$RESUMEN"
